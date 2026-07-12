@@ -15,7 +15,7 @@ EXPECTED_TABLES = {
 }
 
 
-def test_initial_migration_creates_expected_tables() -> None:
+def test_migrations_create_expected_tables() -> None:
     inspector = inspect(get_engine())
     assert set(inspector.get_table_names()) >= EXPECTED_TABLES
 
@@ -40,3 +40,17 @@ def test_telegram_user_id_has_a_unique_constraint() -> None:
         tuple(constraint["column_names"]) for constraint in constraints
     }
     assert ("telegram_user_id",) in constrained_columns
+
+
+def test_onboarding_drafts_preserve_confirmed_revision() -> None:
+    inspector = inspect(get_engine())
+    columns = {
+        column["name"] for column in inspector.get_columns("onboarding_drafts")
+    }
+    assert {
+        "payload",
+        "confirmed_payload",
+        "revision",
+        "confirmed_revision",
+        "is_confirmed",
+    } <= columns
