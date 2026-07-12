@@ -2,7 +2,7 @@
 
 Дата актуализации: **13 июля 2026 года**.
 
-Документ разделяет состояние кода, production и Telegram-интеграции. Наличие функции в `main` не означает, что она уже развёрнута на VPS или подключена к Hermes.
+Документ разделяет состояние production, Hermes-интеграции и следующих срезов.
 
 ## 1. Сводка
 
@@ -12,15 +12,14 @@
 | Hermes Telegram Gateway | production, работает |
 | Профиль `nails` | production, безопасный whitelist tools |
 | Backend foundation | NAILS-002A production |
-| Onboarding API | NAILS-002B реализован и проверяется PR/CI, deployment отдельно |
-| Production migration | пока `0001 (head)` |
-| Новая migration в коде | `0002` |
-| Hermes → Onboarding API | не подключён, следующий NAILS-002C |
+| Onboarding API | NAILS-002B production, проверен synthetic smoke |
+| Production migration | `0002 (head)` |
+| Hermes → Onboarding API | не подключён, активный NAILS-002C |
 | Scheduling happy path | не реализован |
-| Backup/restore-test | не реализован |
+| Backup/restore-test | автоматизация и restore-test не реализованы |
 | Пилот с мастером | не начат |
 
-## 2. Production до deployment NAILS-002B
+## 2. Production
 
 VPS:
 
@@ -34,19 +33,19 @@ Repository:
 /opt/nails/repo
 ```
 
-Environment:
+Production environment:
 
 ```text
 /opt/nails/.env
 ```
 
-Текущий production backend commit:
+Production commit:
 
 ```text
-cca0109ea8c716fdf03d97c34a1c0f06bfb5fc50
+40b25ff5fe519eda8602d0eeac7d06a1b191138d
 ```
 
-Контейнеры:
+Containers:
 
 ```text
 nails-api — running, healthy
@@ -63,29 +62,132 @@ GET /ready  → {"status":"ready"}
 
 PostgreSQL:
 
-- migration `0001 (head)`;
-- host port отсутствует;
-- API подключается как restricted role `nails_app`;
-- `nails_admin` используется только для bootstrap;
-- `nails_app`: `SUPERUSER=0`, `CREATEDB=0`, `CREATEROLE=0`, `REPLICATION=0`.
+- Alembic `0002 (head)`;
+- PostgreSQL не публикует host port;
+- API подключается как `nails_app`;
+- role flags: `0|0|0|0` для SUPERUSER/CREATEDB/CREATEROLE/REPLICATION;
+- `nails_admin` используется только для bootstrap и controlled administration.
 
 API container:
 
 - user `nails`;
 - read-only root filesystem;
-- `CapDrop=ALL`;
+- `CapDrop=["ALL"]`;
 - `no-new-privileges:true`;
 - bind только на loopback.
 
-## 3. Hermes production
+Production authentication setting:
 
-Профиль:
+- создан отдельно на VPS;
+- хранится в `/opt/nails/.env`;
+- файл `600 root:root`;
+- значение не выводилось и не хранится в GitHub.
+
+## 3. Production deployment NAILS-002B
+
+Deployment выполнен с commit:
+
+```text
+40b25ff5fe519eda8602d0eeac7d06a1b191138d
+```
+
+Перед migration создан backup:
+
+```text
+/opt/nails/backups/nails_before_0002_20260712T224019Z.dump
+```
+
+Проверка `pg_restore --list` успешна.
+
+Подтверждено:
+
+- fast-forward `main` и чистое рабочее дерево;
+- migration `0001 → 0002`;
+- repeated `alembic upgrade head` без изменений;
+- наличие `confirmed_payload`, `confirmed_revision`, `revision`;
+- `/health` и `/ready`;
+- restricted DB role и API identity;
+- loopback-only API и отсутствие DB host port;
+- container hardening;
+- Docker daemon не перезапускался;
+- Amnezia container IDs и `StartedAt` не изменились;
+- Hermes, Telegram, Nginx/Traefik и другие проекты не изменялись.
+
+Полный deployment record: [`deployments/2026-07-13-nails-002b.md`](deployments/2026-07-13-nails-002b.md).
+
+## 4. Onboarding API в production
+
+Endpoints:
+
+```text
+POST /api/v1/onboarding/start
+GET  /api/v1/onboarding
+PUT  /api/v1/onboarding/sections/{section}
+POST /api/v1/onboarding/sections/{section}/confirm
+POST /api/v1/onboarding/pause
+POST /api/v1/onboarding/resume
+POST /api/v1/onboarding/complete
+```
+
+Sections:
+
+```text
+schedule
+services
+buffers
+bookings
+```
+
+Поддерживается:
+
+- active user and role checks;
+- draft/confirmed separation;
+- revision and confirmed revision;
+- ordered confirmation;
+- downstream invalidation;
+- idempotent confirmation/completion;
+- pause/resume;
+- persistence after API restart;
+- safe audit metadata;
+- JSON-safe validation errors without echoing source payload.
+
+## 5. Production synthetic smoke
+
+Проверки завершились результатом:
+
+```text
+NAILS_002B_SMOKE_OK
+```
+
+Подтверждено:
+
+- missing/wrong authentication → `401`;
+- unknown/inactive synthetic user → `403`;
+- active synthetic admin starts onboarding;
+- invalid schedule → `422 invalid_onboarding_payload`;
+- services before schedule confirmation → `409 prior_sections_not_confirmed`;
+- schedule revision 1 confirmation idempotent;
+- revision 2 preserves previous effective payload until confirmation;
+- services/buffers/bookings flow works;
+- unknown service reference → `409 unknown_service_reference`;
+- pause survives restart of only `nails-api`;
+- resume works;
+- completion is idempotent;
+- schedule revision 1 confirmation audit count = `1`;
+- completion audit count = `1`;
+- audit privacy leak count = `0`;
+- cleanup result = `0|0|0`;
+- temporary test script removed.
+
+## 6. Hermes production
+
+Profile:
 
 ```text
 nails
 ```
 
-Разрешённые Telegram tools:
+Allowed Telegram tools:
 
 ```text
 vision
@@ -95,7 +197,7 @@ skills
 clarify
 ```
 
-Отключены:
+Disabled:
 
 ```text
 terminal
@@ -117,178 +219,55 @@ SSH
 deploy tools
 ```
 
-Built-in profile memory отключена, чтобы данные разных Telegram users не смешивались. Persistent state должен поступать только из PostgreSQL через restricted domain tools.
+Built-in memory/user profile отключены. Persistent business state должен поступать только из PostgreSQL через restricted domain tools.
 
 `skills.write_approval=true`.
 
-## 4. NAILS-002B — реализовано в коде
+## 7. Активный этап NAILS-002C
 
-### Authentication boundary
+Issue #5 обновлена под фактическое состояние production.
 
-- обязательный `INTERNAL_API_KEY` не короче 32 символов;
-- key сравнивается constant-time;
-- Telegram ID передаётся только внутренним header;
-- пользователь должен существовать в `users`, быть active и иметь role `master` or `admin`;
-- unknown/inactive user получает отказ;
-- автоматического provisioning нет.
+Нужно:
 
-### Endpoints
+- один restricted onboarding domain tool;
+- Telegram ID только из trusted gateway context;
+- отсутствие identity argument в model-visible schema;
+- только start/get/save/confirm/pause/resume/complete;
+- отсутствие generic HTTP, arbitrary URL/headers, SQL и filesystem;
+- runtime-generated request ID;
+- безопасное отображение backend errors;
+- owner isolation для двух synthetic users;
+- безопасный отказ unknown/inactive user;
+- работа после restart Hermes;
+- отсутствие authentication setting и bot token в model-visible data и logs.
 
-```text
-POST /api/v1/onboarding/start
-GET  /api/v1/onboarding
-PUT  /api/v1/onboarding/sections/{section}
-POST /api/v1/onboarding/sections/{section}/confirm
-POST /api/v1/onboarding/pause
-POST /api/v1/onboarding/resume
-POST /api/v1/onboarding/complete
-```
-
-### Sections
-
-```text
-schedule
-services
-buffers
-bookings
-```
-
-### Draft model
-
-Для каждого блока отдельно хранятся:
-
-- current draft payload;
-- last confirmed payload;
-- current revision;
-- confirmed revision;
-- confirmation status/time.
-
-Редактирование подтверждённого блока не подменяет последнюю effective version до нового подтверждения.
-
-Повторное confirmation одной revision и повторное completion идемпотентны.
-
-Изменение и новое подтверждение upstream section инвалидирует downstream confirmations, зависящие от старых данных.
-
-### Validation
-
-- schedule intervals and weekday uniqueness;
-- all seven weekdays required for schedule confirmation;
-- unique public service names;
-- non-negative price and ISO currency;
-- duration and buffer limits;
-- service references in buffers/bookings;
-- timezone-aware future booking input;
-- JSON-safe errors without echoing original payload.
-
-### Audit
-
-Создаются события:
-
-```text
-onboarding.started
-onboarding.draft_saved
-onboarding.section_confirmed
-onboarding.paused
-onboarding.resumed
-onboarding.completed
-```
-
-Audit содержит только safe metadata: section, revision, status and invalidated sections. Полный onboarding payload не записывается.
-
-### Migration `0002`
-
-Добавляет в `onboarding_drafts`:
-
-- `confirmed_payload`;
-- `revision`;
-- `confirmed_revision`;
-- consistency constraints.
-
-Существующие confirmed rows при migration получают compatible confirmed snapshot.
-
-## 5. Проверки NAILS-002B
-
-Backend CI проверяет:
-
-- Ruff;
-- migration `0001 → 0002` на clean PostgreSQL 17;
-- repeated `alembic upgrade head`;
-- config and authentication;
-- role access;
-- pause/resume and state persistence;
-- draft/effective separation;
-- confirmation idempotency;
-- confirmation order;
-- service references;
-- downstream invalidation;
-- completion requirements;
-- audit payload safety.
-
-Compose smoke-test дополнительно:
-
-- запускает production-like stack;
-- проверяет restricted `nails_app`;
-- проверяет `/health` and `/ready`;
-- создаёт synthetic admin;
-- начинает and pauses onboarding;
-- restarts `nails-api`;
-- подтверждает restored paused state.
-
-## 6. Что после merge ещё не будет работать
-
-Даже после merge и deployment NAILS-002B Smart Nails не сможет сохранять данные из Telegram, пока не выполнен NAILS-002C.
-
-Не реализованы:
+## 8. Что пока не реализовано
 
 - Hermes onboarding domain tool;
+- production onboarding skill;
 - automatic user provisioning;
 - materialization confirmed blocks into working services/schedule/bookings;
 - availability search;
 - booking creation/transfer/cancellation;
-- Google Calendar;
-- backup and restore.
+- automated backups and off-host/off-disk copy;
+- verified restore;
+- Google Calendar.
 
-## 7. Исправленные проблемы
+## 9. Следующие шаги
 
-- SOUL запрещает преувеличивать возможности;
-- Hermes administrative tools removed;
-- shared profile memory disabled;
-- Telegram allowlist corrected and tested;
-- PostgreSQL bootstrap/app roles separated;
-- Docker internal/edge networks separated;
-- owner deletion protected by `RESTRICT`;
-- booking idempotency scoped by owner;
-- Ubuntu `docker-compose-v2` installed without Docker restart;
-- Pydantic validation errors sanitized to JSON-safe details.
-
-## 8. Следующие шаги
-
-1. Merge PR #11 после полностью зелёного CI.
-2. Создать secure `INTERNAL_API_KEY` в `/opt/nails/.env`.
-3. Back up production DB and deploy exact main commit.
-4. Apply migration `0002`.
-5. Выполнить synthetic API lifecycle and cleanup.
-6. NAILS-002C: restricted Hermes onboarding tool.
-7. NAILS-002D: production onboarding skill.
-8. NAILS-002E: materialization and scheduling happy path.
-9. NAILS-002F: automated backup and verified restore.
-
-## 9. Условия пилота
-
-Real-data pilot не начинается, пока:
-
-- Telegram flow сохраняет onboarding через restricted tool;
-- roles and owners проверяются backend;
-- confirmed blocks materialized;
-- scheduling end-to-end работает;
-- backup successfully restored;
-- internal aliases cannot leak;
-- synthetic tests passed and cleaned.
+1. Реализовать NAILS-002C через GitHub PR и CI.
+2. Развернуть restricted domain tool без расширения Hermes toolsets.
+3. Выполнить two-user isolation and identity spoofing tests.
+4. Реализовать NAILS-002D production onboarding skill.
+5. Реализовать NAILS-002E materialization and scheduling happy path.
+6. Реализовать NAILS-002F automated backup and verified restore.
+7. Выполнить full synthetic end-to-end test и cleanup.
+8. Только после этого приглашать мастера в limited pilot.
 
 ## 10. Процесс изменений
 
-- code, migrations, tests and docs изменяются через GitHub;
+- code, migrations, tests and docs меняются через GitHub;
 - CI обязателен;
-- VPS-agent deploys only exact `main` commit;
+- VPS-agent deploys only an exact `main` commit;
 - VPS-agent does not edit tracked files and does not push;
-- production error возвращается разработчику как диагностика.
+- production errors возвращаются в разработку как диагностика.
