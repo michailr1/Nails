@@ -1,7 +1,7 @@
 from functools import lru_cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     app_timezone: str = Field(alias="APP_TIMEZONE", min_length=1)
     database_url: str = Field(alias="DATABASE_URL", min_length=1)
+    internal_api_key: SecretStr = Field(alias="INTERNAL_API_KEY", min_length=32)
 
     @field_validator("app_timezone")
     @classmethod
@@ -37,6 +38,13 @@ class Settings(BaseSettings):
         if not candidate.startswith("postgresql+psycopg://"):
             raise ValueError("DATABASE_URL must use the postgresql+psycopg SQLAlchemy driver")
         return candidate
+
+    @field_validator("internal_api_key")
+    @classmethod
+    def validate_internal_api_key(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value().strip()) < 32:
+            raise ValueError("INTERNAL_API_KEY must contain at least 32 characters")
+        return value
 
 
 @lru_cache(maxsize=1)
