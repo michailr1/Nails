@@ -52,10 +52,18 @@ def validate_payload(section: OnboardingSection, payload: dict[str, Any]) -> dic
     try:
         parsed = model.model_validate(payload)
     except ValidationError as exc:
+        safe_errors = [
+            {
+                "type": error["type"],
+                "location": list(error["loc"]),
+                "message": error["msg"],
+            }
+            for error in exc.errors(include_url=False, include_input=False)
+        ]
         raise OnboardingDomainError(
             "invalid_onboarding_payload",
             status_code=422,
-            details=exc.errors(include_url=False, include_input=False),
+            details=safe_errors,
         ) from exc
     return parsed.model_dump(mode="json")
 
