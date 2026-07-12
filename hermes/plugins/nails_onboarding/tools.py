@@ -5,7 +5,8 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 
@@ -79,16 +80,14 @@ def _validate_args(args: dict[str, Any]) -> tuple[str, str | None, dict[str, Any
     section = args.get("section")
     payload = args.get("payload")
 
-    if action in {"save_section", "confirm_section"}:
-        if section not in _ALLOWED_SECTIONS:
-            raise ToolInputError("a valid onboarding section is required")
-    elif section is not None:
+    if action in {"save_section", "confirm_section"} and section not in _ALLOWED_SECTIONS:
+        raise ToolInputError("a valid onboarding section is required")
+    if action not in {"save_section", "confirm_section"} and section is not None:
         raise ToolInputError("section is not allowed for this action")
 
-    if action == "save_section":
-        if not isinstance(payload, dict):
-            raise ToolInputError("payload object is required for save_section")
-    elif payload is not None:
+    if action == "save_section" and not isinstance(payload, dict):
+        raise ToolInputError("payload object is required for save_section")
+    if action != "save_section" and payload is not None:
         raise ToolInputError("payload is not allowed for this action")
 
     return action, section, payload
@@ -151,7 +150,8 @@ def _safe_backend_detail(response: httpx.Response) -> tuple[str, Any | None]:
         return "backend_error", None
 
     details = detail.get("details")
-    if details is not None and not isinstance(details, (dict, list, str, int, float, bool)):
+    safe_detail_types = (dict, list, str, int, float, bool)
+    if details is not None and not isinstance(details, safe_detail_types):
         details = None
     return code, details
 
