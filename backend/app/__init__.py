@@ -1,0 +1,1 @@
+"""Nails Booking API package."""
