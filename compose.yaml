@@ -50,6 +50,7 @@ services:
     cap_drop:
       - ALL
     networks:
+      - nails-edge
       - nails-internal
 
 volumes:
@@ -57,6 +58,11 @@ volumes:
     name: nails-postgres-data
 
 networks:
+  nails-edge:
+    name: nails-edge
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
   nails-internal:
     name: nails-internal
     internal: true
