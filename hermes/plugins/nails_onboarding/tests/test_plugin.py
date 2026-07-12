@@ -3,9 +3,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-
-from nails_onboarding import register
-from nails_onboarding import schemas, tools
+from nails_onboarding import register, schemas, tools
 
 
 def _set_context(monkeypatch, *, platform="telegram", user_id="100000001"):
