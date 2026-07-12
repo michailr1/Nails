@@ -1,10 +1,21 @@
 # Приватность и модель данных
 
-## 1. Классы данных
+Дата актуализации: **13 июля 2026 года**.
+
+## 1. Основные правила
+
+- PostgreSQL — единственный источник бизнес-данных.
+- Telegram allowlist не заменяет owner and role checks.
+- Реальные данные не попадают в GitHub, issues, PR, Actions logs или screenshots.
+- Внутренние обозначения мастера отделяются от публичных данных клиентки.
+- Draft onboarding data не участвуют в рабочем расписании до подтверждения.
+- Built-in Hermes memory не используется для постоянных данных.
+
+## 2. Классы данных
 
 ### Публично допустимые поля
 
-Поля, которые в будущем могут использоваться в сообщении клиенту:
+Поля, которые в будущем могут использоваться в сообщении клиентке:
 
 - `public_name`;
 - публичное название услуги;
@@ -14,176 +25,282 @@
 
 ### Внутренние поля
 
-Доступны только ролям `master` и `admin`:
+Доступны только доверенному контуру `master/admin`:
 
 - `internal_alias`;
 - `internal_notes`;
 - служебные теги;
 - история изменений;
-- технические идентификаторы;
-- feedback-контекст;
-- показатели неявок и рабочие замечания.
+- technical identifiers;
+- feedback context;
+- показатели no-show;
+- рабочие замечания.
 
-Внутренние значения не передаются в клиентский контур.
+Внутренние значения не передаются в клиентский контур, публичные templates или внешние integrations.
 
-## 2. Предварительная модель
+## 3. Фактически реализованная схема `0001`
+
+Production migration:
+
+```text
+0001 (head)
+```
+
+Созданы таблицы:
+
+```text
+users
+services
+clients
+bookings
+schedule_rules
+schedule_exceptions
+audit_events
+onboarding_states
+onboarding_drafts
+```
 
 ### `users`
 
-- `id`;
-- `telegram_user_id`;
-- `role`;
+- `id` — UUID;
+- `telegram_user_id` — unique bigint;
+- `role` — `admin` or `master`;
 - `is_active`;
 - timestamps.
 
-### `clients`
+Telegram ID хранится как технический идентификатор. Он не должен выводиться в публичные ответы и не принимается из model-generated text как trusted value.
 
-- `id`;
-- `public_name`;
-- `normalized_public_name`;
-- контактные поля;
-- `profile_status`;
-- timestamps;
-- `archived_at`.
+### Owner-scoped tables
 
-Счётчик неявок отдельно не хранится: он вычисляется по записям со статусом `no_show`.
+Таблицы:
 
-### `client_internal_aliases`
+- `services`;
+- `clients`;
+- `bookings`;
+- `schedule_rules`;
+- `schedule_exceptions`;
 
-- `id`;
-- `client_id`;
-- `alias`;
-- `normalized_alias`;
-- `created_by`;
-- `created_at`.
+содержат `owner_user_id`.
 
-### `client_internal_notes`
-
-- `id`;
-- `client_id`;
-- `note`;
-- `visibility = master_admin_only`;
-- `created_by`;
-- timestamps.
-
-Заметки не являются источником длительности, цены или других бизнес-правил.
+Это база tenant isolation. Booking API обязан добавлять owner filter ко всем операциям чтения и записи. Само наличие поля в таблице не считается достаточной авторизацией.
 
 ### `services`
 
-- `id`;
-- публичное название и описание;
-- текущая стоимость или правило расчёта;
-- валюта;
-- стандартная длительность;
-- буферы до и после;
-- `is_active`.
+Фактически предусмотрены:
 
-### `client_service_overrides`
-
-Персональные корректировки для пары «клиент + услуга»:
-
-- `id`;
-- `client_id`;
-- `service_id`;
-- корректировка длительности;
-- при необходимости персональная цена или правило цены;
-- `created_by`;
+- owner;
+- public name and description;
+- current price;
+- currency;
+- standard duration;
+- buffer before/after;
+- active flag;
 - timestamps.
 
-Используется при расчёте окон и предварительной стоимости вместо чтения свободного текста заметок.
+Название услуги уникально в пределах владельца, а не глобально для всех мастеров.
+
+### `clients`
+
+Фактически предусмотрены:
+
+- owner;
+- `public_name`;
+- `normalized_public_name`;
+- optional phone;
+- profile status;
+- `archived_at`;
+- timestamps.
+
+Internal aliases and notes в migration `0001` ещё не созданы. Они относятся к NAILS-004.
 
 ### `bookings`
 
-- `id`;
-- `client_id`;
-- `service_id`;
-- плановые начало и окончание;
-- ожидаемое окончание при текущей задержке — при необходимости;
-- фактические начало и окончание — при наличии;
-- статус, включая `scheduled`, `completed`, `cancelled`, `no_show`;
-- `price_amount` — снимок стоимости записи;
-- `currency`;
-- `price_source`;
-- `price_confirmed_at`;
-- `completed_at`;
-- фактически удержанная предоплата или штраф — только после появления такой функции;
-- `calendar_event_id`;
-- `idempotency_key`;
+Фактически предусмотрены:
+
+- owner;
+- client and service references;
+- planned start/end;
+- expected end during delay;
+- actual start/end;
+- status: `scheduled`, `completed`, `cancelled`, `no_show`;
+- price snapshot;
+- currency;
+- price source;
+- price confirmation/completion timestamps;
+- idempotency key;
 - timestamps.
 
-Изменение текущей цены услуги не изменяет исторические записи.
+Idempotency uniqueness:
 
-### `schedule_rules` и `schedule_exceptions`
+```text
+owner_user_id + idempotency_key
+```
 
-Хранят обычный рабочий график и разовые изменения. Все бизнес-границы дня рассчитываются в настроенном IANA-часовом поясе мастера.
+Изменение текущей цены услуги не должно изменять historical booking price.
 
-### `calendar_sync_jobs`
+### `schedule_rules`
 
-Очередь одностороннего экспорта в Google Calendar:
+Хранит обычный weekly schedule:
 
-- `id`;
-- `booking_id`;
-- операция (`create`, `update`, `delete`);
-- статус;
-- количество попыток;
-- `next_attempt_at`;
-- безопасное описание последней ошибки;
+- owner;
+- weekday;
+- start/end local time;
+- working flag;
+- optional validity range;
 - timestamps.
 
-Сбой задания не отменяет бизнес-операцию в PostgreSQL.
+Database constraints проверяют weekday range и корректность рабочего интервала.
+
+### `schedule_exceptions`
+
+Хранит one-off changes:
+
+- owner;
+- date;
+- optional working interval;
+- working/non-working flag;
+- reason;
+- timestamps.
 
 ### `audit_events`
 
-Хранят актёра, действие, объект, безопасное описание изменения, request ID и время. Секреты и полные чувствительные payload в аудит не записываются.
+Фактически предусмотрены:
+
+- optional owner;
+- optional actor;
+- action;
+- object type and ID;
+- request ID;
+- safe JSON changes;
+- creation time.
+
+В audit запрещено сохранять secrets, credentials и полный чувствительный payload.
+
+### `onboarding_states`
+
+- user reference;
+- status: `not_started`, `in_progress`, `paused`, `completed`;
+- current step;
+- start/completion timestamps;
+- timestamps.
+
+### `onboarding_drafts`
+
+- onboarding state reference;
+- section: schedule/services/buffers/bookings;
+- JSONB payload;
+- confirmation flag/time;
+- timestamps.
+
+Один draft section уникален в пределах onboarding state.
+
+## 4. Что ещё не реализовано в схеме
+
+Следующие целевые entities пока отсутствуют:
+
+- `client_internal_aliases`;
+- `client_internal_notes`;
+- `client_service_overrides`;
+- `feedback_events`;
+- `calendar_sync_jobs`;
+- отдельные pilot metrics tables, если будут нужны;
+- public client identities.
+
+Их нельзя считать доступными только потому, что они описаны в целевой модели.
+
+## 5. Целевая расширенная модель
+
+### `client_internal_aliases`
+
+- `client_id`;
+- private alias;
+- normalized alias;
+- `created_by`;
+- timestamp.
+
+Alias используется только для поиска в доверенном контуре. Он никогда не становится public name автоматически.
+
+### `client_internal_notes`
+
+- `client_id`;
+- note;
+- visibility `master_admin_only`;
+- `created_by`;
+- timestamps.
+
+Свободная note не является источником duration, price or business rule.
+
+### `client_service_overrides`
+
+Структурированные корректировки пары client/service:
+
+- duration adjustment;
+- optional personal price/rule;
+- creator;
+- timestamps.
+
+Используется вместо извлечения правил из notes.
 
 ### `feedback_events`
 
-Лог разбора качества ответов:
+Целевой protected quality log:
 
-- `id`;
-- тип (`thumbs_down`, `unrecognized`, `repeated_clarification`);
-- ограниченный фрагмент контекста;
-- редактированный payload без секретов;
-- причина создания события;
-- `created_at`;
-- `expires_at`;
-- `deleted_at`.
+- type: `thumbs_down`, `unrecognized`, `repeated_clarification`;
+- минимальный redacted context;
+- reason;
+- creation/expiry/deletion timestamps.
 
-Правила хранения:
+Начальный срок хранения — 30 дней, если он не изменён отдельным решением.
 
-- сохраняются только последние сообщения, необходимые для разбора;
-- секреты удаляются всегда;
-- телефоны и другие контакты маскируются, если не нужны для расследования;
-- начальный срок хранения — 30 дней и настраивается;
-- доступ к содержимому имеет только `admin`;
-- поддерживается ручное досрочное удаление;
-- данные не попадают в GitHub и CI-логи.
+### `calendar_sync_jobs`
 
-### `pilot_metrics`
+Будущая очередь одностороннего export:
 
-Можно хранить агрегированные показатели без лишних персональных данных:
+- booking reference;
+- operation;
+- status;
+- attempts;
+- next attempt;
+- safe error;
+- timestamps.
 
-- успешно созданные записи;
-- исправленные или отменённые операции;
-- повторные уточнения;
-- feedback-события;
-- расхождения расписания;
-- ошибки backup и calendar sync.
+Calendar error не откатывает business operation в PostgreSQL.
 
-Допустима реализация как агрегирующих запросов без отдельной таблицы.
+## 6. Удаление и архивирование
 
-## 3. Правила расчёта выручки
+Owner foreign keys для рабочих данных используют защитную семантику `RESTRICT`, чтобы случайное удаление user не уничтожало весь business history.
 
-- сумма берётся из `bookings.price_amount`, а не из текущего каталога;
-- учитываются только завершённые визиты;
-- отменённые записи исключаются;
-- `no_show` учитывается только в размере реально удержанной суммы;
-- разные валюты не суммируются без явной конвертации;
-- ручное изменение итоговой суммы фиксируется в аудите.
+Client and business deletion должны быть отдельными контролируемыми operations с:
 
-## 4. GitHub
+- role check;
+- owner check;
+- confirmation;
+- audit;
+- retention decision.
 
-Разрешены только синтетические данные, например:
+На ранних этапах предпочтительно archive/disable вместо physical delete.
+
+## 7. Внутреннее обозначение и публичное имя
+
+Пример только с synthetic data:
+
+```text
+public_name: Тестовый клиент A
+internal_alias: Тестовый клиент A — дополнительное время
+internal_notes: Предпочитает вечерние записи
+```
+
+Правила:
+
+- бот отдельно подтверждает public name;
+- internal alias не используется в обращении к клиентке;
+- internal note не попадает в outbound message;
+- personal duration хранится структурированно, а не внутри alias/note;
+- fuzzy match не выполняет automatic merge.
+
+## 8. GitHub и тестовые данные
+
+Разрешены только synthetic values, например:
 
 ```text
 public_name = "Тестовый клиент A"
@@ -191,8 +308,52 @@ phone = "+70000000001"
 telegram_user_id = 100000001
 ```
 
-Запрещено сохранять реальные данные даже в issues, pull requests, Actions logs и скриншотах.
+Запрещены реальные:
 
-## 5. Исходящие сообщения
+- имена;
+- телефоны;
+- Telegram IDs;
+- записи;
+- фотографии записной книжки;
+- `.env`;
+- database dumps;
+- access logs with personal payload.
 
-Будущий сервис отправки сообщений получает только whitelisted public-поля. Перед отправкой выполняется проверка, что текст не содержит значений внутренних алиасов, внутренних заметок или технических полей.
+## 9. Hermes и память
+
+Встроенные profile memory and user profile отключены:
+
+```text
+memory.memory_enabled=false
+memory.user_profile_enabled=false
+```
+
+Причина — отсутствие надёжной tenant isolation для бизнес-данных нескольких Telegram users.
+
+Hermes может использовать текущую conversation session, но persistent state получает только через restricted Booking API tools.
+
+## 10. Backup and recovery
+
+До real-data pilot обязательны:
+
+- scheduled backup;
+- copy outside active database and single VPS disk;
+- encryption/access control as applicable;
+- backup result log;
+- restore into separate database;
+- documented restore verification.
+
+Проверенная persistence Docker volume после restart не является backup.
+
+## 11. Исходящие сообщения
+
+Будущий outbound component получает только explicitly whitelisted public fields.
+
+Перед отправкой проверяется отсутствие:
+
+- internal aliases;
+- internal notes;
+- technical IDs;
+- credentials;
+- raw audit payload;
+- unrelated client data.
