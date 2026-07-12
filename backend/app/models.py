@@ -277,6 +277,20 @@ class OnboardingDraft(TimestampMixin, Base):
     __tablename__ = "onboarding_drafts"
     __table_args__ = (
         UniqueConstraint("onboarding_state_id", "section", name="uq_onboarding_draft_section"),
+        CheckConstraint("revision >= 1", name="revision_positive"),
+        CheckConstraint(
+            "confirmed_revision IS NULL OR confirmed_revision >= 1",
+            name="confirmed_revision_positive",
+        ),
+        CheckConstraint(
+            "confirmed_revision IS NULL OR confirmed_revision <= revision",
+            name="confirmed_revision_not_ahead",
+        ),
+        CheckConstraint(
+            "(is_confirmed = false) OR "
+            "(confirmed_revision = revision AND confirmed_payload IS NOT NULL)",
+            name="current_confirmation_consistent",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -291,6 +305,11 @@ class OnboardingDraft(TimestampMixin, Base):
     payload: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
+    confirmed_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
+    confirmed_revision: Mapped[int | None] = mapped_column(Integer)
     is_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

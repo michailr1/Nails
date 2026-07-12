@@ -5,13 +5,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.onboarding import router as onboarding_router
 from app.config import get_settings
 from app.db import get_engine
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Fail fast on missing/invalid APP_TIMEZONE or DATABASE_URL.
+    # Fail fast on missing/invalid APP_TIMEZONE, DATABASE_URL, or INTERNAL_API_KEY.
     get_settings()
     get_engine()
     yield
@@ -19,12 +20,13 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Nails Booking API",
-    version="0.1.0",
+    version="0.2.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
     lifespan=lifespan,
 )
+app.include_router(onboarding_router)
 
 
 @app.get("/health", tags=["system"])
