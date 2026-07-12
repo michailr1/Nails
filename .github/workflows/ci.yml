@@ -83,10 +83,11 @@ jobs:
             python -c "from sqlalchemy import create_engine, text; from app.config import get_settings; engine = create_engine(get_settings().database_url); connection = engine.connect(); print(connection.execute(text('SELECT current_user')).scalar_one()); connection.close(); engine.dispose()")"
           test "$current_user" = "nails_app"
 
-      - name: Verify health and readiness
+      - name: Verify health and readiness over the loopback port
         run: |
-          curl --fail --silent --show-error http://127.0.0.1:8210/health
-          curl --fail --silent --show-error http://127.0.0.1:8210/ready
+          docker compose --env-file .env.example port nails-api 8000
+          curl --retry 5 --retry-delay 1 --retry-connrefused --fail --silent --show-error http://127.0.0.1:8210/health
+          curl --retry 5 --retry-delay 1 --retry-connrefused --fail --silent --show-error http://127.0.0.1:8210/ready
 
       - name: Stop the isolated stack
         if: always()
