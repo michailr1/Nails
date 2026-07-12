@@ -83,7 +83,10 @@ class BufferInput(BaseModel):
     @field_validator("service_name")
     @classmethod
     def normalize_service_name(cls, value: str) -> str:
-        return " ".join(value.split())
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("service_name must not be empty")
+        return candidate
 
 
 class BuffersPayload(BaseModel):
@@ -111,7 +114,10 @@ class BookingInput(BaseModel):
     @field_validator("client_public_name", "service_name")
     @classmethod
     def normalize_name(cls, value: str) -> str:
-        return " ".join(value.split())
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("name must not be empty")
+        return candidate
 
     @field_validator("starts_at")
     @classmethod
