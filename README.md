@@ -223,6 +223,7 @@
 - [Роли и полномочия](docs/roles-and-permissions.md)
 - [Приватность и модель данных](docs/privacy-and-data-model.md)
 - [План разработки](docs/roadmap.md)
+- [Ревью проекта от 2026-07-12](docs/reviews/2026-07-12-project-review.md)
 
 ## Текущий статус
 
