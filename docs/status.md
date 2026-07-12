@@ -2,112 +2,90 @@
 
 Дата актуализации: **13 июля 2026 года**.
 
-Этот документ отделяет уже работающие компоненты от целевых функций. Описание будущих возможностей в README, roadmap и бизнес-процессах не означает, что они уже доступны в production.
+Документ разделяет состояние кода, production и Telegram-интеграции. Наличие функции в `main` не означает, что она уже развёрнута на VPS или подключена к Hermes.
 
-## 1. Общий статус
+## 1. Сводка
 
 | Область | Состояние |
 |---|---|
-| Бизнес-правила MVP | базово согласованы, финальный чек-лист NAILS-001 ещё открыт |
-| Hermes Telegram Gateway | развёрнут и работает |
-| Профиль Hermes `nails` | развёрнут, ограничен whitelist инструментов |
-| Smart Nails SOUL | установлен, запрещает преувеличивать возможности |
-| Backend foundation | завершён, NAILS-002A |
-| PostgreSQL schema | миграция `0001 (head)` применена в production |
-| Onboarding API | следующий этап, ещё не реализован |
-| Hermes → Booking API | ещё не подключён |
-| Scheduling happy path | ещё не реализован |
-| Backup и проверка восстановления | ещё не реализованы |
-| Google Calendar | запланирован на NAILS-006 |
-| Пилот с мастером | ещё не начат |
+| Бизнес-правила MVP | базово согласованы, NAILS-001 ещё открыт |
+| Hermes Telegram Gateway | production, работает |
+| Профиль `nails` | production, безопасный whitelist tools |
+| Backend foundation | NAILS-002A production |
+| Onboarding API | NAILS-002B реализован и проверяется PR/CI, deployment отдельно |
+| Production migration | пока `0001 (head)` |
+| Новая migration в коде | `0002` |
+| Hermes → Onboarding API | не подключён, следующий NAILS-002C |
+| Scheduling happy path | не реализован |
+| Backup/restore-test | не реализован |
+| Пилот с мастером | не начат |
 
-## 2. Production
+## 2. Production до deployment NAILS-002B
 
-Production размещён только на VPS:
+VPS:
 
 ```text
 de.funti.cc
 ```
 
-Репозиторий на сервере:
+Repository:
 
 ```text
 /opt/nails/repo
 ```
 
-Production commit backend foundation:
-
-```text
-cca0109ea8c716fdf03d97c34a1c0f06bfb5fc50
-```
-
-Production environment:
+Environment:
 
 ```text
 /opt/nails/.env
 ```
 
-Файл находится вне репозитория, имеет права `600 root:root` и не должен выводиться в отчёты или CI.
+Текущий production backend commit:
 
-### Контейнеры
+```text
+cca0109ea8c716fdf03d97c34a1c0f06bfb5fc50
+```
 
-- `nails-api` — running, healthy;
-- `nails-db` — running, healthy.
+Контейнеры:
 
-### API
+```text
+nails-api — running, healthy
+nails-db  — running, healthy
+```
 
-- локальный адрес: `127.0.0.1:8210`;
-- `GET /health` → `{"status":"ok"}`;
-- `GET /ready` → `{"status":"ready"}`;
-- OpenAPI/Swagger в текущем каркасе наружу не публикуется.
+API:
 
-### PostgreSQL
+```text
+127.0.0.1:8210
+GET /health → {"status":"ok"}
+GET /ready  → {"status":"ready"}
+```
 
-- Alembic: `0001 (head)`;
-- PostgreSQL не имеет опубликованного host-порта;
-- `nails-db` подключён только к `nails-internal`;
-- `nails-api` подключён к `nails-internal` и `nails-edge`;
-- приложение подключается как `nails_app`;
-- `nails_app` не имеет `SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION`;
-- bootstrap-пользователь `nails_admin` не используется приложением.
+PostgreSQL:
 
-### Защита API-контейнера
+- migration `0001 (head)`;
+- host port отсутствует;
+- API подключается как restricted role `nails_app`;
+- `nails_admin` используется только для bootstrap;
+- `nails_app`: `SUPERUSER=0`, `CREATEDB=0`, `CREATEROLE=0`, `REPLICATION=0`.
 
-- непривилегированный пользователь `nails`;
+API container:
+
+- user `nails`;
 - read-only root filesystem;
-- все Linux capabilities удалены;
+- `CapDrop=ALL`;
 - `no-new-privileges:true`;
-- API опубликован только на loopback.
+- bind только на loopback.
 
-### Проверки production
+## 3. Hermes production
 
-Подтверждено:
-
-- миграция применяется на чистую базу;
-- повторный `alembic upgrade head` безопасен;
-- health/readiness работают;
-- API подключён ограниченной ролью;
-- синтетическая запись сохраняется после рестарта;
-- синтетическая запись после проверки удалена;
-- в последних проверенных логах нет traceback, migration error, authentication failure или цикла рестартов.
-
-## 3. Telegram и Hermes
-
-Работает отдельный профиль:
+Профиль:
 
 ```text
 nails
 ```
 
-Он использует отдельные:
-
-- Telegram bot token;
-- allowlist;
-- конфигурацию;
-- SOUL;
-- сессии пользователей.
-
-### Разрешённые инструменты Telegram
+Разрешённые Telegram tools:
 
 ```text
 vision
@@ -117,7 +95,7 @@ skills
 clarify
 ```
 
-### Запрещённые инструменты
+Отключены:
 
 ```text
 terminal
@@ -139,147 +117,178 @@ SSH
 deploy tools
 ```
 
-Встроенная память Hermes и user profile отключены. Причина: профиль используется несколькими Telegram-пользователями, а общая файловая память могла бы смешать их данные. Рабочее состояние мастера должно храниться в PostgreSQL и выдаваться только через Booking API.
+Built-in profile memory отключена, чтобы данные разных Telegram users не смешивались. Persistent state должен поступать только из PostgreSQL через restricted domain tools.
 
-`skills.write_approval=true`: изменение skills требует отдельного подтверждения.
+`skills.write_approval=true`.
 
-### Что Smart Nails умеет сейчас
+## 4. NAILS-002B — реализовано в коде
 
-- вести обычный диалог;
-- честно объяснять текущие ограничения;
-- задавать структурированные уточняющие вопросы;
-- анализировать изображения в рамках доступного vision tool;
-- генерировать изображения;
-- создавать TTS-ответы;
-- использовать разрешённые skills.
+### Authentication boundary
 
-### Чего Smart Nails пока не умеет
+- обязательный `INTERNAL_API_KEY` не короче 32 символов;
+- key сравнивается constant-time;
+- Telegram ID передаётся только внутренним header;
+- пользователь должен существовать в `users`, быть active и иметь role `master` or `admin`;
+- unknown/inactive user получает отказ;
+- автоматического provisioning нет.
 
-- сохранять график, услуги, клиентов и записи в backend;
-- проверять реальные свободные окна;
-- выполнять операции записи;
-- продолжать onboarding через PostgreSQL;
-- определять роль через Booking API.
+### Endpoints
 
-## 4. Реализовано в NAILS-002A
+```text
+POST /api/v1/onboarding/start
+GET  /api/v1/onboarding
+PUT  /api/v1/onboarding/sections/{section}
+POST /api/v1/onboarding/sections/{section}/confirm
+POST /api/v1/onboarding/pause
+POST /api/v1/onboarding/resume
+POST /api/v1/onboarding/complete
+```
 
-- Python 3.12 и FastAPI;
-- SQLAlchemy 2;
-- Alembic;
-- PostgreSQL 17;
-- Pydantic Settings;
-- обязательный `APP_TIMEZONE` в формате IANA;
-- Ruff и pytest;
-- Docker Compose deployment;
-- CI с PostgreSQL service и production-подобным Compose smoke-test;
-- initial schema:
-  - `users`;
-  - `services`;
-  - `clients`;
-  - `bookings`;
-  - `schedule_rules`;
-  - `schedule_exceptions`;
-  - `audit_events`;
-  - `onboarding_states`;
-  - `onboarding_drafts`.
+### Sections
 
-Бизнес-таблицы привязаны к владельцу через `owner_user_id`. Удаление пользователя не должно каскадно уничтожать рабочую историю. Idempotency key записи уникален в пределах владельца.
+```text
+schedule
+services
+buffers
+bookings
+```
 
-## 5. Исправленные ошибки и блокеры
+### Draft model
 
-### Преувеличение возможностей Smart Nails
+Для каждого блока отдельно хранятся:
 
-Проблема: бот предлагал «настроить график» и создавал впечатление, что данные уже сохраняются.
+- current draft payload;
+- last confirmed payload;
+- current revision;
+- confirmed revision;
+- confirmation status/time.
 
-Исправление: SOUL требует отличать тестовое интервью от рабочего сохранения и запрещает утверждать, что график, услуга или запись сохранены без подтверждённого результата Booking API.
+Редактирование подтверждённого блока не подменяет последнюю effective version до нового подтверждения.
 
-### Слишком широкие Hermes toolsets
+Повторное confirmation одной revision и повторное completion идемпотентны.
 
-Проблема: профиль показывал административные и универсальные инструменты, потенциально опасные на VPS.
+Изменение и новое подтверждение upstream section инвалидирует downstream confirmations, зависящие от старых данных.
 
-Исправление: применён точный Telegram whitelist из пяти пользовательских toolsets. Terminal, files, web, browser, code execution, cron, delegation, MCP и infrastructure tools отключены.
+### Validation
 
-### Риск смешивания памяти пользователей
+- schedule intervals and weekday uniqueness;
+- all seven weekdays required for schedule confirmation;
+- unique public service names;
+- non-negative price and ISO currency;
+- duration and buffer limits;
+- service references in buffers/bookings;
+- timezone-aware future booking input;
+- JSON-safe errors without echoing original payload.
 
-Проблема: встроенная файловая память Hermes является общей для профиля и не подходит для бизнес-данных нескольких пользователей.
+### Audit
 
-Исправление: `memory.memory_enabled=false` и `memory.user_profile_enabled=false`. Источник истины — PostgreSQL.
+Создаются события:
 
-### Allowlist тестового Telegram-пользователя
+```text
+onboarding.started
+onboarding.draft_saved
+onboarding.section_confirmed
+onboarding.paused
+onboarding.resumed
+onboarding.completed
+```
 
-Проблема: разрешённый тестовый аккаунт сначала молча игнорировался gateway.
+Audit содержит только safe metadata: section, revision, status and invalidated sections. Полный onboarding payload не записывается.
 
-Исправление: проверены фактический Telegram ID, `.env` профиля и окружение процесса; allowlist перечитан после корректного рестарта профильного gateway.
+### Migration `0002`
 
-### PostgreSQL application role
+Добавляет в `onboarding_drafts`:
 
-Проблема: первоначальный вариант Compose мог использовать bootstrap-пользователя PostgreSQL с избыточными правами.
+- `confirmed_payload`;
+- `revision`;
+- `confirmed_revision`;
+- consistency constraints.
 
-Исправление: разделены `nails_admin` и ограниченный `nails_app`; CI проверяет фактические атрибуты роли и `current_user` API.
+Существующие confirmed rows при migration получают compatible confirmed snapshot.
 
-### Сетевая топология Compose
+## 5. Проверки NAILS-002B
 
-Проблема: полностью internal Docker network позволяла API общаться с БД, но блокировала loopback-доступ к API с VPS.
+Backend CI проверяет:
 
-Исправление: `nails-db` оставлен только в `nails-internal`, а `nails-api` подключён дополнительно к `nails-edge`; порт опубликован строго на `127.0.0.1`.
+- Ruff;
+- migration `0001 → 0002` на clean PostgreSQL 17;
+- repeated `alembic upgrade head`;
+- config and authentication;
+- role access;
+- pause/resume and state persistence;
+- draft/effective separation;
+- confirmation idempotency;
+- confirmation order;
+- service references;
+- downstream invalidation;
+- completion requirements;
+- audit payload safety.
 
-### Защита от удаления бизнес-данных
+Compose smoke-test дополнительно:
 
-Проблема: каскадное удаление владельца могло уничтожить услуги, клиентов, график и записи.
+- запускает production-like stack;
+- проверяет restricted `nails_app`;
+- проверяет `/health` and `/ready`;
+- создаёт synthetic admin;
+- начинает and pauses onboarding;
+- restarts `nails-api`;
+- подтверждает restored paused state.
 
-Исправление: owner foreign keys используют защитное поведение `RESTRICT`; удаление и архивирование должны выполняться отдельными бизнес-операциями.
+## 6. Что после merge ещё не будет работать
 
-### Scope idempotency
+Даже после merge и deployment NAILS-002B Smart Nails не сможет сохранять данные из Telegram, пока не выполнен NAILS-002C.
 
-Проблема: глобальная уникальность idempotency key могла создавать ложные конфликты между мастерами.
+Не реализованы:
 
-Исправление: ключ уникален по паре `owner_user_id + idempotency_key`.
+- Hermes onboarding domain tool;
+- automatic user provisioning;
+- materialization confirmed blocks into working services/schedule/bookings;
+- availability search;
+- booking creation/transfer/cancellation;
+- Google Calendar;
+- backup and restore.
 
-### Отсутствие Docker Compose на production VPS
+## 7. Исправленные проблемы
 
-Проблема: Ubuntu Docker Engine был установлен как `docker.io`, но Compose CLI отсутствовал.
+- SOUL запрещает преувеличивать возможности;
+- Hermes administrative tools removed;
+- shared profile memory disabled;
+- Telegram allowlist corrected and tested;
+- PostgreSQL bootstrap/app roles separated;
+- Docker internal/edge networks separated;
+- owner deletion protected by `RESTRICT`;
+- booking idempotency scoped by owner;
+- Ubuntu `docker-compose-v2` installed without Docker restart;
+- Pydantic validation errors sanitized to JSON-safe details.
 
-Исправление: установлен совместимый Ubuntu-пакет `docker-compose-v2` из `noble-updates/universe`. Docker Engine, daemon и существующие Amnezia-контейнеры не перезапускались и не заменялись.
+## 8. Следующие шаги
 
-## 6. Следующие шаги
+1. Merge PR #11 после полностью зелёного CI.
+2. Создать secure `INTERNAL_API_KEY` в `/opt/nails/.env`.
+3. Back up production DB and deploy exact main commit.
+4. Apply migration `0002`.
+5. Выполнить synthetic API lifecycle and cleanup.
+6. NAILS-002C: restricted Hermes onboarding tool.
+7. NAILS-002D: production onboarding skill.
+8. NAILS-002E: materialization and scheduling happy path.
+9. NAILS-002F: automated backup and verified restore.
 
-### NAILS-002B — следующий активный срез
+## 9. Условия пилота
 
-- onboarding API;
-- trusted identification пользователя;
-- start/get/pause/resume/complete onboarding;
-- черновики графика, услуг, буферов и записей;
-- подтверждение каждого блока;
-- аудит изменений;
-- тест продолжения после рестарта.
+Real-data pilot не начинается, пока:
 
-### Затем
+- Telegram flow сохраняет onboarding через restricted tool;
+- roles and owners проверяются backend;
+- confirmed blocks materialized;
+- scheduling end-to-end работает;
+- backup successfully restored;
+- internal aliases cannot leak;
+- synthetic tests passed and cleaned.
 
-1. Завершить NAILS-002C: подключить Hermes к узким domain tools и проверке ролей Booking API.
-2. Реализовать NAILS-002D: production skill `nails-onboarding`.
-3. Реализовать NAILS-002E: первый scheduling happy path.
-4. Реализовать NAILS-002F: автоматический backup и реальное тестовое восстановление.
-5. Провести полный синтетический прогон ролью `admin`.
-6. Очистить тестовые данные.
-7. Подключить мастера к ограниченному пилоту.
+## 10. Процесс изменений
 
-## 7. Условия начала пилота
-
-Пилот с реальными данными не начинается, пока не выполнены все условия:
-
-- onboarding сохраняется в PostgreSQL;
-- Hermes использует только ограниченные Booking API tools;
-- роли проверяются backend;
-- опасные операции подтверждаются;
-- test restore backup успешно выполнен и документирован;
-- исключена утечка внутренних алиасов;
-- синтетические end-to-end тесты пройдены;
-- тестовые данные очищены.
-
-## 8. Процесс изменений
-
-- основной ChatGPT изменяет код и документацию через GitHub;
-- изменения проходят PR и CI;
-- VPS-агент не разрабатывает и не исправляет tracked-файлы;
-- VPS-агент получает точный commit из `main`, разворачивает его на `de.funti.cc` и выполняет production-проверки;
-- при ошибке deployment агент останавливается и возвращает диагностику.
+- code, migrations, tests and docs изменяются через GitHub;
+- CI обязателен;
+- VPS-agent deploys only exact `main` commit;
+- VPS-agent does not edit tracked files and does not push;
+- production error возвращается разработчику как диагностика.
