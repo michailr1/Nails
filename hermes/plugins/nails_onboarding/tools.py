@@ -136,7 +136,7 @@ def _http_request(
 def _safe_backend_detail(response: httpx.Response) -> tuple[str, Any | None]:
     try:
         body = response.json()
-    except (ValueError, json.JSONDecodeError):
+    except ValueError:
         return "backend_error", None
 
     if not isinstance(body, dict):
@@ -219,7 +219,7 @@ def _call_backend(
     if response.status_code == 200:
         try:
             result = response.json()
-        except (ValueError, json.JSONDecodeError):
+        except ValueError:
             result = None
         if isinstance(result, dict):
             return {"ok": True, "action": action, "result": result}
