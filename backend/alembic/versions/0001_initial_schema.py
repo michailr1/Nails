@@ -68,7 +68,7 @@ def upgrade() -> None:
         sa.CheckConstraint("duration_minutes > 0", name=op.f("ck_services_duration_positive")),
         sa.CheckConstraint("buffer_before_minutes >= 0", name=op.f("ck_services_buffer_before_non_negative")),
         sa.CheckConstraint("buffer_after_minutes >= 0", name=op.f("ck_services_buffer_after_non_negative")),
-        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_services_owner_user_id_users"), ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_services_owner_user_id_users"), ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_services")),
         sa.UniqueConstraint("owner_user_id", "public_name", name="uq_services_owner_public_name"),
     )
@@ -83,7 +83,7 @@ def upgrade() -> None:
         sa.Column("profile_status", client_profile_status, nullable=False),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
         *timestamps(),
-        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_clients_owner_user_id_users"), ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_clients_owner_user_id_users"), ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_clients")),
     )
     op.create_index(
@@ -106,7 +106,7 @@ def upgrade() -> None:
         sa.CheckConstraint("weekday BETWEEN 0 AND 6", name=op.f("ck_schedule_rules_weekday_range")),
         sa.CheckConstraint("(is_working = false) OR (start_time IS NOT NULL AND end_time IS NOT NULL AND end_time > start_time)", name=op.f("ck_schedule_rules_working_interval_valid")),
         sa.CheckConstraint("valid_until IS NULL OR valid_from IS NULL OR valid_until >= valid_from", name=op.f("ck_schedule_rules_valid_date_range")),
-        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_schedule_rules_owner_user_id_users"), ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_schedule_rules_owner_user_id_users"), ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_schedule_rules")),
     )
     op.create_index(
@@ -126,7 +126,7 @@ def upgrade() -> None:
         sa.Column("reason", sa.String(length=255), nullable=True),
         *timestamps(),
         sa.CheckConstraint("(is_working = false) OR (start_time IS NOT NULL AND end_time IS NOT NULL AND end_time > start_time)", name=op.f("ck_schedule_exceptions_working_interval_valid")),
-        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_schedule_exceptions_owner_user_id_users"), ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_schedule_exceptions_owner_user_id_users"), ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_schedule_exceptions")),
     )
     op.create_index(
@@ -156,11 +156,11 @@ def upgrade() -> None:
         *timestamps(),
         sa.CheckConstraint("ends_at > starts_at", name=op.f("ck_bookings_end_after_start")),
         sa.CheckConstraint("price_amount >= 0", name=op.f("ck_bookings_price_non_negative")),
-        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_bookings_owner_user_id_users"), ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"], name=op.f("fk_bookings_owner_user_id_users"), ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["client_id"], ["clients.id"], name=op.f("fk_bookings_client_id_clients"), ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["service_id"], ["services.id"], name=op.f("fk_bookings_service_id_services"), ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_bookings")),
-        sa.UniqueConstraint("idempotency_key", name=op.f("uq_bookings_idempotency_key")),
+        sa.UniqueConstraint("owner_user_id", "idempotency_key", name="uq_bookings_owner_idempotency_key"),
     )
     op.create_index("ix_bookings_starts_at", "bookings", ["starts_at"])
     op.create_index(
