@@ -14,7 +14,7 @@ Nails создаётся как закрытый помощник мастера
 
 ## Текущий статус
 
-На 13 июля 2026 года `NAILS-002B` завершён и развёрнут в production на `de.funti.cc`. Активный этап — `NAILS-002C`: подключение Hermes к onboarding API через один ограниченный domain tool.
+На 13 июля 2026 года `NAILS-002B` завершён и работает в production на `de.funti.cc`. Код `NAILS-002C` реализован в PR #14 и ожидает полного CI, merge и отдельного production deployment.
 
 ### Уже работает в production
 
@@ -41,46 +41,45 @@ Production commit:
 40b25ff5fe519eda8602d0eeac7d06a1b191138d
 ```
 
-Production deployment проверил:
+### Реализовано в коде NAILS-002C
 
-- migration `0001 → 0002`;
-- повторный `alembic upgrade head`;
-- missing/wrong authentication → `401`;
-- unknown/inactive user → `403`;
-- draft/confirmed revision behavior;
-- confirmation order;
-- pause/restart/resume;
-- completion idempotency;
-- audit privacy;
-- cleanup synthetic data;
-- отсутствие влияния на Docker daemon, Amnezia, Hermes и другие проекты.
+- profile-local Hermes plugin `nails-onboarding`;
+- один dedicated tool `nails_onboarding`;
+- Telegram identity только из trusted task-local context;
+- model-visible schema не содержит Telegram ID, URL, headers, request ID или secret;
+- backend URL жёстко фиксирован на `127.0.0.1:8210`;
+- разрешены только start/get/save/confirm/pause/resume/complete;
+- fail-closed для non-Telegram or missing identity;
+- одинаковый safe response для backend `401` и `403`;
+- ограниченный retry только для transport errors и `502/503/504`;
+- обновлён SOUL: draft, confirmed onboarding block и active working data называются по-разному;
+- security tests запускаются на Python 3.11 и 3.12.
+
+До merge и production deployment этот tool нельзя считать доступным в Telegram.
 
 ### Пока не работает через Telegram
 
 Smart Nails пока не может надёжно:
 
-- вызывать onboarding API из Telegram;
-- сохранять рабочее onboarding-состояние через Hermes;
+- сохранять onboarding через production plugin;
 - искать реальные свободные окна;
 - создавать, переносить или отменять записи;
 - рассчитывать рабочую выручку;
 - синхронизироваться с Google Calendar.
 
-До завершения `NAILS-002C` бот проводит только тестовое интервью и обязан говорить, что сохранение из Telegram ещё не подключено.
+До production deployment NAILS-002C бот проводит только тестовое интервью и обязан говорить, что сохранение из Telegram ещё не подключено.
 
 ## Активный этап: NAILS-002C
 
-Нужно создать один узкий Hermes onboarding tool:
+После зелёного CI необходимо:
 
-- Telegram ID берётся только из trusted gateway context;
-- модель не передаёт и не выбирает identity;
-- доступны только start/get/save/confirm/pause/resume/complete;
-- generic HTTP остаётся запрещён;
-- production authentication setting скрыт от модели;
-- два пользователя не видят состояние друг друга;
-- unknown/inactive user получает безопасный отказ;
-- tool переживает restart Hermes;
-- aiogram не добавляется.
+1. Смержить PR #14.
+2. Установить plugin только в profile `nails`.
+3. Передать authentication setting в profile environment без вывода значения.
+4. Добавить только toolset `nails_onboarding` к Telegram whitelist.
+5. Проверить identity spoofing, two-user isolation и safe refusal.
+6. Проверить pause/resume после restart gateway.
+7. Очистить synthetic data.
 
 Issue: [`NAILS-002C`](https://github.com/michailr1/Nails/issues/5).
 
@@ -122,6 +121,7 @@ Hermes отвечает за диалог, но не является источ
 ## Документация
 
 - [Фактическое состояние проекта](docs/status.md)
+- [Restricted Hermes onboarding tool](docs/hermes-onboarding-plugin.md)
 - [Отчёт deployment NAILS-002B](docs/deployments/2026-07-13-nails-002b.md)
 - [Onboarding API](docs/onboarding-api.md)
 - [Архитектура](docs/architecture.md)
