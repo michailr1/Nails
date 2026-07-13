@@ -2,6 +2,8 @@
 
 Profile-local Hermes plugin for NAILS-002C.
 
+**Proprietary module of the Nails project.** Not for use, copying or distribution outside this project. Plain-language documentation of every function: [docs/modules/nails-onboarding-plugin.md](../../../docs/modules/nails-onboarding-plugin.md).
+
 ## Security boundary
 
 The model sees one tool: `nails_onboarding`.

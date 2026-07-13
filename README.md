@@ -122,6 +122,7 @@ Hermes отвечает за диалог, но не является источ
 
 - [Фактическое состояние проекта](docs/status.md)
 - [Restricted Hermes onboarding tool](docs/hermes-onboarding-plugin.md)
+- [Модуль nails-onboarding: паспорт и описание функций](docs/modules/nails-onboarding-plugin.md)
 - [Отчёт deployment NAILS-002B](docs/deployments/2026-07-13-nails-002b.md)
 - [Onboarding API](docs/onboarding-api.md)
 - [Архитектура](docs/architecture.md)
