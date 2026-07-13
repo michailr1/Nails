@@ -26,7 +26,14 @@ def test_schema_exposes_only_public_business_arguments():
     assert parameters["additionalProperties"] is False
     assert set(parameters["properties"]) == {
         "action",
+        "date_kind",
         "day",
+        "month",
+        "day_of_month",
+        "offset_days",
+        "weekday_iso",
+        "occurrence",
+        "days",
         "service_name",
         "client_public_name",
         "phone",
@@ -34,11 +41,13 @@ def test_schema_exposes_only_public_business_arguments():
         "confirmed",
     }
     assert parameters["properties"]["action"]["enum"] == [
+        "resolve_date",
         "list_services",
         "day_view",
         "free_slots",
         "find_client",
         "create_client",
+        "update_availability",
         "create_booking",
     ]
     serialized = json.dumps(schemas.NAILS_SCHEDULING).lower()
@@ -129,12 +138,44 @@ def test_missing_key_fails_before_http(monkeypatch):
 @pytest.mark.parametrize(
     "args",
     [
+        {"action": "resolve_date", "date_kind": "absolute"},
+        {
+            "action": "resolve_date",
+            "date_kind": "weekday",
+            "weekday_iso": 5,
+            "occurrence": "current_year",
+        },
+        {
+            "action": "resolve_date",
+            "date_kind": "month_day",
+            "month": 2,
+            "day_of_month": 30,
+            "occurrence": "nearest_future",
+        },
         {"action": "list_services", "day": "2026-07-18"},
         {"action": "day_view"},
         {"action": "day_view", "day": "18.07.2026"},
         {"action": "free_slots", "day": "2026-07-18"},
         {"action": "find_client", "client_public_name": ""},
         {"action": "create_client", "client_public_name": "Анна", "confirmed": False},
+        {
+            "action": "update_availability",
+            "days": [
+                {
+                    "day": "2026-07-17",
+                    "state": "available",
+                    "intervals": [{"start_time": "15:00", "end_time": "11:00"}],
+                }
+            ],
+            "confirmed": True,
+        },
+        {
+            "action": "update_availability",
+            "days": [
+                {"day": "2026-07-18", "state": "unknown", "intervals": []}
+            ],
+            "confirmed": False,
+        },
         {
             "action": "create_booking",
             "client_public_name": "Анна",
