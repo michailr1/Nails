@@ -1,0 +1,168 @@
+name: Deployment runbooks E5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/deploy/nails-002e5-date-availability.sh"
+      - "ops/deploy/lib/nails-002e5-common.sh"
+      - "ops/deploy/lib/nails-002e5-runtime.sh"
+      - "ops/deploy/README.md"
+      - "docs/operations/hermes-plugin-runtime.md"
+      - ".github/workflows/deployment-runbooks-e5.yml"
+  pull_request:
+    paths:
+      - "ops/deploy/nails-002e5-date-availability.sh"
+      - "ops/deploy/lib/nails-002e5-common.sh"
+      - "ops/deploy/lib/nails-002e5-runtime.sh"
+      - "ops/deploy/README.md"
+      - "docs/operations/hermes-plugin-runtime.md"
+      - ".github/workflows/deployment-runbooks-e5.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Bash syntax
+        run: |
+          bash -n ops/deploy/nails-002e5-date-availability.sh
+          bash -n ops/deploy/lib/nails-002e5-common.sh
+          bash -n ops/deploy/lib/nails-002e5-runtime.sh
+
+      - name: Validate E5 deployment contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          entry = Path("ops/deploy/nails-002e5-date-availability.sh").read_text(encoding="utf-8")
+          common = Path("ops/deploy/lib/nails-002e5-common.sh").read_text(encoding="utf-8")
+          runtime = Path("ops/deploy/lib/nails-002e5-runtime.sh").read_text(encoding="utf-8")
+          combined = "\n".join((entry, common, runtime))
+
+          assert entry.startswith("#!/usr/bin/env bash\n")
+          assert "set -Eeuo pipefail" in entry
+          assert 'RELEASE_SHA="${NAILS_RELEASE_SHA:-}"' in entry
+          assert "ops/deploy/lib/nails-002e5-runtime.sh" in entry
+          assert "nails_002e5_main" in entry
+
+          assert 'RUNBOOK_ID="NAILS-002E5"' in common
+          assert 'EXPECTED_HOST="de.funti.cc"' in common
+          assert 'EXPECTED_BEFORE="385a92962e3736553335d717adcdf4b83ac8a8b3"' in common
+          assert 'EXPECTED_CODE_ANCESTOR="c9e400c80398bd4367aad0ed0416ee0fc6a79b2d"' in common
+          assert 'DB_BACKUP="${BACKUP_ROOT}/nails-before-002e5-${STAMP}.sql.gz"' in common
+          assert 'RUNTIME_BACKUP="${PROFILE}/backups/nails-002e5-${STAMP}"' in common
+
+          assert 'XDG_RUNTIME_DIR="$USER_RUNTIME_DIR" systemctl --user' in common
+          assert 'XDG_RUNTIME_DIR="$USER_RUNTIME_DIR" journalctl --user' in common
+          assert 'GATEWAY_FRAGMENT="/root/.config/systemd/user/hermes-gateway-nails.service"' in common
+          assert "discover_plugins()" in common
+          assert "discover_plugins(force=True)" not in common
+          assert '"nails-scheduling": ("nails-scheduling", "0.2.0")' in common
+          assert 'assert "resolve_date" in actions' in common
+          assert 'assert "update_availability" in actions' in common
+
+          assert "ROLLBACK_PERFORMED=true" in common
+          assert 'git -C "$REPO" reset --hard "$HEAD_BEFORE"' in common
+          assert 'docker image tag "$API_IMAGE_ID_BEFORE" "$API_IMAGE_REF_BEFORE"' in common
+          assert "compose up -d --no-deps --force-recreate --no-build nails-api" in common
+          assert "restore_runtime" in common
+          assert "wait_api" in common
+
+          assert "git merge --ff-only \"$RELEASE_SHA\"" in runtime
+          assert "git diff --quiet \"$EXPECTED_BEFORE\" \"$RELEASE_SHA\" -- backend/alembic" in runtime
+          assert "compose exec -T nails-db" in runtime
+          assert "pg_dump --no-owner --no-acl" in runtime
+          assert "gzip -t \"$DB_BACKUP\"" in runtime
+          assert "compose build nails-api" in runtime
+          assert "compose up -d --no-deps --force-recreate --no-build nails-api" in runtime
+          assert "user_systemctl stop \"$GATEWAY\"" in runtime
+          assert "user_systemctl start \"$GATEWAY\"" in runtime
+          assert 'verify_plugin_list "0.1.0"' in runtime
+          assert 'verify_plugin_list "0.2.0"' in runtime
+          assert "verify_registry_and_visibility" in runtime
+          assert "verify_openapi" in runtime
+          assert "verify_alembic_0006" in runtime
+          assert "NAILS_002E5_DEPLOYMENT_OK" in runtime
+          assert "calendar_data_changed_by_deployment=false" in runtime
+          assert "manual_sql_executed=false" in runtime
+          assert "db_container_unchanged=true" in runtime
+          assert "docker_daemon_unchanged=true" in runtime
+          assert "schema_revision_changed=false" in runtime
+
+          forbidden = (
+              "docker compose down",
+              "compose down",
+              "docker restart",
+              "compose restart",
+              "alembic upgrade head",
+              "psql ",
+              "DELETE FROM",
+              "UPDATE availability_intervals",
+              "INSERT INTO availability_intervals",
+              "plugins enable",
+              "plugins disable",
+              "git push",
+              "git commit",
+              "gh pr",
+              "gh issue",
+          )
+          for snippet in forbidden:
+              assert snippet not in combined, f"forbidden operation: {snippet}"
+
+          assert "compose up -d nails-db" not in combined
+          assert "compose up -d --force-recreate nails-db" not in combined
+          assert "nails_scheduling(" not in combined
+          assert "NAILS_INTERNAL_API_KEY=" not in combined
+          assert "INTERNAL_API_KEY=" not in combined
+
+          expected_files = {
+              "__init__.py",
+              "operations.py",
+              "plugin.yaml",
+              "presenters.py",
+              "schemas.py",
+              "tools.py",
+              "transport.py",
+              "validation.py",
+          }
+          lines = common.splitlines()
+          start = lines.index("PLUGIN_FILES=(") + 1
+          end = lines.index(")", start)
+          actual_files = {
+              line.strip().strip('"')
+              for line in lines[start:end]
+              if line.strip()
+          }
+          assert actual_files == expected_files
+
+          def python_heredocs(text: str) -> list[str]:
+              lines = text.splitlines()
+              snippets = []
+              index = 0
+              while index < len(lines):
+                  if "<<'PY'" not in lines[index]:
+                      index += 1
+                      continue
+                  index += 1
+                  snippet = []
+                  while index < len(lines) and lines[index] != "PY":
+                      snippet.append(lines[index])
+                      index += 1
+                  assert index < len(lines), "unterminated Python heredoc"
+                  snippets.append("\n".join(snippet) + "\n")
+                  index += 1
+              return snippets
+
+          snippets = python_heredocs(common) + python_heredocs(runtime)
+          assert len(snippets) == 7, len(snippets)
+          for number, snippet in enumerate(snippets, start=1):
+              compile(snippet, f"embedded-python-{number}", "exec")
+
+          print("DEPLOYMENT_RUNBOOK_E5_CONTRACT_OK")
+          PY
