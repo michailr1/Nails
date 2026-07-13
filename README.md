@@ -108,6 +108,7 @@
 - [Обязательный контракт агентов](AGENTS.md)
 - [Разделение ответственности основного и VPS-агента](docs/operations/agent-responsibilities.md)
 - [Проверенная production-инфраструктура](docs/operations/production-infrastructure.md)
+- [Контракт Hermes plugins и Telegram tools](docs/operations/hermes-plugin-runtime.md)
 - [Фактическое состояние проекта](docs/status.md)
 - [План разработки](docs/roadmap.md)
 - [Архитектура](docs/architecture.md)

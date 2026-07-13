@@ -21,35 +21,88 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate historical runbook Bash syntax
-        run: bash -n ops/deploy/nails-002e4.sh
+      - name: Validate Bash syntax
+        run: |
+          bash -n ops/deploy/nails-002e4.sh
+          bash -n ops/deploy/nails-002e4-v2.sh
 
-      - name: Validate historical artifact and deployment boundary
+      - name: Validate legacy artifact and corrected E4 boundary
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
 
-          path = Path("ops/deploy/nails-002e4.sh")
-          text = path.read_text(encoding="utf-8")
-          lines = text.splitlines()
+          legacy_path = Path("ops/deploy/nails-002e4.sh")
+          current_path = Path("ops/deploy/nails-002e4-v2.sh")
+          readme_path = Path("ops/deploy/README.md")
 
-          # The failed E4 runbook remains immutable and syntactically valid as an
-          # auditable record. These assertions do not authorize its execution.
-          assert text.startswith("#!/usr/bin/env bash\n")
-          assert "\r" not in text
-          assert 'EXPECTED_BEFORE="5565a524b75a04fe5d8bc2c3e758d2994e9d9c12"' in text
-          assert 'EXPECTED_FEATURE_ANCESTOR="77b6ca69286d7f2c203a85c04f4224f783038fdf"' in text
-          assert 'RELEASE_SHA="${NAILS_RELEASE_SHA:-}"' in text
-          assert 'git merge --ff-only "$RELEASE_SHA"' in text
-          assert 'git -C "$REPO" reset --hard "$HEAD_BEFORE"' in text
-          assert 'systemctl stop "$GATEWAY"' in text
-          assert 'systemctl start "$GATEWAY"' in text
-          assert 'PLUGIN_TARGET="${PROFILE}/plugins/nails_scheduling"' in text
-          assert 'SKILL_TARGET="${PROFILE}/skills/nails-scheduling/SKILL.md"' in text
-          assert 'NEW_ALLOWLIST="clarify,image_gen,nails_onboarding,nails_scheduling,skills,tts,vision"' in text
-          assert "migration_executed=false" in text
-          assert "database_write_executed=false" in text
-          assert "backend_restart_executed=false" in text
+          legacy = legacy_path.read_text(encoding="utf-8")
+          current = current_path.read_text(encoding="utf-8")
+          readme = readme_path.read_text(encoding="utf-8")
+          lines = current.splitlines()
+
+          # The first runbook remains an immutable, blocked audit artifact.
+          assert legacy.startswith("#!/usr/bin/env bash\n")
+          assert 'EXPECTED_BEFORE="5565a524b75a04fe5d8bc2c3e758d2994e9d9c12"' in legacy
+          assert 'systemctl stop "$GATEWAY"' in legacy
+          assert 'OLD_ALLOWLIST="clarify,image_gen,nails_onboarding,skills,tts,vision"' in legacy
+          assert "nails-002e4.sh` must **not** be executed again" in readme
+
+          # V2 identity and release ancestry.
+          assert current.startswith("#!/usr/bin/env bash\n")
+          assert "\r" not in current
+          assert 'RUNBOOK_ID="NAILS-002E4-V2"' in current
+          assert 'EXPECTED_BEFORE="5565a524b75a04fe5d8bc2c3e758d2994e9d9c12"' in current
+          assert 'EXPECTED_FEATURE_ANCESTOR="77b6ca69286d7f2c203a85c04f4224f783038fdf"' in current
+          assert 'EXPECTED_INFRA_ANCESTOR="e80c2e0e75afdcbb4462abf45c4f1f52a1208e9a"' in current
+          assert 'RELEASE_SHA="${NAILS_RELEASE_SHA:-}"' in current
+          assert 'git merge --ff-only "$RELEASE_SHA"' in current
+          assert 'git -C "$REPO" reset --hard "$HEAD_BEFORE"' in current
+          assert 'git cat-file -e "${RELEASE_SHA}:ops/deploy/nails-002e4-v2.sh"' in current
+
+          # Correct root user-level systemd boundary.
+          assert 'USER_RUNTIME_DIR="/run/user/0"' in current
+          assert 'XDG_RUNTIME_DIR="$USER_RUNTIME_DIR" systemctl --user "$@"' in current
+          assert 'XDG_RUNTIME_DIR="$USER_RUNTIME_DIR" journalctl --user "$@"' in current
+          assert 'GATEWAY_FRAGMENT="/root/.config/systemd/user/hermes-gateway-nails.service"' in current
+          assert 'user_systemctl stop "$GATEWAY"' in current
+          assert 'user_systemctl start "$GATEWAY"' in current
+          assert re.search(r'^\s*systemctl\s+stop\s+"\$GATEWAY"', current, re.MULTILINE) is None
+          assert re.search(r'^\s*systemctl\s+start\s+"\$GATEWAY"', current, re.MULTILINE) is None
+          assert re.search(r'^\s*systemctl\s+restart\s+"\$GATEWAY"', current, re.MULTILINE) is None
+
+          # Exact Hermes and structured YAML contract.
+          assert 'Hermes Agent v0.18.2 (2026.7.7.2)' in current
+          assert 'PROFILE_CONFIG="${PROFILE}/config.yaml"' in current
+          assert 'plugins.get("enabled") == ["nails-onboarding"]' in current
+          assert 'plugins.get("enabled") == ["nails-onboarding", "nails-scheduling"]' in current
+          assert '"nails_onboarding",\n    "nails_scheduling",' in current
+          assert 'yaml.safe_load' in current
+          assert 'yaml.safe_dump' in current
+          assert 'os.replace(temp_name, path)' in current
+          assert 'CONFIG_UPDATED_ATOMICALLY=true' in current
+          assert 'HERMES_HOME="$PROFILE" "$HERMES_BIN" --profile nails config check' in current
+          assert 'enabled user 0.5.0 nails-onboarding' in current
+          assert 'enabled user 0.1.0 nails-scheduling' in current
+          assert 'PLUGIN_REGISTRY_OK=true' in current
+          assert 'TELEGRAM_VISIBILITY_OK=true' in current
+
+          # Backup and rollback semantics.
+          assert 'cp -a "$PROFILE_CONFIG" "${BACKUP_DIR}/config.before"' in current
+          assert 'MUTATION_STARTED="false"' in current
+          assert 'if [[ "$MUTATION_STARTED" != "true" ]]' in current
+          assert 'ROLLBACK_PERFORMED=false' in current
+          assert 'ROLLBACK_REASON=no-production-mutation-started' in current
+          assert 'restore_runtime_from_backup' in current
+
+          # Backend and Docker must remain untouched.
+          assert 'backend_api_container_unchanged=true' in current
+          assert 'backend_db_container_unchanged=true' in current
+          assert 'docker_daemon_unchanged=true' in current
+          assert 'migration_executed=false' in current
+          assert 'database_write_executed=false' in current
+          assert 'backend_restart_executed=false' in current
+          assert 'NAILS_002E4_DEPLOYMENT_OK' in current
 
           forbidden = (
               "git push",
@@ -63,10 +116,13 @@ jobs:
               "docker restart",
               "alembic upgrade",
               "psql ",
-              "systemctl restart",
+              "plugins enable",
+              "plugins disable",
+              "plugins install",
+              "plugins remove",
           )
           for snippet in forbidden:
-              assert snippet not in text, f"forbidden deployment operation: {snippet}"
+              assert snippet not in current, f"forbidden deployment operation: {snippet}"
 
           expected_release_files = {
               "__init__.py",
@@ -90,7 +146,7 @@ jobs:
           snippets = []
           index = 0
           while index < len(lines):
-              if "python3 - <<'PY'" not in lines[index]:
+              if "<<'PY'" not in lines[index]:
                   index += 1
                   continue
               index += 1
@@ -102,20 +158,20 @@ jobs:
               snippets.append("\n".join(snippet) + "\n")
               index += 1
 
-          assert len(snippets) == 6
+          assert len(snippets) == 10
           for number, snippet in enumerate(snippets, start=1):
               compile(snippet, f"embedded-python-{number}", "exec")
 
-          readme = Path("ops/deploy/README.md").read_text(encoding="utf-8")
-          assert "VPS agent never writes or edits" in readme
-          assert "nails-002e4.sh` must **not** be executed again" in readme
-          assert "blocked legacy runbook" in readme
+          assert "ops/deploy/nails-002e4-v2.sh" in readme
+          assert "NAILS_002E4_DEPLOYMENT_OK" in readme
           assert "root user-level systemd" in readme
-          assert "/root/.hermes/profiles/nails/config.yaml" in readme
-          assert "new reviewed runbook with a new filename" in readme
+          assert "atomically updates" in readme
+          assert "nails-scheduling` to `plugins.enabled" in readme
+          assert "nails_scheduling` to `platform_toolsets.telegram" in readme
+          assert "This runbook is not authorized merely because it exists on a branch" in readme
+          assert "<EXACT_APPROVED_RELEASE_SHA>" in readme
           assert "<APPROVED_RUNBOOK>.sh" in readme
           assert 'git show "${NAILS_RELEASE_SHA}:ops/deploy/nails-002e4.sh" | bash' not in readme
-          assert "<EXACT_APPROVED_RELEASE_SHA>" in readme
 
-          print("DEPLOYMENT_RUNBOOK_ARCHIVE_CONTRACT_OK")
+          print("DEPLOYMENT_RUNBOOK_V2_CONTRACT_OK")
           PY

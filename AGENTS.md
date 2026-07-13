@@ -5,9 +5,10 @@
 Обязательные нормативные документы:
 
 - [`docs/operations/agent-responsibilities.md`](docs/operations/agent-responsibilities.md) — разделение ответственности основного и VPS-агента;
-- [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — проверенная production-топология, пути и правильный способ управления Hermes.
+- [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — проверенная production-топология, пути и правильный способ управления Hermes;
+- [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — точный контракт загрузки profile-local plugins, `plugins.enabled` и Telegram toolsets для установленной версии Hermes.
 
-Перед подготовкой любого production diagnostic, deployment, restart или rollback runbook основной агент обязан прочитать оба документа. Нельзя заново угадывать service manager, runtime paths или структуру конфигурации по памяти предыдущего чата.
+Перед подготовкой любого production diagnostic, deployment, restart или rollback runbook основной агент обязан прочитать все три документа. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации или правила видимости tools по памяти предыдущего чата.
 
 ## Неизменяемая граница ответственности
 
@@ -69,7 +70,7 @@ VPS-агенту запрещено:
 
 ## Обязательный порядок работы
 
-1. Основной агент читает этот файл, контракт ответственности и production infrastructure source of truth.
+1. Основной агент читает этот файл, контракт ответственности, production infrastructure source of truth и Hermes plugin runtime contract.
 2. Основной агент проверяет актуальный `main` и production baseline.
 3. Основной агент создаёт ветку и вносит изменения.
 4. Основной агент запускает review и CI.

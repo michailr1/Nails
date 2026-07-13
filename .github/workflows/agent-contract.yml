@@ -22,13 +22,18 @@ jobs:
 
           root_contract = Path("AGENTS.md")
           detailed_contract = Path("docs/operations/agent-responsibilities.md")
+          infrastructure_contract = Path("docs/operations/production-infrastructure.md")
+          plugin_runtime_contract = Path("docs/operations/hermes-plugin-runtime.md")
           readme = Path("README.md")
 
           assert root_contract.is_file(), "AGENTS.md is mandatory"
           assert detailed_contract.is_file(), "detailed agent contract is mandatory"
+          assert infrastructure_contract.is_file(), "production infrastructure contract is mandatory"
+          assert plugin_runtime_contract.is_file(), "Hermes plugin runtime contract is mandatory"
 
           root_text = root_contract.read_text(encoding="utf-8")
           detailed_text = detailed_contract.read_text(encoding="utf-8")
+          plugin_text = plugin_runtime_contract.read_text(encoding="utf-8")
           readme_text = readme.read_text(encoding="utf-8")
 
           required_root_phrases = (
@@ -38,6 +43,9 @@ jobs:
               "выполнять push, merge или любые изменения в GitHub",
               "не исправлять проблему самостоятельно",
               "Issue закрывает основной агент",
+              "обязан прочитать все три документа",
+              "plugin keys",
+              "правила видимости tools",
           )
           for phrase in required_root_phrases:
               assert phrase in root_text, f"missing root contract phrase: {phrase}"
@@ -53,9 +61,23 @@ jobs:
           for phrase in required_detailed_phrases:
               assert phrase in detailed_text, f"missing detailed contract phrase: {phrase}"
 
+          required_plugin_phrases = (
+              "Hermes Agent v0.18.2 (2026.7.7.2)",
+              "plugins.enabled",
+              "nails-onboarding",
+              "nails-scheduling",
+              "platform_toolsets",
+              "nails_scheduling",
+              "must not rely on that implicit behavior",
+          )
+          for phrase in required_plugin_phrases:
+              assert phrase in plugin_text, f"missing plugin runtime phrase: {phrase}"
+
           required_readme_links = (
               "[Обязательный контракт агентов](AGENTS.md)",
               "[Разделение ответственности основного и VPS-агента](docs/operations/agent-responsibilities.md)",
+              "[Проверенная production-инфраструктура](docs/operations/production-infrastructure.md)",
+              "[Контракт Hermes plugins и Telegram tools](docs/operations/hermes-plugin-runtime.md)",
           )
           for link in required_readme_links:
               assert link in readme_text, f"missing README contract link: {link}"
