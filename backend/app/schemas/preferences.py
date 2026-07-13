@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-AssistantStyle = Literal["business", "friendly", "casual", "playful", "custom"]
+type AssistantStyle = Literal["business", "friendly", "casual", "playful", "custom"]
 
 
 class PreferredNameUpdateRequest(BaseModel):
@@ -34,7 +36,7 @@ class AssistantStyleUpdateRequest(BaseModel):
         return candidate or None
 
     @model_validator(mode="after")
-    def require_custom_details(self) -> "AssistantStyleUpdateRequest":
+    def require_custom_details(self) -> AssistantStyleUpdateRequest:
         if self.style == "custom" and self.details is None:
             raise ValueError("custom style requires details")
         return self
