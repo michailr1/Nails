@@ -5,7 +5,6 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-
 SERVICE_PAYLOAD = {
     "public_name": "Маникюр",
     "public_description": "Покрытие и обработка",

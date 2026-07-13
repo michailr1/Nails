@@ -3,6 +3,9 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.auth import RequestIdentity
 from app.models import AuditEvent, Service
 from app.schemas.scheduling import (
@@ -16,8 +19,6 @@ from app.schemas.scheduling import (
 from app.services.normalization import normalize_public_name
 from app.services.scheduling_common import SchedulingDomainError, lock_owner_schedule
 from app.services.scheduling_presenters import service_summary
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 _SERVICE_FIELDS = (
     "public_name",
