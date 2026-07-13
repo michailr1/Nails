@@ -9,8 +9,18 @@ from app.main import app
 from app.models import AuditEvent
 
 
+def empty_preferences() -> dict:
+    return {
+        "preferred_name": None,
+        "assistant_style": None,
+        "assistant_style_details": None,
+        "default_work_intervals": None,
+        "is_complete": False,
+    }
+
+
 @pytest.mark.usefixtures("clean_database")
-def test_preferences_start_empty_and_become_complete(
+def test_preferences_require_name_style_and_default_hours_answer(
     client: TestClient,
     create_user: Callable,
     auth_headers: Callable,
@@ -20,12 +30,7 @@ def test_preferences_start_empty_and_become_complete(
 
     empty = client.get("/api/v1/onboarding/preferences", headers=headers)
     assert empty.status_code == 200
-    assert empty.json() == {
-        "preferred_name": None,
-        "assistant_style": None,
-        "assistant_style_details": None,
-        "is_complete": False,
-    }
+    assert empty.json() == empty_preferences()
 
     named = client.put(
         "/api/v1/onboarding/preferences/name",
@@ -45,12 +50,93 @@ def test_preferences_start_empty_and_become_complete(
         },
     )
     assert styled.status_code == 200
-    assert styled.json() == {
+    assert styled.json()["is_complete"] is False
+    assert styled.json()["default_work_intervals"] is None
+
+    hours = client.put(
+        "/api/v1/onboarding/preferences/default-work-hours",
+        headers=headers,
+        json={
+            "intervals": [
+                {"start_time": "11:00", "end_time": "20:00"},
+            ]
+        },
+    )
+    assert hours.status_code == 200
+    assert hours.json() == {
         "preferred_name": "Настя",
         "assistant_style": "friendly",
         "assistant_style_details": "тепло, но без лишних эмодзи",
+        "default_work_intervals": [
+            {"start_time": "11:00:00", "end_time": "20:00:00"},
+        ],
         "is_complete": True,
     }
+
+
+@pytest.mark.usefixtures("clean_database")
+def test_master_can_explicitly_have_no_default_work_hours(
+    client: TestClient,
+    create_user: Callable,
+    auth_headers: Callable,
+) -> None:
+    create_user()
+    headers = auth_headers()
+    client.put(
+        "/api/v1/onboarding/preferences/name",
+        headers=headers,
+        json={"preferred_name": "Настя"},
+    )
+    client.put(
+        "/api/v1/onboarding/preferences/style",
+        headers=headers,
+        json={"style": "casual"},
+    )
+
+    response = client.put(
+        "/api/v1/onboarding/preferences/default-work-hours",
+        headers=headers,
+        json={"intervals": []},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["default_work_intervals"] == []
+    assert response.json()["is_complete"] is True
+
+
+@pytest.mark.parametrize(
+    "intervals",
+    [
+        [{"start_time": "20:00", "end_time": "11:00"}],
+        [
+            {"start_time": "10:00", "end_time": "15:00"},
+            {"start_time": "14:00", "end_time": "18:00"},
+        ],
+        [
+            {"start_time": "08:00", "end_time": "09:00"},
+            {"start_time": "10:00", "end_time": "11:00"},
+            {"start_time": "12:00", "end_time": "13:00"},
+            {"start_time": "14:00", "end_time": "15:00"},
+            {"start_time": "16:00", "end_time": "17:00"},
+        ],
+    ],
+)
+@pytest.mark.usefixtures("clean_database")
+def test_invalid_default_work_hours_are_rejected(
+    client: TestClient,
+    create_user: Callable,
+    auth_headers: Callable,
+    intervals: list[dict],
+) -> None:
+    create_user()
+
+    response = client.put(
+        "/api/v1/onboarding/preferences/default-work-hours",
+        headers=auth_headers(),
+        json={"intervals": intervals},
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.usefixtures("clean_database")
@@ -92,15 +178,19 @@ def test_preferences_are_isolated_between_two_users(
         headers=first_headers,
         json={"style": "playful"},
     )
+    client.put(
+        "/api/v1/onboarding/preferences/default-work-hours",
+        headers=first_headers,
+        json={
+            "intervals": [
+                {"start_time": "11:00", "end_time": "20:00"},
+            ]
+        },
+    )
 
     second = client.get("/api/v1/onboarding/preferences", headers=second_headers)
     assert second.status_code == 200
-    assert second.json() == {
-        "preferred_name": None,
-        "assistant_style": None,
-        "assistant_style_details": None,
-        "is_complete": False,
-    }
+    assert second.json() == empty_preferences()
 
 
 @pytest.mark.usefixtures("clean_database")
@@ -122,6 +212,16 @@ def test_preferences_survive_new_application_session(
             headers=headers,
             json={"style": "casual", "details": "без официоза"},
         )
+        first_client.put(
+            "/api/v1/onboarding/preferences/default-work-hours",
+            headers=headers,
+            json={
+                "intervals": [
+                    {"start_time": "10:00", "end_time": "14:00"},
+                    {"start_time": "16:00", "end_time": "20:00"},
+                ]
+            },
+        )
 
     clear_runtime_caches()
 
@@ -131,11 +231,15 @@ def test_preferences_survive_new_application_session(
         assert restored.json()["preferred_name"] == "Настя"
         assert restored.json()["assistant_style"] == "casual"
         assert restored.json()["assistant_style_details"] == "без официоза"
+        assert restored.json()["default_work_intervals"] == [
+            {"start_time": "10:00:00", "end_time": "14:00:00"},
+            {"start_time": "16:00:00", "end_time": "20:00:00"},
+        ]
         assert restored.json()["is_complete"] is True
 
 
 @pytest.mark.usefixtures("clean_database")
-def test_audit_does_not_store_name_or_free_text_style_details(
+def test_audit_does_not_store_name_style_details_or_raw_hours(
     client: TestClient,
     create_user: Callable,
     auth_headers: Callable,
@@ -153,6 +257,15 @@ def test_audit_does_not_store_name_or_free_text_style_details(
         headers=headers,
         json={"style": "custom", "details": "Очень личное описание"},
     )
+    client.put(
+        "/api/v1/onboarding/preferences/default-work-hours",
+        headers=headers,
+        json={
+            "intervals": [
+                {"start_time": "11:00", "end_time": "20:00"},
+            ]
+        },
+    )
 
     with get_session_factory()() as session:
         events = session.scalars(
@@ -167,12 +280,14 @@ def test_audit_does_not_store_name_or_free_text_style_details(
     assert [event.action for event in events] == [
         "master_preferences.name_saved",
         "master_preferences.style_saved",
+        "master_preferences.default_work_hours_saved",
     ]
     serialized = str([event.safe_changes for event in events])
     assert "Секретное имя" not in serialized
     assert "Очень личное описание" not in serialized
-    assert events[0].safe_changes == {"preferred_name_set": True}
-    assert events[1].safe_changes == {
-        "assistant_style": "custom",
-        "details_set": True,
+    assert "11:00" not in serialized
+    assert "20:00" not in serialized
+    assert events[2].safe_changes == {
+        "uses_default_work_hours": True,
+        "interval_count": 1,
     }
