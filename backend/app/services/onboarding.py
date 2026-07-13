@@ -24,6 +24,10 @@ from app.schemas.onboarding import (
     OnboardingStateResponse,
     ServicesPayload,
 )
+from app.services.materialization import (
+    MaterializationError,
+    materialize_confirmed_onboarding,
+)
 
 SECTION_ORDER = (
     OnboardingSection.services,
@@ -402,22 +406,34 @@ def resume_onboarding(session: Session, identity: RequestIdentity) -> Onboarding
 
 def complete_onboarding(session: Session, identity: RequestIdentity) -> OnboardingStateResponse:
     state = _require_state(session, identity, lock=True)
-    if state.status == OnboardingStatus.completed:
-        return _serialize(state)
-    if state.status != OnboardingStatus.in_progress:
+    if state.status not in {OnboardingStatus.in_progress, OnboardingStatus.completed}:
         raise OnboardingDomainError("onboarding_not_in_progress")
 
     drafts = _draft_map(state)
     missing = [
         section.value
         for section in SECTION_ORDER
-        if section not in drafts or not drafts[section].is_confirmed
+        if section not in drafts
+        or not drafts[section].is_confirmed
+        or drafts[section].confirmed_revision != drafts[section].revision
+        or drafts[section].confirmed_payload is None
     ]
     if missing:
         raise OnboardingDomainError(
             "onboarding_sections_not_confirmed",
             details={"sections": missing},
         )
+
+    try:
+        summary = materialize_confirmed_onboarding(session, identity, state)
+    except MaterializationError as exc:
+        raise OnboardingDomainError(exc.code, details=exc.details) from exc
+
+    if state.status == OnboardingStatus.completed:
+        if summary.changed:
+            session.commit()
+            return _serialize(_require_state(session, identity, lock=False))
+        return _serialize(state)
 
     state.status = OnboardingStatus.completed
     state.current_step = None
