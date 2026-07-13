@@ -51,6 +51,7 @@ get_state
 get_master_preferences
 save_master_name
 save_master_style
+save_default_work_hours
 save_section
 confirm_section
 pause
@@ -67,11 +68,15 @@ availability
 bookings
 ```
 
+`save_default_work_hours` stores zero or more usual daily time intervals. These intervals are reusable suggestions only. They do not create calendar availability until the master names a concrete date or period and explicitly confirms applying them.
+
+An empty default interval list records that the master has no usual hours and plans every period separately.
+
 `availability` contains concrete calendar dates. It supports multiple non-overlapping time intervals in one day and an explicit unavailable day. Absence of a date means unknown availability, never a free day.
 
 There is no repeating weekly schedule action or section. `save_schedule_day` and the weekly `schedule` section were removed from the active contract.
 
-`get_master_preferences`, `save_master_name` and `save_master_style` support a short acquaintance before the business questionnaire. The saved style controls only assistant-to-master conversation and is not inherited by client messages.
+The saved communication style controls only assistant-to-master conversation and is not inherited by client messages.
 
 No generic HTTP client is exposed as a Hermes tool.
 
@@ -79,6 +84,8 @@ No generic HTTP client is exposed as a Hermes tool.
 
 The Hermes skill asks one question at a time and explains why the answer matters:
 
+- usual work hours make phrases such as “I work all next week” easy to confirm without retyping times;
+- usual hours are never treated as active availability by themselves;
 - service duration is needed to calculate booking end time and future free slots;
 - buffers prevent appointments from being placed too close together;
 - availability on specific dates prevents an empty calendar from being treated as a fully free day;
@@ -86,7 +93,7 @@ The Hermes skill asks one question at a time and explains why the answer matters
 
 ## Privacy
 
-Master preference audit events contain only safe facts such as whether a name or optional style detail was set. The preferred name and free-text style description are not copied into audit payloads.
+Master preference audit events contain only safe facts such as whether a value was set and the number of ordinary intervals. Names, free-text style details and exact work hours are not copied into audit payloads.
 
 ## Retry behavior
 
@@ -103,7 +110,7 @@ The onboarding backend operations are state-idempotent for repeated delivery.
 
 - backend `401` and `403` both become `access_denied`;
 - no distinction is exposed between unknown and inactive users;
-- invalid action/section combinations are rejected before any network request;
+- invalid preference and action/section arguments are rejected before any network request;
 - backend validation/domain errors return only safe code/details;
 - response bodies from unexpected backend errors are not exposed;
 - secrets and trusted identity are not included in tool results.
