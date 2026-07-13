@@ -15,23 +15,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate mandatory responsibility boundary
+      - name: Validate mandatory responsibility and context boundary
         run: |
           python - <<'PY'
           from pathlib import Path
 
           root_contract = Path("AGENTS.md")
+          current_context = Path("docs/context/current.md")
+          status = Path("docs/status.md")
           detailed_contract = Path("docs/operations/agent-responsibilities.md")
           infrastructure_contract = Path("docs/operations/production-infrastructure.md")
           plugin_runtime_contract = Path("docs/operations/hermes-plugin-runtime.md")
           readme = Path("README.md")
 
           assert root_contract.is_file(), "AGENTS.md is mandatory"
+          assert current_context.is_file(), "current context handoff is mandatory"
+          assert status.is_file(), "project status is mandatory"
           assert detailed_contract.is_file(), "detailed agent contract is mandatory"
           assert infrastructure_contract.is_file(), "production infrastructure contract is mandatory"
           assert plugin_runtime_contract.is_file(), "Hermes plugin runtime contract is mandatory"
 
           root_text = root_contract.read_text(encoding="utf-8")
+          context_text = current_context.read_text(encoding="utf-8")
+          status_text = status.read_text(encoding="utf-8")
           detailed_text = detailed_contract.read_text(encoding="utf-8")
           plugin_text = plugin_runtime_contract.read_text(encoding="utf-8")
           readme_text = readme.read_text(encoding="utf-8")
@@ -43,12 +49,41 @@ jobs:
               "выполнять push, merge или любые изменения в GitHub",
               "не исправлять проблему самостоятельно",
               "Issue закрывает основной агент",
-              "обязан прочитать все три документа",
+              "docs/context/current.md",
+              "сначала прочитать `docs/context/current.md`",
               "plugin keys",
               "правила видимости tools",
+              "обновляет `docs/context/current.md` после значимого production milestone",
           )
           for phrase in required_root_phrases:
               assert phrase in root_text, f"missing root contract phrase: {phrase}"
+
+          required_context_phrases = (
+              "385a92962e3736553335d717adcdf4b83ac8a8b3",
+              "Alembic: 0006",
+              "NAILS_002E4_V3_DEPLOYMENT_OK",
+              "nails-onboarding",
+              "nails-scheduling",
+              "discover_plugins(force=True)",
+              "set-like unordered collection",
+              "ROLLBACK_PERFORMED=true",
+              "Issue #34",
+              "Что у меня 18 июля?",
+              "один живой Telegram-тест выполняется за раз",
+              "V1 или V2",
+          )
+          for phrase in required_context_phrases:
+              assert phrase in context_text, f"missing current context fact: {phrase}"
+
+          required_status_phrases = (
+              "385a92962e3736553335d717adcdf4b83ac8a8b3",
+              "Alembic | `0006`",
+              "NAILS_002E4_V3_DEPLOYMENT_OK",
+              "Issue #34",
+              "context/current.md",
+          )
+          for phrase in required_status_phrases:
+              assert phrase in status_text, f"missing status fact: {phrase}"
 
           required_detailed_phrases = (
               "Основной агент ChatGPT создаёт изменения",
@@ -69,11 +104,14 @@ jobs:
               "platform_toolsets",
               "nails_scheduling",
               "must not rely on that implicit behavior",
+              "discover_plugins(force=True)",
+              "set-like unordered collection",
           )
           for phrase in required_plugin_phrases:
               assert phrase in plugin_text, f"missing plugin runtime phrase: {phrase}"
 
           required_readme_links = (
+              "[Текущий контекст и точка продолжения](docs/context/current.md)",
               "[Обязательный контракт агентов](AGENTS.md)",
               "[Разделение ответственности основного и VPS-агента](docs/operations/agent-responsibilities.md)",
               "[Проверенная production-инфраструктура](docs/operations/production-infrastructure.md)",
@@ -82,5 +120,15 @@ jobs:
           for link in required_readme_links:
               assert link in readme_text, f"missing README contract link: {link}"
 
-          print("AGENT_RESPONSIBILITY_CONTRACT_OK")
+          forbidden_context = (
+              "TELEGRAM_BOT_TOKEN=",
+              "NAILS_INTERNAL_API_KEY=",
+              "INTERNAL_API_KEY=",
+              "Authorization: Bearer",
+          )
+          for value in forbidden_context:
+              assert value not in context_text
+              assert value not in status_text
+
+          print("AGENT_RESPONSIBILITY_AND_CONTEXT_CONTRACT_OK")
           PY
