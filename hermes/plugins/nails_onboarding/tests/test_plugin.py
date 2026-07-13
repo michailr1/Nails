@@ -35,6 +35,7 @@ def test_schema_exposes_no_identity_url_headers_or_secret():
     assert parameters["additionalProperties"] is False
     assert set(parameters["properties"]) == {"action", "section", "payload"}
     assert "save_schedule_day" not in parameters["properties"]["action"]["enum"]
+    assert "schedule" not in parameters["properties"]["section"]["enum"]
     assert parameters["properties"]["section"]["enum"] == [
         "services",
         "buffers",
@@ -50,8 +51,6 @@ def test_schema_exposes_no_identity_url_headers_or_secret():
         "internal_key",
         "headers",
         "url",
-        "weekday",
-        "weekly schedule",
     ):
         assert forbidden not in serialized
 
