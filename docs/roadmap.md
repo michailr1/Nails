@@ -7,6 +7,7 @@
 ## Статусы
 
 - ✅ завершено и подтверждено в production;
+- 🧪 установлено, остался acceptance test;
 - 🟡 частично выполнено;
 - ▶️ следующий активный срез;
 - ⬜ запланировано.
@@ -17,8 +18,8 @@
 NAILS-001  🟡 базовые правила согласованы
 NAILS-002A ✅ backend foundation production
 NAILS-002B ✅ onboarding API production
-NAILS-002C ▶️ restricted Hermes onboarding tool
-NAILS-002D 🟡 SOUL готов, production onboarding skill впереди
+NAILS-002C 🧪 restricted Hermes tool установлен, Telegram acceptance впереди
+NAILS-002D ▶️ production onboarding skill
 NAILS-002E ⬜ scheduling happy path
 NAILS-002F ⬜ automated backup and verified restore
 ```
@@ -27,11 +28,19 @@ Production:
 
 ```text
 host: de.funti.cc
-commit: 40b25ff5fe519eda8602d0eeac7d06a1b191138d
+repository HEAD: ae761e5042e2af4685df7bdb1de9485e96bdac74
+backend runtime: 40b25ff5fe519eda8602d0eeac7d06a1b191138d
+Hermes plugin runtime: d8264266256f6fc2c53b6eebd3b9bb6bbc722f7c
 Alembic: 0002 (head)
 ```
 
-Подробности: [`status.md`](status.md), [`onboarding-api.md`](onboarding-api.md), [`deployments/2026-07-13-nails-002b.md`](deployments/2026-07-13-nails-002b.md).
+Подробности:
+
+- [`status.md`](status.md)
+- [`onboarding-api.md`](onboarding-api.md)
+- [`hermes-onboarding-plugin.md`](hermes-onboarding-plugin.md)
+- [`deployments/2026-07-13-nails-002b.md`](deployments/2026-07-13-nails-002b.md)
+- [`deployments/2026-07-13-nails-002c.md`](deployments/2026-07-13-nails-002c.md)
 
 ## NAILS-001 — процессы и правила 🟡
 
@@ -44,8 +53,8 @@ Alembic: 0002 (head)
 - обязательный IANA timezone;
 - confirmations;
 - backup/restore как условие пилота;
-- Google Calendar как необязательный one-way export;
-- запрет shell и direct SQL для Hermes.
+- Google Calendar как optional one-way export;
+- запрет shell and direct SQL for Hermes.
 
 Финальный checklist закрывается после первого полного end-to-end onboarding.
 
@@ -69,77 +78,90 @@ Alembic: 0002 (head)
 - clean/repeated migration CI;
 - production-like Compose smoke-test.
 
-Issue #3 закрыта.
+Issue #3 closed.
 
 ### NAILS-002B — onboarding API ✅
 
 В production:
 
-- required runtime authentication setting;
-- trusted Telegram identity contract;
+- internal authentication boundary;
 - active user and `master/admin` role checks;
 - start/get/pause/resume/complete;
 - drafts: schedule, services, buffers, bookings;
 - separate draft and confirmed payload;
-- revision and confirmed revision;
+- revisions;
 - ordered confirmations;
 - downstream invalidation;
-- idempotent confirmations and completion;
+- idempotent confirmation/completion;
 - safe audit;
-- JSON-safe validation errors;
 - migration `0002`;
-- PostgreSQL integration tests;
-- API restart persistence.
+- restart persistence.
 
-Production smoke подтвердил authorization, draft/effective separation, correction revisions, pause/restart/resume, idempotency, audit privacy и cleanup.
+Production smoke confirmed authorization, revision behavior, pause/resume, idempotency, audit privacy and cleanup.
 
-Issue #4 закрыта.
+Issue #4 closed.
 
-### NAILS-002C — restricted Hermes onboarding tool ▶️
+### NAILS-002C — restricted Hermes onboarding tool 🧪
 
-Уже готово:
+Installed in production:
 
-- отдельный Telegram bot and profile `nails`;
-- allowlist and separate sessions;
-- SOUL;
-- whitelist: `vision`, `image_gen`, `tts`, `skills`, `clarify`;
-- terminal/files/code execution/web/browser/cron/delegation/MCP отключены;
-- built-in memory/user profile отключены;
-- `skills.write_approval=true`;
-- onboarding API доступен на production loopback.
+- profile-local plugin `nails-onboarding` version `0.1.0`;
+- dedicated toolset `nails_onboarding`;
+- Telegram ID only from trusted task-local gateway context;
+- identity absent from model-visible arguments;
+- fixed loopback API URL;
+- no generic HTTP or arbitrary headers;
+- safe mapping of authorization/domain errors;
+- limited retry with runtime request ID;
+- profile-local secret configuration;
+- updated SOUL distinguishing draft, confirmed onboarding block and active working data;
+- exact Telegram whitelist:
+  - `clarify`;
+  - `image_gen`;
+  - `nails_onboarding`;
+  - `skills`;
+  - `tts`;
+  - `vision`.
 
-Активный объём:
+Production synthetic smoke confirmed:
 
-- создать один узкий onboarding domain tool;
-- Telegram ID брать только из trusted gateway context;
-- не включать identity в model-visible arguments;
-- разрешить только start/get/save/confirm/pause/resume/complete;
-- не выдавать generic HTTP, arbitrary URL/headers, SQL или filesystem;
-- runtime-generated request ID;
-- безопасные domain errors;
-- test two-user owner isolation;
-- test identity spoofing resistance;
-- test unknown/inactive user no-disclosure behavior;
-- test restart Hermes;
-- verify no token/authentication value in GitHub, logs or responses;
-- aiogram не использовать.
+- plugin discovery and load;
+- identity spoofing rejection;
+- non-Telegram fail-closed;
+- unknown/inactive no-disclosure behavior;
+- two-user owner isolation;
+- backend loopback access;
+- cleanup `0|0|0`;
+- no side effects on Docker, backend, Amnezia or default Hermes profile.
 
-### NAILS-002D — skill `nails-onboarding` 🟡
+Remaining acceptance before issue #5 closes:
 
-Уже готово:
+- real account A starts/pause/resume through Telegram;
+- real account B starts separately and cannot see A state;
+- gateway restart between pause and resume;
+- text attempt to request another user's state cannot alter trusted identity;
+- final log privacy check.
+
+### NAILS-002D — production skill `nails-onboarding` ▶️
+
+Already available:
 
 - profile SOUL;
-- честное разделение тестового/рабочего режима;
-- запрет заявлять о сохранении без API success.
+- restricted production tool;
+- honest separation of draft/confirmed/active data;
+- API-backed pause/resume.
 
-Остаётся:
+Next implementation:
 
-- production skill;
+- friendly introduction and capability explanation;
+- explicit consent before starting interview;
 - flow schedule → services → buffers → bookings;
+- one clear question at a time;
 - short resumable sessions;
-- summary and confirmation каждого блока;
-- pause/resume UX;
-- capability flags;
+- summaries before confirmation;
+- correction and reconfirmation UX;
+- handling of safe domain errors;
+- completion summary that does not claim working schedule activation;
 - protected feedback flow.
 
 ### NAILS-002E — scheduling happy path ⬜
@@ -152,7 +174,7 @@ Issue #4 закрыта.
 - booking with price snapshot;
 - compact day view;
 - restricted scheduling tools;
-- контрольные запросы «что у меня в четверг?» и «какие окна завтра?».
+- control queries «что у меня в четверг?» and «какие окна завтра?».
 
 ### NAILS-002F — backup and restore ⬜
 
@@ -167,8 +189,8 @@ Issue #4 закрыта.
 
 NAILS-002 завершён, когда:
 
-- full onboarding проходит через Telegram ролью `admin`;
-- state переживает Hermes/backend restart;
+- full onboarding runs through Telegram role `admin`;
+- state survives Hermes/backend restart;
 - identity spoofing blocked;
 - users isolated by owner;
 - confirmed blocks materialized;
@@ -250,7 +272,7 @@ NAILS-002 завершён, когда:
 
 ## Ближайший порядок
 
-1. NAILS-002C — restricted Hermes onboarding tool.
+1. Real Telegram acceptance for NAILS-002C and close issue #5.
 2. NAILS-002D — production onboarding skill.
 3. NAILS-002E — materialization and scheduling happy path.
 4. NAILS-002F — automated backup and verified restore.
