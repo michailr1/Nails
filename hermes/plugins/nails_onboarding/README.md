@@ -12,7 +12,7 @@ The model can choose only:
 
 - action;
 - onboarding section when required;
-- section payload when saving a draft.
+- business payload when saving a draft.
 
 The model cannot provide:
 
@@ -48,12 +48,15 @@ Only these backend operations are mapped:
 ```text
 start
 get_state
+save_schedule_day
 save_section
 confirm_section
 pause
 resume
 complete
 ```
+
+`save_schedule_day` accepts one naturally collected weekday, loads the current schedule draft, merges or replaces that weekday and saves the combined draft. The model does not have to construct the whole weekly payload and cannot accidentally erase earlier days by saving the next answer.
 
 No generic HTTP client is exposed as a Hermes tool.
 
@@ -72,6 +75,7 @@ The onboarding backend operations are state-idempotent for repeated delivery.
 
 - backend `401` and `403` both become `access_denied`;
 - no distinction is exposed between unknown and inactive users;
+- invalid single-day schedule arguments are rejected before any network request;
 - backend validation/domain errors return only safe code/details;
 - response bodies from unexpected backend errors are not exposed;
 - secrets and trusted identity are not included in tool results.
