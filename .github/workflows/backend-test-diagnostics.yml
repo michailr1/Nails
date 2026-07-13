@@ -20,6 +20,7 @@ jobs:
     steps:
       - name: Run first failing backend test with compact output
         run: |
+          docker pull postgres:17-alpine >/dev/null 2>&1
           docker run --detach --rm --name nails-test-db \
             -e POSTGRES_DB=nails_test \
             -e POSTGRES_USER=nails_app \
@@ -37,7 +38,7 @@ jobs:
             | tar -xz --strip-components=1
           cd backend
           python -m pip install --quiet -e '.[dev]'
-          alembic upgrade head >/dev/null
+          alembic upgrade head >/dev/null 2>&1
           pytest -q -x --tb=short >/tmp/backend-pytest.log 2>&1 || {
             tail -n 80 /tmp/backend-pytest.log
             exit 1
