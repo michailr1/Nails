@@ -44,6 +44,15 @@ runbook: ops/deploy/nails-002e4-v3.sh
 success marker: NAILS_002E4_V3_DEPLOYMENT_OK
 ```
 
+Проверенные особенности Hermes:
+
+- gateway управляется root user-level systemd;
+- `_get_platform_tools()` возвращает set-like unordered collection;
+- toolsets сравниваются по множеству, а не по iteration order;
+- read-only verification использует `discover_plugins()`, а `discover_plugins(force=True)` запрещён;
+- V2 rollback доказан маркером `ROLLBACK_PERFORMED=true`;
+- V1 или V2 никогда не запускать повторно.
+
 GitHub `main` содержит PR #44 и PR #45, но пользователь ещё не прислал результат E5. Поэтому нельзя утверждать, что production уже находится на `a0ef8c5c26301a9f6950544afd0e070b7e691582` или plugin `0.2.0`.
 
 ## 3. E5 — date resolver и изменение графика
@@ -156,7 +165,7 @@ update_service
 
 Реализованы backend endpoints, scheduling plugin `0.3.0`, оба skills и regression tests.
 
-Lint исправлен. Scheduling plugin tests проходят на Python 3.11 в focused-прогоне; временные diagnostic/autofix workflows удалены из ветки. Финальный обычный CI после удаления временных файлов ещё должен стать полностью зелёным.
+Lint исправлен. Scheduling plugin tests проходят на Python 3.11/3.12; временные diagnostic/autofix workflows удалены из ветки. Финальный обычный CI после документационных правок ещё должен стать полностью зелёным.
 
 PR #46 нельзя merge до двух условий:
 
