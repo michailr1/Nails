@@ -1,6 +1,8 @@
 import os
 import uuid
 from collections.abc import Callable
+from datetime import date, time
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,7 +18,8 @@ os.environ.setdefault(
 
 from app.db import clear_runtime_caches, get_engine, get_session_factory  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import User, UserRole  # noqa: E402
+from app.models import AvailabilityInterval, Service, User, UserRole  # noqa: E402
+from app.services.normalization import normalize_public_name  # noqa: E402
 
 TEST_INTERNAL_API_KEY = "test-only-internal-api-key-0000000000000000"
 
@@ -75,6 +78,70 @@ def create_user(clean_database) -> Callable[..., User]:
             session.refresh(user)
             session.expunge(user)
             return user
+
+    return factory
+
+
+@pytest.fixture
+def create_service(clean_database) -> Callable[..., Service]:
+    def factory(
+        owner_user_id,
+        *,
+        public_name: str = "Маникюр",
+        price_amount: Decimal = Decimal("2500.00"),
+        currency: str = "RUB",
+        duration_minutes: int = 120,
+        buffer_before_minutes: int = 0,
+        buffer_after_minutes: int = 21,
+        is_active: bool = True,
+    ) -> Service:
+        with get_session_factory()() as session:
+            service = Service(
+                owner_user_id=owner_user_id,
+                public_name=public_name,
+                normalized_public_name=normalize_public_name(public_name),
+                public_description=None,
+                price_amount=price_amount,
+                currency=currency,
+                duration_minutes=duration_minutes,
+                buffer_before_minutes=buffer_before_minutes,
+                buffer_after_minutes=buffer_after_minutes,
+                is_active=is_active,
+            )
+            session.add(service)
+            session.commit()
+            session.refresh(service)
+            session.expunge(service)
+            return service
+
+    return factory
+
+
+@pytest.fixture
+def create_availability(clean_database) -> Callable[..., AvailabilityInterval]:
+    def factory(
+        owner_user_id,
+        *,
+        day: date = date(2026, 7, 18),
+        start_time: time | None = time(11, 0),
+        end_time: time | None = time(20, 0),
+        is_available: bool = True,
+        note: str | None = None,
+    ) -> AvailabilityInterval:
+        with get_session_factory()() as session:
+            interval = AvailabilityInterval(
+                owner_user_id=owner_user_id,
+                day=day,
+                start_time=start_time,
+                end_time=end_time,
+                is_available=is_available,
+                note=note,
+            )
+            session.add(interval)
+            session.commit()
+            session.refresh(interval)
+            session.expunge(interval)
+            return interval
 
     return factory
 

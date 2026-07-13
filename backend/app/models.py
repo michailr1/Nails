@@ -89,6 +89,12 @@ class Service(TimestampMixin, Base):
     __tablename__ = "services"
     __table_args__ = (
         UniqueConstraint("owner_user_id", "public_name", name="uq_services_owner_public_name"),
+        Index(
+            "uq_services_owner_normalized_public_name",
+            "owner_user_id",
+            "normalized_public_name",
+            unique=True,
+        ),
         CheckConstraint("price_amount >= 0", name="price_non_negative"),
         CheckConstraint("duration_minutes > 0", name="duration_positive"),
         CheckConstraint("buffer_before_minutes >= 0", name="buffer_before_non_negative"),
@@ -100,6 +106,7 @@ class Service(TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     public_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    normalized_public_name: Mapped[str] = mapped_column(String(160), nullable=False)
     public_description: Mapped[str | None] = mapped_column(Text)
     price_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
@@ -113,6 +120,13 @@ class Client(TimestampMixin, Base):
     __tablename__ = "clients"
     __table_args__ = (
         Index("ix_clients_owner_normalized_name", "owner_user_id", "normalized_public_name"),
+        Index(
+            "uq_clients_owner_active_normalized_name",
+            "owner_user_id",
+            "normalized_public_name",
+            unique=True,
+            postgresql_where=text("profile_status = 'active'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -135,9 +149,32 @@ class Booking(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("ends_at > starts_at", name="end_after_start"),
         CheckConstraint("price_amount >= 0", name="price_non_negative"),
+        CheckConstraint("duration_minutes_snapshot > 0", name="duration_snapshot_positive"),
+        CheckConstraint(
+            "buffer_before_minutes_snapshot >= 0",
+            name="buffer_before_snapshot_non_negative",
+        ),
+        CheckConstraint(
+            "buffer_after_minutes_snapshot >= 0",
+            name="buffer_after_snapshot_non_negative",
+        ),
+        CheckConstraint(
+            "reserved_ends_at > reserved_starts_at",
+            name="reserved_interval_valid",
+        ),
+        CheckConstraint(
+            "reserved_starts_at <= starts_at AND reserved_ends_at >= ends_at",
+            name="reserved_contains_service_interval",
+        ),
         Index("ix_bookings_starts_at", "starts_at"),
         Index("ix_bookings_owner_starts_at", "owner_user_id", "starts_at"),
         Index("ix_bookings_client_id_starts_at", "client_id", "starts_at"),
+        Index(
+            "ix_bookings_owner_reserved_interval",
+            "owner_user_id",
+            "reserved_starts_at",
+            "reserved_ends_at",
+        ),
         UniqueConstraint(
             "owner_user_id",
             "idempotency_key",
@@ -158,6 +195,11 @@ class Booking(TimestampMixin, Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expected_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reserved_starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reserved_ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    duration_minutes_snapshot: Mapped[int] = mapped_column(Integer, nullable=False)
+    buffer_before_minutes_snapshot: Mapped[int] = mapped_column(Integer, nullable=False)
+    buffer_after_minutes_snapshot: Mapped[int] = mapped_column(Integer, nullable=False)
     actual_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     actual_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[BookingStatus] = mapped_column(
