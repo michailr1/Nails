@@ -1,5 +1,5 @@
+from .handler import nails_onboarding
 from .schemas import NAILS_ONBOARDING
-from .tools import nails_onboarding
 
 
 def register(ctx):
