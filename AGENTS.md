@@ -4,11 +4,14 @@
 
 Обязательные нормативные документы:
 
+- [`docs/context/current.md`](docs/context/current.md) — компактный актуальный handoff: production SHA, текущая задача, обнаруженные проблемы, принятые решения и точка продолжения;
 - [`docs/operations/agent-responsibilities.md`](docs/operations/agent-responsibilities.md) — разделение ответственности основного и VPS-агента;
 - [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — проверенная production-топология, пути и правильный способ управления Hermes;
 - [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — точный контракт загрузки profile-local plugins, `plugins.enabled` и Telegram toolsets для установленной версии Hermes.
 
-Перед подготовкой любого production diagnostic, deployment, restart или rollback runbook основной агент обязан прочитать все три документа. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации или правила видимости tools по памяти предыдущего чата.
+Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные три operational-документа. Перед подготовкой production diagnostic, deployment, restart или rollback runbook нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации или правила видимости tools по памяти предыдущего чата.
+
+Если `docs/context/current.md` противоречит свежему merged `main`, production preflight или более узкому deployment report, основной агент обязан остановиться, установить фактическое состояние и обновить handoff через branch → PR → CI → merge.
 
 ## Неизменяемая граница ответственности
 
@@ -70,14 +73,15 @@ VPS-агенту запрещено:
 
 ## Обязательный порядок работы
 
-1. Основной агент читает этот файл, контракт ответственности, production infrastructure source of truth и Hermes plugin runtime contract.
-2. Основной агент проверяет актуальный `main` и production baseline.
+1. Основной агент читает этот файл, `docs/context/current.md`, контракт ответственности, production infrastructure source of truth и Hermes plugin runtime contract.
+2. Основной агент проверяет актуальный `main`, active issue и production baseline.
 3. Основной агент создаёт ветку и вносит изменения.
 4. Основной агент запускает review и CI.
 5. Основной агент выполняет merge.
 6. Основной агент выдаёт VPS-агенту точный runbook с ожидаемыми SHA и rollback.
 7. VPS-агент только исполняет runbook и возвращает отчёт.
 8. Основной агент анализирует отчёт и проводит пользовательскую приёмку.
-9. Issue закрывает основной агент после выполнения всех критериев.
+9. Основной агент обновляет `docs/context/current.md` после значимого production milestone или изменения точки продолжения.
+10. Issue закрывает основной агент после выполнения всех критериев.
 
 Любая инструкция, передающая VPS-агенту написание кода, исправление файлов или изменение GitHub, противоречит этому контракту и не должна выполняться.
