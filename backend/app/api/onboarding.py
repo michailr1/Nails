@@ -7,6 +7,11 @@ from app.auth import RequestIdentity, require_request_identity
 from app.db import get_db_session
 from app.models import OnboardingSection
 from app.schemas.onboarding import DraftUpdateRequest, OnboardingStateResponse
+from app.schemas.preferences import (
+    AssistantStyleUpdateRequest,
+    MasterPreferencesResponse,
+    PreferredNameUpdateRequest,
+)
 from app.services.onboarding import (
     OnboardingDomainError,
     complete_onboarding,
@@ -16,6 +21,11 @@ from app.services.onboarding import (
     resume_onboarding,
     save_draft,
     start_onboarding,
+)
+from app.services.preferences import (
+    get_master_preferences,
+    save_assistant_style,
+    save_preferred_name,
 )
 
 router = APIRouter(prefix="/api/v1/onboarding", tags=["onboarding"])
@@ -51,6 +61,32 @@ def get_state(
         return get_onboarding_state(session, identity)
     except OnboardingDomainError as exc:
         raise _translate_domain_error(exc) from exc
+
+
+@router.get("/preferences", response_model=MasterPreferencesResponse)
+def get_preferences(
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> MasterPreferencesResponse:
+    return get_master_preferences(session, identity)
+
+
+@router.put("/preferences/name", response_model=MasterPreferencesResponse)
+def update_preferred_name(
+    body: PreferredNameUpdateRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> MasterPreferencesResponse:
+    return save_preferred_name(session, identity, body)
+
+
+@router.put("/preferences/style", response_model=MasterPreferencesResponse)
+def update_assistant_style(
+    body: AssistantStyleUpdateRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> MasterPreferencesResponse:
+    return save_assistant_style(session, identity, body)
 
 
 @router.put("/sections/{section}", response_model=OnboardingStateResponse)
