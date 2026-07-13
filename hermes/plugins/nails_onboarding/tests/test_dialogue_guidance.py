@@ -1,14 +1,32 @@
 """Regression checks for onboarding confirmation and availability prompts."""
 
+import ast
 from pathlib import Path
+
+
+def _dialogue_contract(init_text: str) -> str:
+    tree = ast.parse(init_text)
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            continue
+        if node.targets[0].id == "_DIALOGUE_CONTRACT":
+            value = ast.literal_eval(node.value)
+            assert isinstance(value, str)
+            return value
+    raise AssertionError("_DIALOGUE_CONTRACT assignment not found")
 
 
 def test_registered_schema_uses_authoritative_server_state() -> None:
     plugin_dir = Path(__file__).resolve().parents[1]
     init_text = (plugin_dir / "__init__.py").read_text(encoding="utf-8")
+    contract = _dialogue_contract(init_text)
+
+    assert "from .tools import nails_onboarding" in init_text
+    assert "schema=NAILS_ONBOARDING" in init_text
 
     required_phrases = (
-        "from .tools import nails_onboarding",
         "result.current_step",
         "authoritative next section",
         "is_current_revision_confirmed",
@@ -22,7 +40,7 @@ def test_registered_schema_uses_authoritative_server_state() -> None:
     )
 
     for phrase in required_phrases:
-        assert phrase in init_text
+        assert phrase in contract
 
 
 def test_plugin_keeps_original_handler_contract() -> None:
