@@ -7,6 +7,7 @@ on:
       - "AGENTS.md"
       - "README.md"
       - "docs/operations/production-infrastructure.md"
+      - "docs/operations/hermes-plugin-runtime.md"
       - "ops/deploy/README.md"
       - ".github/workflows/production-infrastructure-contract.yml"
   pull_request:
@@ -14,6 +15,7 @@ on:
       - "AGENTS.md"
       - "README.md"
       - "docs/operations/production-infrastructure.md"
+      - "docs/operations/hermes-plugin-runtime.md"
       - "ops/deploy/README.md"
       - ".github/workflows/production-infrastructure-contract.yml"
 
@@ -33,17 +35,20 @@ jobs:
           from pathlib import Path
 
           infra_path = Path("docs/operations/production-infrastructure.md")
+          plugin_path = Path("docs/operations/hermes-plugin-runtime.md")
           agents_path = Path("AGENTS.md")
           readme_path = Path("README.md")
           deploy_readme_path = Path("ops/deploy/README.md")
 
           assert infra_path.is_file()
+          assert plugin_path.is_file()
           infra = infra_path.read_text(encoding="utf-8")
+          plugin = plugin_path.read_text(encoding="utf-8")
           agents = agents_path.read_text(encoding="utf-8")
           readme = readme_path.read_text(encoding="utf-8")
           deploy_readme = deploy_readme_path.read_text(encoding="utf-8")
 
-          required = (
+          required_infra = (
               "de.funti.cc",
               "/opt/nails/repo",
               "/opt/nails/.env",
@@ -60,8 +65,25 @@ jobs:
               "must not search for or replace an assumed comma-separated allowlist string",
               "PID `2119629` was only a diagnostic snapshot",
           )
-          for item in required:
+          for item in required_infra:
               assert item in infra, f"missing production infrastructure fact: {item}"
+
+          required_plugin = (
+              "Hermes Agent v0.18.2 (2026.7.7.2)",
+              "/usr/local/lib/hermes-agent/venv/bin/hermes",
+              "/root/.hermes/profiles/nails/plugins",
+              "plugins.enabled",
+              "plugin key: nails-onboarding",
+              "plugin key: nails-scheduling",
+              "tool name: nails_onboarding",
+              "tool name: nails_scheduling",
+              "platform_toolsets",
+              "nails-onboarding\n    - nails-scheduling",
+              "nails_onboarding\n    - nails_scheduling",
+              "must not rely on that implicit behavior",
+          )
+          for item in required_plugin:
+              assert item in plugin, f"missing Hermes plugin runtime fact: {item}"
 
           forbidden = (
               "TELEGRAM_BOT_TOKEN=",
@@ -71,18 +93,24 @@ jobs:
               "Authorization: Bearer",
           )
           for item in forbidden:
-              assert item not in infra, f"secret-like value must not be documented: {item}"
+              assert item not in infra
+              assert item not in plugin
 
-          link = "docs/operations/production-infrastructure.md"
-          assert link in agents
-          assert link in readme
-          assert "обязан прочитать оба документа" in agents
+          infra_link = "docs/operations/production-infrastructure.md"
+          plugin_link = "docs/operations/hermes-plugin-runtime.md"
+          assert infra_link in agents
+          assert plugin_link in agents
+          assert infra_link in readme
+          assert plugin_link in readme
+          assert "обязан прочитать все три документа" in agents
           assert "Нельзя заново угадывать" in agents
 
           assert "nails-002e4.sh` must **not** be executed again" in deploy_readme
+          assert "ops/deploy/nails-002e4-v2.sh" in deploy_readme
           assert "root user-level systemd" in deploy_readme
           assert "/root/.hermes/profiles/nails/config.yaml" in deploy_readme
-          assert "new reviewed runbook with a new filename" in deploy_readme
+          assert "nails-scheduling` to `plugins.enabled" in deploy_readme
+          assert "nails_scheduling` to `platform_toolsets.telegram" in deploy_readme
           assert "<APPROVED_RUNBOOK>.sh" in deploy_readme
 
           print("PRODUCTION_INFRASTRUCTURE_CONTRACT_OK")
