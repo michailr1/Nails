@@ -92,7 +92,7 @@ def _bounded_int(value: Any, field_name: str, minimum: int, maximum: int) -> int
 
 
 def _normalize_price(value: Any) -> str:
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
         raise ToolInputError("price_amount is invalid")
     try:
         amount = Decimal(str(value))
