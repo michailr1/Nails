@@ -38,32 +38,18 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          context_path = Path("docs/context/current.md")
-          status_path = Path("docs/status.md")
-          infra_path = Path("docs/operations/production-infrastructure.md")
-          plugin_path = Path("docs/operations/hermes-plugin-runtime.md")
-          agents_path = Path("AGENTS.md")
-          readme_path = Path("README.md")
-          deploy_readme_path = Path("ops/deploy/README.md")
-
-          for path in (
-              context_path,
-              status_path,
-              infra_path,
-              plugin_path,
-              agents_path,
-              readme_path,
-              deploy_readme_path,
-          ):
+          paths = {
+              "context": Path("docs/context/current.md"),
+              "status": Path("docs/status.md"),
+              "infra": Path("docs/operations/production-infrastructure.md"),
+              "plugin": Path("docs/operations/hermes-plugin-runtime.md"),
+              "agents": Path("AGENTS.md"),
+              "readme": Path("README.md"),
+              "deploy": Path("ops/deploy/README.md"),
+          }
+          for path in paths.values():
               assert path.is_file(), f"missing required file: {path}"
-
-          context = context_path.read_text(encoding="utf-8")
-          status = status_path.read_text(encoding="utf-8")
-          infra = infra_path.read_text(encoding="utf-8")
-          plugin = plugin_path.read_text(encoding="utf-8")
-          agents = agents_path.read_text(encoding="utf-8")
-          readme = readme_path.read_text(encoding="utf-8")
-          deploy_readme = deploy_readme_path.read_text(encoding="utf-8")
+          text = {name: path.read_text(encoding="utf-8") for name, path in paths.items()}
 
           required_infra = (
               "de.funti.cc",
@@ -87,7 +73,7 @@ jobs:
               "NAILS_002E4_V3_DEPLOYMENT_OK",
           )
           for item in required_infra:
-              assert item in infra, f"missing production infrastructure fact: {item}"
+              assert item in text["infra"], f"missing infrastructure fact: {item}"
 
           required_plugin = (
               "Hermes Agent v0.18.2 (2026.7.7.2)",
@@ -104,11 +90,16 @@ jobs:
               "must not rely on that implicit behavior",
               "discover_plugins(force=True)",
               "set-like unordered collection",
+              "enabled user 0.1.0 nails-scheduling",
+              "enabled user 0.2.0 nails-scheduling",
+              "resolve_date",
+              "update_availability",
               "PLUGIN_REGISTRY_OK=true",
               "TELEGRAM_VISIBILITY_OK=true",
+              "SCHEDULING_ACTIONS_OK=true",
           )
           for item in required_plugin:
-              assert item in plugin, f"missing Hermes plugin runtime fact: {item}"
+              assert item in text["plugin"], f"missing plugin runtime fact: {item}"
 
           required_context = (
               "production HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3",
@@ -116,23 +107,28 @@ jobs:
               "NAILS_002E4_V3_DEPLOYMENT_OK",
               "Issue #34",
               "PR #44",
+              "c9e400c80398bd4367aad0ed0416ee0fc6a79b2d",
               "Что у меня 18 июля?",
-              "Старый acceptance приостановлен",
+              "ops/nails-002e5-date-availability",
+              "NAILS_002E5_DEPLOYMENT_OK",
+              "calendar_data_changed_by_deployment=false",
+              "manual_sql_executed=false",
               "V1 или V2",
           )
           for item in required_context:
-              assert item in context, f"missing current context fact: {item}"
+              assert item in text["context"], f"missing current context fact: {item}"
 
           required_status = (
               "HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3",
-              "Alembic: 0006",
+              "Alembic | `0006`",
               "NAILS_002E4_V3_DEPLOYMENT_OK",
               "Issue #34",
-              "Telegram happy-path acceptance",
+              "PR #44 merged",
               "candidate `0.2.0`",
+              "NAILS-002E5",
           )
           for item in required_status:
-              assert item in status, f"missing current status fact: {item}"
+              assert item in text["status"], f"missing status fact: {item}"
 
           forbidden = (
               "TELEGRAM_BOT_TOKEN=",
@@ -142,13 +138,8 @@ jobs:
               "Authorization: Bearer",
           )
           for item in forbidden:
-              for name, text in (
-                  ("context", context),
-                  ("status", status),
-                  ("infra", infra),
-                  ("plugin", plugin),
-              ):
-                  assert item not in text, f"secret-like value in {name}: {item}"
+              for name in ("context", "status", "infra", "plugin"):
+                  assert item not in text[name], f"secret-like value in {name}: {item}"
 
           required_links = (
               "docs/context/current.md",
@@ -156,19 +147,27 @@ jobs:
               "docs/operations/hermes-plugin-runtime.md",
           )
           for link in required_links:
-              assert link in agents, f"missing AGENTS link: {link}"
-              assert link in readme, f"missing README link: {link}"
+              assert link in text["agents"], f"missing AGENTS link: {link}"
+              assert link in text["readme"], f"missing README link: {link}"
 
-          assert "сначала прочитать `docs/context/current.md`" in agents
-          assert "Нельзя заново угадывать" in agents
+          assert "сначала прочитать `docs/context/current.md`" in text["agents"]
+          assert "Нельзя заново угадывать" in text["agents"]
 
-          assert "nails-002e4.sh` must **not** be executed again" in deploy_readme
-          assert "nails-002e4-v2.sh` must **not** be executed again" in deploy_readme
-          assert "ops/deploy/nails-002e4-v3.sh" in deploy_readme
-          assert "NAILS_002E4_V3_DEPLOYMENT_OK" in deploy_readme
-          assert "root user-level systemd" in deploy_readme
-          assert "/root/.hermes/profiles/nails/config.yaml" in deploy_readme
-          assert "<APPROVED_RUNBOOK>.sh" in deploy_readme
+          deploy_required = (
+              "nails-002e4.sh` must **not** be executed again",
+              "nails-002e4-v2.sh` must **not** be executed again",
+              "ops/deploy/nails-002e4-v3.sh",
+              "NAILS_002E4_V3_DEPLOYMENT_OK",
+              "ops/deploy/nails-002e5-date-availability.sh",
+              "NAILS_002E5_DEPLOYMENT_OK",
+              "root user-level systemd",
+              "/root/.hermes/profiles/nails/config.yaml",
+              "<APPROVED_RUNBOOK>.sh",
+              "calendar_data_changed_by_deployment=false",
+              "manual_sql_executed=false",
+          )
+          for item in deploy_required:
+              assert item in text["deploy"], f"missing deployment contract: {item}"
 
-          print("PRODUCTION_INFRASTRUCTURE_AND_CONTEXT_CONTRACT_OK")
+          print("PRODUCTION_INFRASTRUCTURE_AND_E5_CONTEXT_CONTRACT_OK")
           PY
