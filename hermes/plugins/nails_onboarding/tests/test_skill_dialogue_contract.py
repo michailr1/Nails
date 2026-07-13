@@ -38,14 +38,18 @@ def test_onboarding_skill_preserves_dialogue_order_and_presentation() -> None:
         assert phrase in text
 
 
-def test_completed_onboarding_routes_calendar_changes_to_scheduling() -> None:
+def test_completed_onboarding_routes_operational_changes_to_scheduling() -> None:
     text = _skill_text().casefold()
     required_phrases = (
-        "не предлагай перезапуск настройки для изменения графика",
-        "для просмотра дня, поиска окон, изменения конкретных рабочих дат",
-        "`update_availability`",
-        "«убрать ошибочную дату» означает состояние `unknown`",
+        "не предлагай перезапуск настройки для изменения графика или услуг",
+        "переименования, изменения цены, длительности, buffers, описания",
+        "сейчас → будет",
+        "будущим записям",
+        "существующие сохранят snapshots",
+        "«удали услугу» означает архивировать её",
+        "«убрать ошибочную дату» означает `unknown`",
         "повторный onboarding нужен только если пользователь явно хочет",
+        "никогда не нужен для обычной корректировки рабочих данных",
         "без повторного прохождения настройки",
     )
     for phrase in required_phrases:
@@ -53,6 +57,8 @@ def test_completed_onboarding_routes_calendar_changes_to_scheduling() -> None:
 
     forbidden_phrases = (
         "для изменения графика нужно заново пройти onboarding",
+        "для изменения услуг нужно заново пройти onboarding",
+        "редактирование услуг требует перезапуска настройки",
         "рабочее управление календарём — следующий модуль",
         "изменение рабочих данных и поиск свободных окон станут доступны",
         "не говори «можете менять настройки»",
