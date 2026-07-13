@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from datetime import date
 from datetime import time as wall_time
 from typing import Any
@@ -14,8 +15,9 @@ _ALLOWED_ACTIONS = {
     "update_availability",
     "create_booking",
 }
-_ALLOWED_DATE_KINDS = {"absolute", "relative_days", "weekday"}
-_ALLOWED_OCCURRENCES = {"nearest_future", "current_week", "next_week"}
+_ALLOWED_DATE_KINDS = {"absolute", "month_day", "relative_days", "weekday"}
+_ALLOWED_WEEKDAY_OCCURRENCES = {"nearest_future", "current_week", "next_week"}
+_ALLOWED_MONTH_DAY_OCCURRENCES = {"nearest_future", "current_year", "next_year"}
 _ALLOWED_AVAILABILITY_STATES = {"available", "unavailable", "unknown"}
 
 
@@ -82,8 +84,37 @@ def _normalize_date_resolution(args: dict[str, Any]) -> dict[str, Any]:
     if kind not in _ALLOWED_DATE_KINDS:
         raise ToolInputError("unsupported date resolution kind")
     if kind == "absolute":
-        _require_exact_keys(args, {"action", "date_kind", "day"}, {"action", "date_kind", "day"})
+        _require_exact_keys(
+            args,
+            {"action", "date_kind", "day"},
+            {"action", "date_kind", "day"},
+        )
         return {"kind": kind, "day": _normalize_day(args.get("day"))}
+    if kind == "month_day":
+        _require_exact_keys(
+            args,
+            {"action", "date_kind", "month", "day_of_month", "occurrence"},
+            {"action", "date_kind", "month", "day_of_month", "occurrence"},
+        )
+        month = args.get("month")
+        day_of_month = args.get("day_of_month")
+        occurrence = args.get("occurrence")
+        if isinstance(month, bool) or not isinstance(month, int) or not 1 <= month <= 12:
+            raise ToolInputError("month is invalid")
+        if (
+            isinstance(day_of_month, bool)
+            or not isinstance(day_of_month, int)
+            or not 1 <= day_of_month <= calendar.monthrange(2000, month)[1]
+        ):
+            raise ToolInputError("day_of_month is invalid")
+        if occurrence not in _ALLOWED_MONTH_DAY_OCCURRENCES:
+            raise ToolInputError("month-day occurrence is invalid")
+        return {
+            "kind": kind,
+            "month": month,
+            "day_of_month": day_of_month,
+            "occurrence": occurrence,
+        }
     if kind == "relative_days":
         _require_exact_keys(
             args,
@@ -104,8 +135,8 @@ def _normalize_date_resolution(args: dict[str, Any]) -> dict[str, Any]:
     occurrence = args.get("occurrence")
     if isinstance(weekday_iso, bool) or not isinstance(weekday_iso, int) or not 1 <= weekday_iso <= 7:
         raise ToolInputError("weekday_iso is invalid")
-    if occurrence not in _ALLOWED_OCCURRENCES:
-        raise ToolInputError("occurrence is invalid")
+    if occurrence not in _ALLOWED_WEEKDAY_OCCURRENCES:
+        raise ToolInputError("weekday occurrence is invalid")
     return {
         "kind": kind,
         "weekday_iso": weekday_iso,
