@@ -29,10 +29,72 @@ class ServiceSummary(BaseModel):
     duration_minutes: int
     buffer_before_minutes: int
     buffer_after_minutes: int
+    is_active: bool
 
 
 class ServiceListResponse(BaseModel):
     services: list[ServiceSummary]
+
+
+class ServiceLookupResponse(BaseModel):
+    found: bool
+    service: ServiceSummary | None = None
+
+
+class ServiceDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    public_name: str = Field(min_length=1, max_length=160)
+    public_description: str | None = Field(default=None, max_length=1000)
+    price_amount: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    duration_minutes: int = Field(ge=1, le=1440)
+    buffer_before_minutes: int = Field(ge=0, le=1440)
+    buffer_after_minutes: int = Field(ge=0, le=1440)
+    is_active: bool = True
+
+    @field_validator("public_name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("public_name must not be empty")
+        return candidate
+
+    @field_validator("public_description")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = " ".join(value.split())
+        return candidate or None
+
+
+class ServiceCreateRequest(ServiceDefinition):
+    pass
+
+
+class ServiceReplaceRequest(ServiceDefinition):
+    current_public_name: str = Field(min_length=1, max_length=160)
+
+    @field_validator("current_public_name")
+    @classmethod
+    def normalize_current_name(cls, value: str) -> str:
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("current_public_name must not be empty")
+        return candidate
+
+
+class ServiceCreateResponse(BaseModel):
+    service: ServiceSummary
+    created: bool
+
+
+class ServiceReplaceResponse(BaseModel):
+    service: ServiceSummary
+    changed: bool
+    changed_fields: list[str]
 
 
 class ClientSummary(BaseModel):

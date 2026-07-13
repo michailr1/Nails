@@ -30,6 +30,7 @@ def _service_payload():
         "duration_minutes": 120,
         "buffer_before_minutes": 0,
         "buffer_after_minutes": 21,
+        "is_active": True,
     }
 
 
@@ -76,7 +77,12 @@ def _slots_payload(*, starts=None, known=True, working=True):
 @pytest.mark.parametrize(
     ("args", "method", "path", "params"),
     [
-        ({"action": "list_services"}, "GET", "/api/v1/scheduling/services", None),
+        (
+            {"action": "list_services"},
+            "GET",
+            "/api/v1/scheduling/services",
+            {"include_inactive": "false"},
+        ),
         (
             {"action": "day_view", "day": "2026-07-18"},
             "GET",

@@ -43,19 +43,19 @@ _AVAILABILITY_DAY = {
 NAILS_SCHEDULING = {
     "name": "nails_scheduling",
     "description": (
-        "Use the current trusted Telegram owner's Nails scheduling data through fixed "
+        "Use the current trusted Telegram owner's Nails operational data through fixed "
         "operations only. Identity comes from Hermes gateway context and must never be "
-        "requested or supplied in arguments. Resolve absolute, month-day, relative, and "
-        "weekday-based dates through the backend before using them; never calculate calendar "
-        "dates, years, or weekdays in the model. Read services, a concrete calendar day, free "
-        "slots, or an exact client match. Replace availability only for explicitly named dates "
-        "after a before/after summary and explicit confirmation; unrelated dates are preserved "
-        "and existing scheduled bookings are protected. Create a client only after an exact "
-        "lookup, a typo check, and explicit user confirmation. Create a booking only after the "
+        "requested or supplied in arguments. Onboarding is only initial data entry and must "
+        "never be restarted for ordinary changes. Resolve dates through the backend; never "
+        "calculate calendar dates, years, or weekdays in the model. Read, create, rename, "
+        "change, archive, and reactivate services after an exact lookup, a complete before/after "
+        "summary, and explicit confirmation. Service price, duration, and buffer changes affect "
+        "future bookings; existing bookings retain their stored commercial and timing snapshots. "
+        "Replace availability only for explicitly named dates after confirmation. Create a client "
+        "only after exact lookup, typo check, and confirmation. Create a booking only after the "
         "client and service are resolved, the chosen time was returned by free_slots, a final "
-        "human-readable summary was shown, and the user explicitly confirmed it. Use only "
-        "weekday_iso returned by the backend. The runtime generates booking idempotency data "
-        "and copies commercial and timing snapshots from backend service data."
+        "human-readable summary was shown, and the user explicitly confirmed it. Runtime generates "
+        "booking idempotency data and copies snapshots from current backend service data."
     ),
     "parameters": {
         "type": "object",
@@ -66,6 +66,9 @@ NAILS_SCHEDULING = {
                 "enum": [
                     "resolve_date",
                     "list_services",
+                    "find_service",
+                    "create_service",
+                    "update_service",
                     "day_view",
                     "free_slots",
                     "find_client",
@@ -126,9 +129,57 @@ NAILS_SCHEDULING = {
                 "maxItems": 31,
                 "description": "Only the exact dates to replace through update_availability.",
             },
+            "include_inactive": {
+                "type": "boolean",
+                "description": "For list_services, include archived services when true.",
+            },
+            "current_service_name": {
+                "type": "string",
+                "description": "Current exact public name used to locate a service before update.",
+            },
             "service_name": {
                 "type": "string",
                 "description": "Public service name, never a technical identifier.",
+            },
+            "service_description": {
+                "type": ["string", "null"],
+                "description": "Optional public service description; null clears it.",
+            },
+            "price_amount": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Base service price with at most two decimal places.",
+            },
+            "currency": {
+                "type": "string",
+                "description": (
+                    "Three-letter currency code; use RUB when no other currency was named."
+                ),
+            },
+            "duration_minutes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1440,
+                "description": "Current service duration for future bookings.",
+            },
+            "buffer_before_minutes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1440,
+                "description": "Current preparation buffer before future bookings.",
+            },
+            "buffer_after_minutes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1440,
+                "description": "Current recovery/cleanup buffer after future bookings.",
+            },
+            "is_active": {
+                "type": "boolean",
+                "description": (
+                    "True makes the service bookable. False archives it without deleting "
+                    "existing booking history."
+                ),
             },
             "client_public_name": {
                 "type": "string",
@@ -145,9 +196,9 @@ NAILS_SCHEDULING = {
             "confirmed": {
                 "type": "boolean",
                 "description": (
-                    "Required and true only for create_client, update_availability, or "
-                    "create_booking after the user explicitly confirms the immediately "
-                    "preceding human-readable summary."
+                    "Required and true only for create_service, update_service, create_client, "
+                    "update_availability, or create_booking after the user explicitly confirms "
+                    "the immediately preceding human-readable summary."
                 ),
             },
         },

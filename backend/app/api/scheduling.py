@@ -18,15 +18,26 @@ from app.schemas.scheduling import (
     DateResolveResponse,
     DayViewResponse,
     FreeSlotsResponse,
+    ServiceCreateRequest,
+    ServiceCreateResponse,
     ServiceListResponse,
+    ServiceLookupResponse,
+    ServiceReplaceRequest,
+    ServiceReplaceResponse,
 )
 from app.services.scheduling_availability import replace_availability
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_clients import create_or_reuse_client
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_dates import resolve_date
-from app.services.scheduling_lookup import find_client_exact, list_active_services
+from app.services.scheduling_lookup import find_client_exact
 from app.services.scheduling_queries import find_free_slots, get_day_view
+from app.services.scheduling_services import (
+    create_service,
+    find_service_exact,
+    list_services,
+    replace_service,
+)
 
 router = APIRouter(prefix="/api/v1/scheduling", tags=["scheduling"])
 
@@ -57,8 +68,46 @@ def date_resolve(
 def services(
     session: SessionDependency,
     identity: IdentityDependency,
+    include_inactive: bool = False,
 ) -> ServiceListResponse:
-    return list_active_services(session, identity)
+    return list_services(
+        session,
+        identity,
+        include_inactive=include_inactive,
+    )
+
+
+@router.get("/services/exact", response_model=ServiceLookupResponse)
+def service_exact(
+    session: SessionDependency,
+    identity: IdentityDependency,
+    public_name: Annotated[str, Query(min_length=1, max_length=160)],
+) -> ServiceLookupResponse:
+    return find_service_exact(session, identity, public_name)
+
+
+@router.post("/services", response_model=ServiceCreateResponse)
+def service_create(
+    body: ServiceCreateRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> ServiceCreateResponse:
+    try:
+        return create_service(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
+@router.put("/services", response_model=ServiceReplaceResponse)
+def service_replace(
+    body: ServiceReplaceRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> ServiceReplaceResponse:
+    try:
+        return replace_service(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
 
 
 @router.get("/clients/exact", response_model=ClientLookupResponse)

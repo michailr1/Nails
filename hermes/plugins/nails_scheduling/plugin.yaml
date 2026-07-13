@@ -1,9 +1,9 @@
 name: nails-scheduling
-version: 0.2.0
-description: Restricted calendar and scheduling bridge from the Nails Hermes profile to the local Booking API
+version: 0.3.0
+description: Restricted operational bridge from the Nails Hermes profile to the local scheduling API
 requires_env:
   - name: NAILS_INTERNAL_API_KEY
-    description: Internal authentication key for the local Nails Booking API
+    description: Internal authentication key for the local Nails scheduling API
     secret: true
 provides_tools:
   - nails_scheduling

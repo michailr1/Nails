@@ -16,6 +16,7 @@ def service_summary(service: Service) -> ServiceSummary:
         duration_minutes=service.duration_minutes,
         buffer_before_minutes=service.buffer_before_minutes,
         buffer_after_minutes=service.buffer_after_minutes,
+        is_active=service.is_active,
     )
 
 

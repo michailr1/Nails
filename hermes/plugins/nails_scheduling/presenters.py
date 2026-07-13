@@ -15,6 +15,7 @@ def _service_summary(value: Any) -> dict[str, Any]:
         "duration_minutes",
         "buffer_before_minutes",
         "buffer_after_minutes",
+        "is_active",
     )
     if not set(fields).issubset(value):
         raise ValueError("invalid service")
@@ -95,6 +96,28 @@ def _sanitize_success(action: str, result: Any) -> dict[str, Any]:
         if not isinstance(services, list):
             raise ValueError("invalid services")
         return {"services": [_service_summary(item) for item in services]}
+    if action == "find_service":
+        service = result.get("service")
+        return {
+            "found": result["found"],
+            "service": None if service is None else _service_summary(service),
+        }
+    if action == "create_service":
+        return {
+            "service": _service_summary(result["service"]),
+            "created": result["created"],
+        }
+    if action == "update_service":
+        changed_fields = result.get("changed_fields")
+        if not isinstance(changed_fields, list) or not all(
+            isinstance(field, str) for field in changed_fields
+        ):
+            raise ValueError("invalid changed fields")
+        return {
+            "service": _service_summary(result["service"]),
+            "changed": result["changed"],
+            "changed_fields": changed_fields,
+        }
     if action == "day_view":
         availability = result.get("availability")
         bookings = result.get("bookings")

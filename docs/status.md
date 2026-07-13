@@ -8,157 +8,107 @@
 
 | Область | Состояние |
 |---|---|
-| Production repository | `385a92962e3736553335d717adcdf4b83ac8a8b3`, clean после последнего deployment |
-| GitHub code fix | PR #44 merged, `c9e400c80398bd4367aad0ed0416ee0fc6a79b2d` |
-| Backend API/PostgreSQL | production, healthy/ready |
+| Production repository | последний доказанный `HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3`, clean |
+| Backend API/PostgreSQL | healthy/ready по последнему production-отчёту |
 | Alembic | `0006` |
-| Hermes gateway | production, active |
+| Hermes gateway | active по последнему production-отчёту |
 | Onboarding plugin | production `0.5.0` |
-| Scheduling plugin | production `0.1.0`; merged candidate `0.2.0` |
-| Last deployment | `NAILS_002E4_V3_DEPLOYMENT_OK` |
-| Next deployment | NAILS-002E5 runbook candidate |
-| Telegram happy-path acceptance | приостановлена до E5 deployment |
+| Scheduling plugin | доказанный production `0.1.0`; E5 candidate `0.2.0`; итоговый candidate `0.3.0` |
+| Date/availability fix | PR #44 merged, `c9e400c80398bd4367aad0ed0416ee0fc6a79b2d` |
+| NAILS-002E5 | PR #45 merged, но отдельный запуск больше не используется |
+| Service management | PR #46 green, готов к merge, ещё не deployed |
+| Last proven deployment | `NAILS_002E4_V3_DEPLOYMENT_OK` |
 | Active issue | Issue #34 |
 
-## 2. Production baseline
+## 2. Найденные UX-дефекты
+
+1. Модель сопоставила пятницу с 18 июля 2026 года вместо 17 июля.
+2. Изменение графика требовало повторного onboarding.
+3. Изменение услуг, цены, длительности и buffers также требовало повторного onboarding.
+
+Общий продуктовый принцип:
+
+> Onboarding — только мастер первичного заполнения. После завершения рабочие данные редактируются через restricted domain operations.
+
+## 3. Реализованный operational scope
+
+PR #44:
 
 ```text
-hostname: de.funti.cc
-repo: /opt/nails/repo
-HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3
-backend API: http://127.0.0.1:8210
-Alembic: 0006
-gateway: active
+resolve_date
+update_availability
 ```
 
-Containers:
+PR #46, scheduling `0.3.0`:
 
 ```text
-nails-api
-nails-db
+find_service
+create_service
+update_service
 ```
 
-Hermes управляется root user-level systemd, не Docker и не system-level systemd.
+Service management поддерживает создание, переименование, описание, цену, валюту, длительность, оба buffers, архив и восстановление.
 
-## 3. Найденные acceptance defects
+Безопасность:
 
-### Неверное разрешение даты
+- exact owner-scoped lookup;
+- «сейчас → будет» и явное подтверждение;
+- repeat-safe create/update;
+- name-conflict protection;
+- физического удаления нет;
+- существующие bookings сохраняют price/currency/duration/buffer snapshots;
+- новые параметры применяются только к будущим bookings;
+- архив блокирует новые записи, но сохраняет историю;
+- migration отсутствует, Alembic остаётся `0006`.
 
-Агент преобразовал «пятница» в `18 июля 2026`, хотя это суббота. Правильная ближайшая пятница — `17 июля 2026`.
-
-Причина: модель вычисляла абсолютную дату до backend-вызова.
-
-### Нельзя исправить график
-
-Scheduling plugin `0.1.0` не содержит write operation для availability. Агент предложил пройти completed onboarding заново. Такой flow признан неприемлемым.
-
-## 4. Смёрженное исправление
-
-```text
-PR #44
-merge SHA: c9e400c80398bd4367aad0ed0416ee0fc6a79b2d
-candidate scheduling plugin: 0.2.0
-```
-
-Trusted date resolver:
+## 4. Проверки PR #46
 
 ```text
-POST /api/v1/scheduling/date/resolve
-action=resolve_date
-```
-
-Он поддерживает полную дату, день/месяц без года, относительные даты, weekday occurrences, переход года и leap-day. Skills запрещают модели самостоятельно вычислять дату, год и день недели.
-
-Direct availability management:
-
-```text
-PUT /api/v1/scheduling/availability
-action=update_availability
-```
-
-Состояния:
-
-```text
-available
-unavailable
-unknown
-```
-
-Операция:
-
-- меняет только явно названные даты;
-- сохраняет остальные даты;
-- требует сводку и подтверждение;
-- атомарна и идемпотентна;
-- защищает active bookings;
-- не изменяет completed onboarding.
-
-PR #44 checks:
-
-```text
-Agent responsibility contract #25 — success
-Production infrastructure contract #14 — success
-CI #115 — success
+head: 81740eb4fedd94a8ccef602837c581bce3105f82
+Agent responsibility contract #52 — success
+Production infrastructure contract #26 — success
+CI #142 — success
 backend — success
-onboarding plugin 3.11/3.12 — success
-scheduling plugin 3.11/3.12 — success
+onboarding plugin Python 3.11/3.12 — success
+scheduling plugin Python 3.11/3.12 — success
 compose-smoke — success
 review threads — none
 ```
 
-## 5. Правильный regression scenario
+## 5. Единый deployment
+
+Отдельный E5 не запускается. После merge PR #46 создаётся новый combined runbook, который принимает только один из двух проверяемых исходных вариантов:
 
 ```text
-2026-07-14 11:00–20:00 — сохранить
-2026-07-15 11:00–20:00 — сохранить
-2026-07-17 11:00–15:00 — добавить
-2026-07-18 — удалить как ошибочную дату, state=unknown
+HEAD 385a92962e3736553335d717adcdf4b83ac8a8b3 + scheduling 0.1.0
+HEAD a0ef8c5c26301a9f6950544afd0e070b7e691582 + scheduling 0.2.0
 ```
 
-`unknown` не означает выходной и не означает свободный день.
-
-## 6. Старый тест отменён
+Итог для обоих вариантов:
 
 ```text
-Что у меня 18 июля?
+точный date resolver
+редактирование availability
+service management
+scheduling 0.3.0
+Alembic 0006
+nails-db unchanged
+Docker daemon unchanged
 ```
 
-Ожидание рабочего интервала `11:00–15:00` признано основанным на ошибочных данных. Старый acceptance не продолжать.
+Deployment создаёт database/runtime backups, обновляет только `nails-api`, plugin и skills, проверяет OpenAPI/actions и не меняет calendar/service data.
 
-## 7. NAILS-002E5 deployment candidate
+## 6. Acceptance
 
-```text
-branch: ops/nails-002e5-date-availability
-entrypoint: ops/deploy/nails-002e5-date-availability.sh
-success marker: NAILS_002E5_DEPLOYMENT_OK
-```
+После combined deployment:
 
-Runbook должен:
-
-- проверить exact production baseline и release SHA;
-- доказать отсутствие Alembic file changes;
-- создать PostgreSQL и runtime backups;
-- build нового API image до остановки gateway;
-- пересоздать только `nails-api`;
-- сохранить `nails-db` и Docker daemon без изменений;
-- сохранить Alembic `0006`;
-- установить scheduling plugin `0.2.0` и оба skills;
-- не менять Hermes config;
-- проверить OpenAPI routes, registry, Telegram actions и журналы;
-- восстановить старый API image/runtime/repo/gateway при ошибке;
-- не выполнять SQL и не менять calendar data.
-
-API container ожидаемо изменится. DB container и Docker daemon должны остаться прежними.
-
-## 8. Следующая production-приёмка
-
-После успешного E5 deployment:
-
-1. «Какая дата у ближайшей пятницы?» → `17 июля 2026`, пятница.
-2. «Исправь график: 17 июля работаю 11:00–15:00, ошибочную 18 июля убери».
-3. Проверить «сейчас → будет» и отсутствие write до подтверждения.
-4. Подтвердить.
-5. Проверить: 17 July available, 18 July unknown, 14/15 unchanged.
-6. Только затем продолжить free slots/client/booking acceptance.
+1. Проверить ближайшую пятницу: 17 июля 2026.
+2. Исправить 17/18 июля через подтверждаемую сводку.
+3. Проверить неизменность 14/15 июля.
+4. Изменить цену услуги без onboarding.
+5. Проверить применение новой цены только к будущим bookings.
+6. Проверить archive/reactivate без удаления истории.
 7. Выполнить финальную read-only проверку counts и log privacy.
 8. Закрыть Issue #34 после всех критериев.
+
+Старый тест `Что у меня 18 июля?` с ожиданием рабочего интервала отменён.
