@@ -29,6 +29,7 @@ jobs:
       - name: Validate legacy artifact and corrected E4 boundary
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
 
           legacy_path = Path("ops/deploy/nails-002e4.sh")
@@ -66,9 +67,9 @@ jobs:
           assert 'GATEWAY_FRAGMENT="/root/.config/systemd/user/hermes-gateway-nails.service"' in current
           assert 'user_systemctl stop "$GATEWAY"' in current
           assert 'user_systemctl start "$GATEWAY"' in current
-          assert 'systemctl stop "$GATEWAY"' not in current
-          assert 'systemctl start "$GATEWAY"' not in current
-          assert 'systemctl restart "$GATEWAY"' not in current
+          assert re.search(r'^\s*systemctl\s+stop\s+"\$GATEWAY"', current, re.MULTILINE) is None
+          assert re.search(r'^\s*systemctl\s+start\s+"\$GATEWAY"', current, re.MULTILINE) is None
+          assert re.search(r'^\s*systemctl\s+restart\s+"\$GATEWAY"', current, re.MULTILINE) is None
 
           # Exact Hermes and structured YAML contract.
           assert 'Hermes Agent v0.18.2 (2026.7.7.2)' in current
