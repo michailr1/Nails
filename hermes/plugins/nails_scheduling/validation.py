@@ -68,6 +68,14 @@ def _normalize_note(value: Any) -> str | None:
     return _normalize_text(value, "note", 255)
 
 
+def _bounded_int(value: Any, field_name: str, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ToolInputError(f"{field_name} is invalid")
+    if not minimum <= value <= maximum:
+        raise ToolInputError(f"{field_name} is invalid")
+    return value
+
+
 def _require_exact_keys(
     args: dict[str, Any],
     allowed: set[str],
@@ -83,30 +91,24 @@ def _normalize_date_resolution(args: dict[str, Any]) -> dict[str, Any]:
     kind = args.get("date_kind")
     if kind not in _ALLOWED_DATE_KINDS:
         raise ToolInputError("unsupported date resolution kind")
+
     if kind == "absolute":
-        _require_exact_keys(
-            args,
-            {"action", "date_kind", "day"},
-            {"action", "date_kind", "day"},
-        )
+        keys = {"action", "date_kind", "day"}
+        _require_exact_keys(args, keys, keys)
         return {"kind": kind, "day": _normalize_day(args.get("day"))}
+
     if kind == "month_day":
-        _require_exact_keys(
-            args,
-            {"action", "date_kind", "month", "day_of_month", "occurrence"},
-            {"action", "date_kind", "month", "day_of_month", "occurrence"},
+        keys = {"action", "date_kind", "month", "day_of_month", "occurrence"}
+        _require_exact_keys(args, keys, keys)
+        month = _bounded_int(args.get("month"), "month", 1, 12)
+        maximum_day = calendar.monthrange(2000, month)[1]
+        day_of_month = _bounded_int(
+            args.get("day_of_month"),
+            "day_of_month",
+            1,
+            maximum_day,
         )
-        month = args.get("month")
-        day_of_month = args.get("day_of_month")
         occurrence = args.get("occurrence")
-        if isinstance(month, bool) or not isinstance(month, int) or not 1 <= month <= 12:
-            raise ToolInputError("month is invalid")
-        if (
-            isinstance(day_of_month, bool)
-            or not isinstance(day_of_month, int)
-            or not 1 <= day_of_month <= calendar.monthrange(2000, month)[1]
-        ):
-            raise ToolInputError("day_of_month is invalid")
         if occurrence not in _ALLOWED_MONTH_DAY_OCCURRENCES:
             raise ToolInputError("month-day occurrence is invalid")
         return {
@@ -115,26 +117,17 @@ def _normalize_date_resolution(args: dict[str, Any]) -> dict[str, Any]:
             "day_of_month": day_of_month,
             "occurrence": occurrence,
         }
+
     if kind == "relative_days":
-        _require_exact_keys(
-            args,
-            {"action", "date_kind", "offset_days"},
-            {"action", "date_kind", "offset_days"},
-        )
-        offset = args.get("offset_days")
-        if isinstance(offset, bool) or not isinstance(offset, int) or not -366 <= offset <= 366:
-            raise ToolInputError("offset_days is invalid")
+        keys = {"action", "date_kind", "offset_days"}
+        _require_exact_keys(args, keys, keys)
+        offset = _bounded_int(args.get("offset_days"), "offset_days", -366, 366)
         return {"kind": kind, "offset_days": offset}
 
-    _require_exact_keys(
-        args,
-        {"action", "date_kind", "weekday_iso", "occurrence"},
-        {"action", "date_kind", "weekday_iso", "occurrence"},
-    )
-    weekday_iso = args.get("weekday_iso")
+    keys = {"action", "date_kind", "weekday_iso", "occurrence"}
+    _require_exact_keys(args, keys, keys)
+    weekday_iso = _bounded_int(args.get("weekday_iso"), "weekday_iso", 1, 7)
     occurrence = args.get("occurrence")
-    if isinstance(weekday_iso, bool) or not isinstance(weekday_iso, int) or not 1 <= weekday_iso <= 7:
-        raise ToolInputError("weekday_iso is invalid")
     if occurrence not in _ALLOWED_WEEKDAY_OCCURRENCES:
         raise ToolInputError("weekday occurrence is invalid")
     return {
@@ -142,6 +135,36 @@ def _normalize_date_resolution(args: dict[str, Any]) -> dict[str, Any]:
         "weekday_iso": weekday_iso,
         "occurrence": occurrence,
     }
+
+
+def _normalize_intervals(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list) or len(value) > 4:
+        raise ToolInputError("availability intervals are invalid")
+
+    intervals: list[tuple[wall_time, wall_time]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ToolInputError("availability interval is invalid")
+        if set(item) != {"start_time", "end_time"}:
+            raise ToolInputError("availability interval is invalid")
+        start = wall_time.fromisoformat(_normalize_start_time(item.get("start_time")))
+        end = wall_time.fromisoformat(_normalize_start_time(item.get("end_time")))
+        if end <= start:
+            raise ToolInputError("availability interval end must be later than start")
+        intervals.append((start, end))
+
+    intervals.sort(key=lambda pair: pair[0])
+    for previous, current in zip(intervals, intervals[1:], strict=False):
+        if current[0] < previous[1]:
+            raise ToolInputError("availability intervals must not overlap")
+
+    return [
+        {
+            "start_time": start.isoformat(timespec="minutes"),
+            "end_time": end.isoformat(timespec="minutes"),
+        }
+        for start, end in intervals
+    ]
 
 
 def _normalize_availability_days(value: Any) -> list[dict[str, Any]]:
@@ -153,10 +176,9 @@ def _normalize_availability_days(value: Any) -> list[dict[str, Any]]:
     for item in value:
         if not isinstance(item, dict):
             raise ToolInputError("availability day is invalid")
-        if set(item) - {"day", "state", "intervals", "note"}:
-            raise ToolInputError("unsupported availability day fields")
-        if not {"day", "state", "intervals"}.issubset(item):
-            raise ToolInputError("availability day fields are missing")
+        allowed = {"day", "state", "intervals", "note"}
+        required = {"day", "state", "intervals"}
+        _require_exact_keys(item, allowed, required)
 
         day = _normalize_day(item.get("day"))
         if day in seen_days:
@@ -166,25 +188,9 @@ def _normalize_availability_days(value: Any) -> list[dict[str, Any]]:
         state = item.get("state")
         if state not in _ALLOWED_AVAILABILITY_STATES:
             raise ToolInputError("availability state is invalid")
-        intervals_value = item.get("intervals")
-        if not isinstance(intervals_value, list) or len(intervals_value) > 4:
-            raise ToolInputError("availability intervals are invalid")
-
-        intervals: list[tuple[wall_time, wall_time]] = []
-        for interval in intervals_value:
-            if not isinstance(interval, dict) or set(interval) != {"start_time", "end_time"}:
-                raise ToolInputError("availability interval is invalid")
-            start = wall_time.fromisoformat(_normalize_start_time(interval.get("start_time")))
-            end = wall_time.fromisoformat(_normalize_start_time(interval.get("end_time")))
-            if end <= start:
-                raise ToolInputError("availability interval end must be later than start")
-            intervals.append((start, end))
-        intervals.sort(key=lambda pair: pair[0])
-        for previous, current in zip(intervals, intervals[1:], strict=False):
-            if current[0] < previous[1]:
-                raise ToolInputError("availability intervals must not overlap")
-
+        intervals = _normalize_intervals(item.get("intervals"))
         note = _normalize_note(item.get("note"))
+
         if state == "available" and not intervals:
             raise ToolInputError("available day requires intervals")
         if state != "available" and intervals:
@@ -196,13 +202,7 @@ def _normalize_availability_days(value: Any) -> list[dict[str, Any]]:
             {
                 "day": day,
                 "state": state,
-                "intervals": [
-                    {
-                        "start_time": start.isoformat(timespec="minutes"),
-                        "end_time": end.isoformat(timespec="minutes"),
-                    }
-                    for start, end in intervals
-                ],
+                "intervals": intervals,
                 "note": note,
             }
         )
@@ -230,22 +230,20 @@ def _validate_args(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         return action, {"day": _normalize_day(args.get("day"))}
 
     if action == "free_slots":
-        _require_exact_keys(
-            args,
-            {"action", "day", "service_name"},
-            {"action", "day", "service_name"},
-        )
+        allowed = {"action", "day", "service_name"}
+        _require_exact_keys(args, allowed, allowed)
         return action, {
             "day": _normalize_day(args.get("day")),
-            "service_name": _normalize_text(args.get("service_name"), "service_name", 160),
+            "service_name": _normalize_text(
+                args.get("service_name"),
+                "service_name",
+                160,
+            ),
         }
 
     if action == "find_client":
-        _require_exact_keys(
-            args,
-            {"action", "client_public_name"},
-            {"action", "client_public_name"},
-        )
+        allowed = {"action", "client_public_name"}
+        _require_exact_keys(args, allowed, allowed)
         return action, {
             "client_public_name": _normalize_text(
                 args.get("client_public_name"),
@@ -255,11 +253,9 @@ def _validate_args(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         }
 
     if action == "create_client":
-        _require_exact_keys(
-            args,
-            {"action", "client_public_name", "phone", "confirmed"},
-            {"action", "client_public_name", "confirmed"},
-        )
+        allowed = {"action", "client_public_name", "phone", "confirmed"}
+        required = {"action", "client_public_name", "confirmed"}
+        _require_exact_keys(args, allowed, required)
         if args.get("confirmed") is not True:
             raise ToolInputError("explicit confirmation is required")
         return action, {
@@ -272,34 +268,21 @@ def _validate_args(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         }
 
     if action == "update_availability":
-        _require_exact_keys(
-            args,
-            {"action", "days", "confirmed"},
-            {"action", "days", "confirmed"},
-        )
+        allowed = {"action", "days", "confirmed"}
+        _require_exact_keys(args, allowed, allowed)
         if args.get("confirmed") is not True:
             raise ToolInputError("explicit confirmation is required")
         return action, {"days": _normalize_availability_days(args.get("days"))}
 
-    _require_exact_keys(
-        args,
-        {
-            "action",
-            "client_public_name",
-            "service_name",
-            "day",
-            "start_time",
-            "confirmed",
-        },
-        {
-            "action",
-            "client_public_name",
-            "service_name",
-            "day",
-            "start_time",
-            "confirmed",
-        },
-    )
+    allowed = {
+        "action",
+        "client_public_name",
+        "service_name",
+        "day",
+        "start_time",
+        "confirmed",
+    }
+    _require_exact_keys(args, allowed, allowed)
     if args.get("confirmed") is not True:
         raise ToolInputError("explicit confirmation is required")
     return action, {
@@ -308,7 +291,11 @@ def _validate_args(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
             "client_public_name",
             160,
         ),
-        "service_name": _normalize_text(args.get("service_name"), "service_name", 160),
+        "service_name": _normalize_text(
+            args.get("service_name"),
+            "service_name",
+            160,
+        ),
         "day": _normalize_day(args.get("day")),
         "start_time": _normalize_start_time(args.get("start_time")),
     }
@@ -339,7 +326,12 @@ def _request_spec(
             None,
         )
     if action == "update_availability":
-        return "PUT", "/api/v1/scheduling/availability", None, {"days": values["days"]}
+        return (
+            "PUT",
+            "/api/v1/scheduling/availability",
+            None,
+            {"days": values["days"]},
+        )
     if action in {"create_client", "create_booking"}:
         raise ToolInputError(f"{action} requires the guarded write flow")
     raise ToolInputError("unsupported scheduling action")
