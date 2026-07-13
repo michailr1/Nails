@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import uuid
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -8,6 +9,15 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models import BookingStatus
+
+DateKind = Literal["absolute", "month_day", "relative_days", "weekday"]
+DateOccurrence = Literal[
+    "nearest_future",
+    "current_week",
+    "next_week",
+    "current_year",
+    "next_year",
+]
 
 
 class ServiceSummary(BaseModel):
@@ -111,31 +121,65 @@ class FreeSlotsResponse(BaseModel):
 class DateResolveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["absolute", "relative_days", "weekday"]
+    kind: DateKind
     day: date | None = None
+    month: int | None = Field(default=None, ge=1, le=12)
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
     offset_days: int | None = Field(default=None, ge=-366, le=366)
     weekday_iso: int | None = Field(default=None, ge=1, le=7)
-    occurrence: Literal["nearest_future", "current_week", "next_week"] | None = None
+    occurrence: DateOccurrence | None = None
 
     @model_validator(mode="after")
     def validate_shape(self) -> DateResolveRequest:
         if self.kind == "absolute":
             if self.day is None or any(
                 value is not None
-                for value in (self.offset_days, self.weekday_iso, self.occurrence)
+                for value in (
+                    self.month,
+                    self.day_of_month,
+                    self.offset_days,
+                    self.weekday_iso,
+                    self.occurrence,
+                )
             ):
                 raise ValueError("absolute resolution requires only day")
             return self
+        if self.kind == "month_day":
+            if (
+                self.month is None
+                or self.day_of_month is None
+                or self.occurrence not in {"nearest_future", "current_year", "next_year"}
+                or any(
+                    value is not None
+                    for value in (self.day, self.offset_days, self.weekday_iso)
+                )
+            ):
+                raise ValueError("month_day resolution requires month, day_of_month and occurrence")
+            if self.day_of_month > calendar.monthrange(2000, self.month)[1]:
+                raise ValueError("day_of_month is invalid for month")
+            return self
         if self.kind == "relative_days":
             if self.offset_days is None or any(
-                value is not None for value in (self.day, self.weekday_iso, self.occurrence)
+                value is not None
+                for value in (
+                    self.day,
+                    self.month,
+                    self.day_of_month,
+                    self.weekday_iso,
+                    self.occurrence,
+                )
             ):
                 raise ValueError("relative_days resolution requires only offset_days")
             return self
-        if self.weekday_iso is None or self.occurrence is None or any(
-            value is not None for value in (self.day, self.offset_days)
+        if (
+            self.weekday_iso is None
+            or self.occurrence not in {"nearest_future", "current_week", "next_week"}
+            or any(
+                value is not None
+                for value in (self.day, self.month, self.day_of_month, self.offset_days)
+            )
         ):
-            raise ValueError("weekday resolution requires weekday_iso and occurrence")
+            raise ValueError("weekday resolution requires weekday_iso and weekday occurrence")
         return self
 
 
@@ -146,8 +190,8 @@ class DateResolveResponse(BaseModel):
     day: date
     weekday_iso: int
     is_past: bool
-    kind: Literal["absolute", "relative_days", "weekday"]
-    occurrence: Literal["nearest_future", "current_week", "next_week"] | None
+    kind: DateKind
+    occurrence: DateOccurrence | None
 
 
 class AvailabilityIntervalInput(BaseModel):
