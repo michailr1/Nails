@@ -36,6 +36,21 @@ def _availability_summary(value: Any) -> dict[str, Any]:
     return {key: value[key] for key in fields}
 
 
+def _availability_day_result(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("invalid availability day")
+    availability = value.get("availability")
+    if not isinstance(availability, list):
+        raise ValueError("invalid availability day")
+    return {
+        "day": value["day"],
+        "weekday_iso": value["weekday_iso"],
+        "availability_known": value["availability_known"],
+        "availability": [_availability_summary(item) for item in availability],
+        "changed": value["changed"],
+    }
+
+
 def _booking_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("invalid booking")
@@ -61,6 +76,20 @@ def _booking_summary(value: Any) -> dict[str, Any]:
 def _sanitize_success(action: str, result: Any) -> dict[str, Any]:
     if not isinstance(result, dict):
         raise ValueError("invalid result")
+    if action == "resolve_date":
+        fields = (
+            "timezone",
+            "today",
+            "today_weekday_iso",
+            "day",
+            "weekday_iso",
+            "is_past",
+            "kind",
+            "occurrence",
+        )
+        if not set(fields).issubset(result):
+            raise ValueError("invalid resolved date")
+        return {key: result[key] for key in fields}
     if action == "list_services":
         services = result.get("services")
         if not isinstance(services, list):
@@ -105,6 +134,11 @@ def _sanitize_success(action: str, result: Any) -> dict[str, Any]:
             "created": result["created"],
             "contact_added": result["contact_added"],
         }
+    if action == "update_availability":
+        days = result.get("days")
+        if not isinstance(days, list):
+            raise ValueError("invalid availability update")
+        return {"days": [_availability_day_result(item) for item in days]}
     if action == "create_booking":
         return {
             "booking": _booking_summary(result["booking"]),
