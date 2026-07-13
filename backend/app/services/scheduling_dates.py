@@ -1,13 +1,35 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from app.schemas.scheduling import DateResolveRequest, DateResolveResponse
-from app.services.scheduling_common import app_timezone
+from app.services.scheduling_common import SchedulingDomainError, app_timezone
 
 
-def _local_today():
+def _local_today() -> date:
     return datetime.now(app_timezone()).date()
+
+
+def _date_in_year(year: int, month: int, day_of_month: int) -> date:
+    try:
+        return date(year, month, day_of_month)
+    except ValueError as exc:
+        raise SchedulingDomainError(
+            "date_not_valid_in_year",
+            status_code=422,
+            details={"year": year, "month": month, "day_of_month": day_of_month},
+        ) from exc
+
+
+def _nearest_future_month_day(today: date, month: int, day_of_month: int) -> date:
+    for year in range(today.year, today.year + 9):
+        try:
+            candidate = date(year, month, day_of_month)
+        except ValueError:
+            continue
+        if candidate >= today:
+            return candidate
+    raise SchedulingDomainError("date_resolution_failed", status_code=422)
 
 
 def resolve_date(body: DateResolveRequest) -> DateResolveResponse:
@@ -16,6 +38,15 @@ def resolve_date(body: DateResolveRequest) -> DateResolveResponse:
 
     if body.kind == "absolute":
         resolved = body.day
+    elif body.kind == "month_day":
+        if body.month is None or body.day_of_month is None:
+            raise AssertionError("validated month and day are required")
+        if body.occurrence == "nearest_future":
+            resolved = _nearest_future_month_day(today, body.month, body.day_of_month)
+        elif body.occurrence == "current_year":
+            resolved = _date_in_year(today.year, body.month, body.day_of_month)
+        else:
+            resolved = _date_in_year(today.year + 1, body.month, body.day_of_month)
     elif body.kind == "relative_days":
         resolved = today + timedelta(days=body.offset_days or 0)
     else:
