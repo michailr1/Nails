@@ -6,6 +6,8 @@ on:
     paths:
       - "AGENTS.md"
       - "README.md"
+      - "docs/context/current.md"
+      - "docs/status.md"
       - "docs/operations/production-infrastructure.md"
       - "docs/operations/hermes-plugin-runtime.md"
       - "ops/deploy/README.md"
@@ -14,6 +16,8 @@ on:
     paths:
       - "AGENTS.md"
       - "README.md"
+      - "docs/context/current.md"
+      - "docs/status.md"
       - "docs/operations/production-infrastructure.md"
       - "docs/operations/hermes-plugin-runtime.md"
       - "ops/deploy/README.md"
@@ -34,14 +38,27 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          context_path = Path("docs/context/current.md")
+          status_path = Path("docs/status.md")
           infra_path = Path("docs/operations/production-infrastructure.md")
           plugin_path = Path("docs/operations/hermes-plugin-runtime.md")
           agents_path = Path("AGENTS.md")
           readme_path = Path("README.md")
           deploy_readme_path = Path("ops/deploy/README.md")
 
-          assert infra_path.is_file()
-          assert plugin_path.is_file()
+          for path in (
+              context_path,
+              status_path,
+              infra_path,
+              plugin_path,
+              agents_path,
+              readme_path,
+              deploy_readme_path,
+          ):
+              assert path.is_file(), f"missing required file: {path}"
+
+          context = context_path.read_text(encoding="utf-8")
+          status = status_path.read_text(encoding="utf-8")
           infra = infra_path.read_text(encoding="utf-8")
           plugin = plugin_path.read_text(encoding="utf-8")
           agents = agents_path.read_text(encoding="utf-8")
@@ -63,7 +80,11 @@ jobs:
               "Hermes is **not** running in Docker",
               "long polling",
               "must not search for or replace an assumed comma-separated allowlist string",
-              "PID `2119629` was only a diagnostic snapshot",
+              "PIDs are transient",
+              "while `MainPID=0`",
+              "385a92962e3736553335d717adcdf4b83ac8a8b3",
+              "Alembic: 0006",
+              "NAILS_002E4_V3_DEPLOYMENT_OK",
           )
           for item in required_infra:
               assert item in infra, f"missing production infrastructure fact: {item}"
@@ -81,9 +102,35 @@ jobs:
               "nails-onboarding\n    - nails-scheduling",
               "nails_onboarding\n    - nails_scheduling",
               "must not rely on that implicit behavior",
+              "discover_plugins(force=True)",
+              "set-like unordered collection",
+              "PLUGIN_REGISTRY_OK=true",
+              "TELEGRAM_VISIBILITY_OK=true",
           )
           for item in required_plugin:
               assert item in plugin, f"missing Hermes plugin runtime fact: {item}"
+
+          required_context = (
+              "production HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3",
+              "Alembic: 0006",
+              "NAILS_002E4_V3_DEPLOYMENT_OK",
+              "Issue #34",
+              "Что у меня 18 июля?",
+              "gateway_stop_state=failed",
+              "V1 или V2",
+          )
+          for item in required_context:
+              assert item in context, f"missing current context fact: {item}"
+
+          required_status = (
+              "HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3",
+              "Alembic: 0006",
+              "NAILS_002E4_V3_DEPLOYMENT_OK",
+              "Issue #34",
+              "Telegram happy-path acceptance",
+          )
+          for item in required_status:
+              assert item in status, f"missing current status fact: {item}"
 
           forbidden = (
               "TELEGRAM_BOT_TOKEN=",
@@ -93,25 +140,33 @@ jobs:
               "Authorization: Bearer",
           )
           for item in forbidden:
-              assert item not in infra
-              assert item not in plugin
+              for name, text in (
+                  ("context", context),
+                  ("status", status),
+                  ("infra", infra),
+                  ("plugin", plugin),
+              ):
+                  assert item not in text, f"secret-like value in {name}: {item}"
 
-          infra_link = "docs/operations/production-infrastructure.md"
-          plugin_link = "docs/operations/hermes-plugin-runtime.md"
-          assert infra_link in agents
-          assert plugin_link in agents
-          assert infra_link in readme
-          assert plugin_link in readme
-          assert "обязан прочитать все три документа" in agents
+          required_links = (
+              "docs/context/current.md",
+              "docs/operations/production-infrastructure.md",
+              "docs/operations/hermes-plugin-runtime.md",
+          )
+          for link in required_links:
+              assert link in agents, f"missing AGENTS link: {link}"
+              assert link in readme, f"missing README link: {link}"
+
+          assert "сначала прочитать `docs/context/current.md`" in agents
           assert "Нельзя заново угадывать" in agents
 
           assert "nails-002e4.sh` must **not** be executed again" in deploy_readme
-          assert "ops/deploy/nails-002e4-v2.sh" in deploy_readme
+          assert "nails-002e4-v2.sh` must **not** be executed again" in deploy_readme
+          assert "ops/deploy/nails-002e4-v3.sh" in deploy_readme
+          assert "NAILS_002E4_V3_DEPLOYMENT_OK" in deploy_readme
           assert "root user-level systemd" in deploy_readme
           assert "/root/.hermes/profiles/nails/config.yaml" in deploy_readme
-          assert "nails-scheduling` to `plugins.enabled" in deploy_readme
-          assert "nails_scheduling` to `platform_toolsets.telegram" in deploy_readme
           assert "<APPROVED_RUNBOOK>.sh" in deploy_readme
 
-          print("PRODUCTION_INFRASTRUCTURE_CONTRACT_OK")
+          print("PRODUCTION_INFRASTRUCTURE_AND_CONTEXT_CONTRACT_OK")
           PY
