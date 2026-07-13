@@ -28,7 +28,33 @@ def test_onboarding_skill_preserves_dialogue_order_and_presentation() -> None:
         "Думаю… (nails_onboarding)",
         "один раз перед всей группой последовательных вызовов",
         "не добавляй эмодзи, шестерёнку",
+        "не добавляй день недели",
+        "никогда не вычисляй и не угадывай день недели по памяти",
+        "успешный `complete` materializes",
+        "не говори «можете добавлять записи»",
+        "не говори «можете менять настройки»",
+        "не обещай поиск свободных окон",
+        "Создание новых записей, изменение рабочих данных и поиск свободных окон",
     )
 
     for phrase in required_phrases:
         assert phrase in text
+
+
+def test_onboarding_skill_no_longer_contains_obsolete_materialization_claims() -> None:
+    skill_path = (
+        Path(__file__).resolve().parents[3]
+        / "skills"
+        / "nails-onboarding"
+        / "SKILL.md"
+    )
+    text = skill_path.read_text(encoding="utf-8")
+
+    obsolete_phrases = (
+        "сам по себе не создаёт рабочие записи",
+        "materialization в рабочий календарь выполняется отдельным этапом",
+        "Рабочее создание записей и расчёт свободных окон будут materialized",
+    )
+
+    for phrase in obsolete_phrases:
+        assert phrase not in text
