@@ -1,11 +1,11 @@
 NAILS_ONBOARDING = {
     "name": "nails_onboarding",
     "description": (
-        "Read or update the current Telegram user's Nails onboarding state. "
-        "The user identity is supplied by trusted Hermes gateway context and must never be "
-        "requested from the user or included in tool arguments. Use save_schedule_day when the "
-        "user gives one day of their weekly schedule. Use confirm_section or complete only after "
-        "the user explicitly confirms the shown summary."
+        "Read or update the current Telegram user's Nails onboarding state and master communication "
+        "preferences. The user identity is supplied by trusted Hermes gateway context and must never "
+        "be requested from the user or included in tool arguments. On start, read master preferences "
+        "before asking schedule questions. Use save_schedule_day for one weekly schedule day. Use "
+        "confirm_section or complete only after explicit user confirmation."
     ),
     "parameters": {
         "type": "object",
@@ -16,6 +16,9 @@ NAILS_ONBOARDING = {
                 "enum": [
                     "start",
                     "get_state",
+                    "get_master_preferences",
+                    "save_master_name",
+                    "save_master_style",
                     "save_schedule_day",
                     "save_section",
                     "confirm_section",
@@ -36,11 +39,14 @@ NAILS_ONBOARDING = {
             "payload": {
                 "type": "object",
                 "description": (
-                    "Required for save_section and save_schedule_day. For save_schedule_day pass "
-                    "exactly one day: weekday is Monday=0 through Sunday=6, is_working is boolean, "
-                    "and working days also require start_time and end_time in HH:MM format. For a "
-                    "non-working day omit both times. For save_section pass the complete section "
-                    "draft. Never include credentials or technical identity data."
+                    "Required for save_master_name, save_master_style, save_section and "
+                    "save_schedule_day. For save_master_name pass preferred_name. For "
+                    "save_master_style pass style as business, friendly, casual, playful or custom; "
+                    "details may refine any style and are required for custom. For save_schedule_day "
+                    "pass exactly one day: weekday is Monday=0 through Sunday=6, is_working is "
+                    "boolean, and working days require start_time and end_time in HH:MM format. For "
+                    "save_section pass the complete section draft. Never include credentials or "
+                    "technical identity data."
                 ),
                 "additionalProperties": True,
             },
