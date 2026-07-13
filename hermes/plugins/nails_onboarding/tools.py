@@ -6,6 +6,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable
+from datetime import time as wall_time
 from typing import Any
 
 import httpx
@@ -22,6 +23,7 @@ _ALLOWED_ACTIONS = {
     "get_master_preferences",
     "save_master_name",
     "save_master_style",
+    "save_default_work_hours",
     "save_section",
     "confirm_section",
     "pause",
@@ -31,6 +33,7 @@ _ALLOWED_ACTIONS = {
 _PAYLOAD_ACTIONS = {
     "save_master_name",
     "save_master_style",
+    "save_default_work_hours",
     "save_section",
 }
 _RETRYABLE_STATUS_CODES = {502, 503, 504}
@@ -113,6 +116,52 @@ def _normalize_master_style(value: Any) -> dict[str, Any]:
     return result
 
 
+def _normalize_clock(value: Any, field_name: str) -> wall_time:
+    if not isinstance(value, str):
+        raise ToolInputError(f"{field_name} must be a time string")
+    try:
+        parsed = wall_time.fromisoformat(value)
+    except ValueError as exc:
+        raise ToolInputError(f"{field_name} must use HH:MM format") from exc
+    if parsed.second or parsed.microsecond or parsed.tzinfo is not None:
+        raise ToolInputError(f"{field_name} must use local minute precision")
+    return parsed
+
+
+def _normalize_default_work_hours(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {"intervals"}:
+        raise ToolInputError("default work hours intervals are required")
+
+    intervals_value = value.get("intervals")
+    if not isinstance(intervals_value, list) or len(intervals_value) > 4:
+        raise ToolInputError("default work hours intervals are invalid")
+
+    intervals: list[tuple[wall_time, wall_time]] = []
+    for item in intervals_value:
+        if not isinstance(item, dict) or set(item) != {"start_time", "end_time"}:
+            raise ToolInputError("default work interval is invalid")
+        start_time = _normalize_clock(item.get("start_time"), "start_time")
+        end_time = _normalize_clock(item.get("end_time"), "end_time")
+        if end_time <= start_time:
+            raise ToolInputError("end_time must be later than start_time")
+        intervals.append((start_time, end_time))
+
+    intervals.sort(key=lambda item: item[0])
+    for previous, current in zip(intervals, intervals[1:], strict=False):
+        if current[0] < previous[1]:
+            raise ToolInputError("default work intervals must not overlap")
+
+    return {
+        "intervals": [
+            {
+                "start_time": start.isoformat(timespec="minutes"),
+                "end_time": end.isoformat(timespec="minutes"),
+            }
+            for start, end in intervals
+        ]
+    }
+
+
 def _validate_args(
     args: dict[str, Any],
 ) -> tuple[str, str | None, dict[str, Any] | None]:
@@ -145,6 +194,8 @@ def _validate_args(
         payload = _normalize_master_name(payload)
     elif action == "save_master_style":
         payload = _normalize_master_style(payload)
+    elif action == "save_default_work_hours":
+        payload = _normalize_default_work_hours(payload)
 
     return action, section, payload
 
@@ -164,6 +215,8 @@ def _request_spec(
         return "PUT", "/api/v1/onboarding/preferences/name", payload
     if action == "save_master_style":
         return "PUT", "/api/v1/onboarding/preferences/style", payload
+    if action == "save_default_work_hours":
+        return "PUT", "/api/v1/onboarding/preferences/default-work-hours", payload
     if action == "save_section":
         return "PUT", f"/api/v1/onboarding/sections/{section}", {"payload": payload}
     if action == "confirm_section":
