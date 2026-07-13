@@ -7,12 +7,14 @@ on:
       - "AGENTS.md"
       - "README.md"
       - "docs/operations/production-infrastructure.md"
+      - "ops/deploy/README.md"
       - ".github/workflows/production-infrastructure-contract.yml"
   pull_request:
     paths:
       - "AGENTS.md"
       - "README.md"
       - "docs/operations/production-infrastructure.md"
+      - "ops/deploy/README.md"
       - ".github/workflows/production-infrastructure-contract.yml"
 
 permissions:
@@ -33,11 +35,13 @@ jobs:
           infra_path = Path("docs/operations/production-infrastructure.md")
           agents_path = Path("AGENTS.md")
           readme_path = Path("README.md")
+          deploy_readme_path = Path("ops/deploy/README.md")
 
           assert infra_path.is_file()
           infra = infra_path.read_text(encoding="utf-8")
           agents = agents_path.read_text(encoding="utf-8")
           readme = readme_path.read_text(encoding="utf-8")
+          deploy_readme = deploy_readme_path.read_text(encoding="utf-8")
 
           required = (
               "de.funti.cc",
@@ -74,6 +78,12 @@ jobs:
           assert link in readme
           assert "обязан прочитать оба документа" in agents
           assert "Нельзя заново угадывать" in agents
+
+          assert "nails-002e4.sh` must **not** be executed again" in deploy_readme
+          assert "root user-level systemd" in deploy_readme
+          assert "/root/.hermes/profiles/nails/config.yaml" in deploy_readme
+          assert "new reviewed runbook with a new filename" in deploy_readme
+          assert "<APPROVED_RUNBOOK>.sh" in deploy_readme
 
           print("PRODUCTION_INFRASTRUCTURE_CONTRACT_OK")
           PY
