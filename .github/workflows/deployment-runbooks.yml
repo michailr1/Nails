@@ -1,0 +1,113 @@
+name: Deployment runbooks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/deploy/**"
+      - ".github/workflows/deployment-runbooks.yml"
+  pull_request:
+    paths:
+      - "ops/deploy/**"
+      - ".github/workflows/deployment-runbooks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Bash syntax
+        run: bash -n ops/deploy/nails-002e4.sh
+
+      - name: Validate embedded Python and deployment boundary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("ops/deploy/nails-002e4.sh")
+          text = path.read_text(encoding="utf-8")
+          lines = text.splitlines()
+
+          assert text.startswith("#!/usr/bin/env bash\n")
+          assert "\r" not in text
+          assert 'EXPECTED_BEFORE="5565a524b75a04fe5d8bc2c3e758d2994e9d9c12"' in text
+          assert 'EXPECTED_FEATURE_ANCESTOR="77b6ca69286d7f2c203a85c04f4224f783038fdf"' in text
+          assert 'RELEASE_SHA="${NAILS_RELEASE_SHA:-}"' in text
+          assert 'git merge --ff-only "$RELEASE_SHA"' in text
+          assert 'git -C "$REPO" reset --hard "$HEAD_BEFORE"' in text
+          assert 'systemctl stop "$GATEWAY"' in text
+          assert 'systemctl start "$GATEWAY"' in text
+          assert 'PLUGIN_TARGET="${PROFILE}/plugins/nails_scheduling"' in text
+          assert 'SKILL_TARGET="${PROFILE}/skills/nails-scheduling/SKILL.md"' in text
+          assert 'NEW_ALLOWLIST="clarify,image_gen,nails_onboarding,nails_scheduling,skills,tts,vision"' in text
+          assert "migration_executed=false" in text
+          assert "database_write_executed=false" in text
+          assert "backend_restart_executed=false" in text
+
+          forbidden = (
+              "git push",
+              "git commit",
+              "git checkout -b",
+              "git switch -c",
+              "gh pr",
+              "gh issue",
+              "docker compose up",
+              "docker compose restart",
+              "docker restart",
+              "alembic upgrade",
+              "psql ",
+              "systemctl restart",
+          )
+          for snippet in forbidden:
+              assert snippet not in text, f"forbidden deployment operation: {snippet}"
+
+          expected_release_files = {
+              "__init__.py",
+              "operations.py",
+              "plugin.yaml",
+              "presenters.py",
+              "schemas.py",
+              "tools.py",
+              "transport.py",
+              "validation.py",
+          }
+          start = lines.index("RELEASE_FILES=(") + 1
+          end = lines.index(")", start)
+          actual_release_files = {
+              line.strip().strip('"')
+              for line in lines[start:end]
+              if line.strip()
+          }
+          assert actual_release_files == expected_release_files
+
+          snippets = []
+          index = 0
+          while index < len(lines):
+              if "python3 - <<'PY'" not in lines[index]:
+                  index += 1
+                  continue
+              index += 1
+              snippet = []
+              while index < len(lines) and lines[index] != "PY":
+                  snippet.append(lines[index])
+                  index += 1
+              assert index < len(lines), "unterminated embedded Python heredoc"
+              snippets.append("\n".join(snippet) + "\n")
+              index += 1
+
+          assert len(snippets) == 6
+          for number, snippet in enumerate(snippets, start=1):
+              compile(snippet, f"embedded-python-{number}", "exec")
+
+          readme = Path("ops/deploy/README.md").read_text(encoding="utf-8")
+          assert "VPS agent never writes or edits" in readme
+          assert 'git show "${NAILS_RELEASE_SHA}:ops/deploy/nails-002e4.sh" | bash' in readme
+          assert "<EXACT_APPROVED_RELEASE_SHA>" in readme
+
+          print("DEPLOYMENT_RUNBOOK_CONTRACT_OK")
+          PY
