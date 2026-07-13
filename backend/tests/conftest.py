@@ -40,6 +40,7 @@ def clean_database():
         "audit_events",
         "onboarding_drafts",
         "onboarding_states",
+        "master_preferences",
         "bookings",
         "schedule_exceptions",
         "schedule_rules",
