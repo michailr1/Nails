@@ -1,0 +1,64 @@
+name: Agent responsibility contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-agent-contract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate mandatory responsibility boundary
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          root_contract = Path("AGENTS.md")
+          detailed_contract = Path("docs/operations/agent-responsibilities.md")
+          readme = Path("README.md")
+
+          assert root_contract.is_file(), "AGENTS.md is mandatory"
+          assert detailed_contract.is_file(), "detailed agent contract is mandatory"
+
+          root_text = root_contract.read_text(encoding="utf-8")
+          detailed_text = detailed_contract.read_text(encoding="utf-8")
+          readme_text = readme.read_text(encoding="utf-8")
+
+          required_root_phrases = (
+              "Основной агент ChatGPT — единственный исполнитель",
+              "VPS-агент — **только исполнитель заранее подготовленного runbook**",
+              "писать, редактировать, исправлять или рефакторить код",
+              "выполнять push, merge или любые изменения в GitHub",
+              "не исправлять проблему самостоятельно",
+              "Issue закрывает основной агент",
+          )
+          for phrase in required_root_phrases:
+              assert phrase in root_text, f"missing root contract phrase: {phrase}"
+
+          required_detailed_phrases = (
+              "Основной агент ChatGPT создаёт изменения",
+              "VPS-агент только исполняет уже утверждённые команды",
+              "git merge --ff-only",
+              "Каждый новый deployment или diagnostic prompt",
+              "Не исправляй проблему самостоятельно",
+              "VPS-агент не вставляется в этапы разработки и не закрывает задачи",
+          )
+          for phrase in required_detailed_phrases:
+              assert phrase in detailed_text, f"missing detailed contract phrase: {phrase}"
+
+          required_readme_links = (
+              "[Обязательный контракт агентов](AGENTS.md)",
+              "[Разделение ответственности основного и VPS-агента](docs/operations/agent-responsibilities.md)",
+          )
+          for link in required_readme_links:
+              assert link in readme_text, f"missing README contract link: {link}"
+
+          print("AGENT_RESPONSIBILITY_CONTRACT_OK")
+          PY
