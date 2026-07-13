@@ -12,20 +12,6 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: nails_test
-          POSTGRES_USER: nails_app
-          POSTGRES_PASSWORD: nails_test
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U nails_app -d nails_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
     env:
       APP_TIMEZONE: Europe/Berlin
       INTERNAL_API_KEY: test-only-internal-api-key-0000000000000000
@@ -34,6 +20,16 @@ jobs:
     steps:
       - name: Run first failing backend test with compact output
         run: |
+          docker run --detach --rm --name nails-test-db \
+            -e POSTGRES_DB=nails_test \
+            -e POSTGRES_USER=nails_app \
+            -e POSTGRES_PASSWORD=nails_test \
+            -p 55432:5432 postgres:17-alpine >/dev/null
+          for attempt in $(seq 1 30); do
+            docker exec nails-test-db pg_isready -U nails_app -d nails_test >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker exec nails-test-db pg_isready -U nails_app -d nails_test >/dev/null
           curl --fail --silent --show-error --location \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -42,4 +38,7 @@ jobs:
           cd backend
           python -m pip install --quiet -e '.[dev]'
           alembic upgrade head >/dev/null
-          pytest -q -x --tb=short
+          pytest -q -x --tb=short >/tmp/backend-pytest.log 2>&1 || {
+            tail -n 80 /tmp/backend-pytest.log
+            exit 1
+          }
