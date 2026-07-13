@@ -1,6 +1,6 @@
 # Nails onboarding Hermes plugin
 
-Profile-local Hermes plugin for NAILS-002C and NAILS-002D.
+Profile-local Hermes plugin for NAILS-002C, NAILS-002D and NAILS-002E.
 
 **Proprietary module of the Nails project.** Not for use, copying or distribution outside this project. Plain-language documentation of every function: [docs/modules/nails-onboarding-plugin.md](../../../docs/modules/nails-onboarding-plugin.md).
 
@@ -51,7 +51,6 @@ get_state
 get_master_preferences
 save_master_name
 save_master_style
-save_schedule_day
 save_section
 confirm_section
 pause
@@ -59,11 +58,31 @@ resume
 complete
 ```
 
+Supported onboarding sections are:
+
+```text
+services
+buffers
+availability
+bookings
+```
+
+`availability` contains concrete calendar dates. It supports multiple non-overlapping time intervals in one day and an explicit unavailable day. Absence of a date means unknown availability, never a free day.
+
+There is no repeating weekly schedule action or section. `save_schedule_day` and the weekly `schedule` section were removed from the active contract.
+
 `get_master_preferences`, `save_master_name` and `save_master_style` support a short acquaintance before the business questionnaire. The saved style controls only assistant-to-master conversation and is not inherited by client messages.
 
-`save_schedule_day` accepts one naturally collected weekday, loads the current schedule draft, merges or replaces that weekday and saves the combined draft. The model does not have to construct the whole weekly payload and cannot accidentally erase earlier days by saving the next answer.
-
 No generic HTTP client is exposed as a Hermes tool.
+
+## Interview behavior
+
+The Hermes skill asks one question at a time and explains why the answer matters:
+
+- service duration is needed to calculate booking end time and future free slots;
+- buffers prevent appointments from being placed too close together;
+- availability on specific dates prevents an empty calendar from being treated as a fully free day;
+- existing appointments prevent occupied time from being offered again.
 
 ## Privacy
 
@@ -84,7 +103,7 @@ The onboarding backend operations are state-idempotent for repeated delivery.
 
 - backend `401` and `403` both become `access_denied`;
 - no distinction is exposed between unknown and inactive users;
-- invalid preference and single-day schedule arguments are rejected before any network request;
+- invalid action/section combinations are rejected before any network request;
 - backend validation/domain errors return only safe code/details;
 - response bodies from unexpected backend errors are not exposed;
 - secrets and trusted identity are not included in tool results.
