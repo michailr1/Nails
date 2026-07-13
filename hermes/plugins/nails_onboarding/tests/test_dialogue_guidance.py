@@ -1,4 +1,4 @@
-"""Regression checks for onboarding confirmation and availability prompts."""
+"""Regression checks for onboarding confirmation and completion guidance."""
 
 import ast
 from pathlib import Path
@@ -37,6 +37,12 @@ def test_registered_schema_uses_authoritative_server_state() -> None:
         "concrete nearby calendar dates",
         "Never ask for weekdays alone",
         "repeating weekly schedule",
+        "preserve the exact ISO calendar date",
+        "Do not add or infer a weekday label",
+        "unverified weekday must be omitted",
+        "successful complete operation materializes",
+        "do not promise creating or changing bookings",
+        "calculating free slots",
     )
 
     for phrase in required_phrases:
