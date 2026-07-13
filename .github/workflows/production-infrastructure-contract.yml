@@ -1,0 +1,89 @@
+name: Production infrastructure contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "AGENTS.md"
+      - "README.md"
+      - "docs/operations/production-infrastructure.md"
+      - "ops/deploy/README.md"
+      - ".github/workflows/production-infrastructure-contract.yml"
+  pull_request:
+    paths:
+      - "AGENTS.md"
+      - "README.md"
+      - "docs/operations/production-infrastructure.md"
+      - "ops/deploy/README.md"
+      - ".github/workflows/production-infrastructure-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate production infrastructure source of truth
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          infra_path = Path("docs/operations/production-infrastructure.md")
+          agents_path = Path("AGENTS.md")
+          readme_path = Path("README.md")
+          deploy_readme_path = Path("ops/deploy/README.md")
+
+          assert infra_path.is_file()
+          infra = infra_path.read_text(encoding="utf-8")
+          agents = agents_path.read_text(encoding="utf-8")
+          readme = readme_path.read_text(encoding="utf-8")
+          deploy_readme = deploy_readme_path.read_text(encoding="utf-8")
+
+          required = (
+              "de.funti.cc",
+              "/opt/nails/repo",
+              "/opt/nails/.env",
+              "http://127.0.0.1:8210",
+              "/root/.hermes/profiles/nails",
+              "/root/.hermes/profiles/nails/config.yaml",
+              "/root/.config/systemd/user/hermes-gateway-nails.service",
+              "/usr/local/lib/hermes-agent/venv/bin/python",
+              "-m hermes_cli.main --profile nails gateway run",
+              "XDG_RUNTIME_DIR=/run/user/0 systemctl --user",
+              "root user-level systemd",
+              "Hermes is **not** running in Docker",
+              "long polling",
+              "must not search for or replace an assumed comma-separated allowlist string",
+              "PID `2119629` was only a diagnostic snapshot",
+          )
+          for item in required:
+              assert item in infra, f"missing production infrastructure fact: {item}"
+
+          forbidden = (
+              "TELEGRAM_BOT_TOKEN=",
+              "INTERNAL_API_KEY=",
+              "NAILS_INTERNAL_API_KEY=",
+              "DATABASE_URL=postgres",
+              "Authorization: Bearer",
+          )
+          for item in forbidden:
+              assert item not in infra, f"secret-like value must not be documented: {item}"
+
+          link = "docs/operations/production-infrastructure.md"
+          assert link in agents
+          assert link in readme
+          assert "обязан прочитать оба документа" in agents
+          assert "Нельзя заново угадывать" in agents
+
+          assert "nails-002e4.sh` must **not** be executed again" in deploy_readme
+          assert "root user-level systemd" in deploy_readme
+          assert "/root/.hermes/profiles/nails/config.yaml" in deploy_readme
+          assert "new reviewed runbook with a new filename" in deploy_readme
+          assert "<APPROVED_RUNBOOK>.sh" in deploy_readme
+
+          print("PRODUCTION_INFRASTRUCTURE_CONTRACT_OK")
+          PY
