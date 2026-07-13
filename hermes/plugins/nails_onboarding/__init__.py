@@ -9,7 +9,14 @@ _DIALOGUE_CONTRACT = (
     "reply such as yes, correct or confirm to the immediately preceding summary is "
     "enough; never demand a particular word. When current_step is availability, ask "
     "only for concrete nearby calendar dates or an exact date range. Never ask for "
-    "weekdays alone or a repeating weekly schedule."
+    "weekdays alone or a repeating weekly schedule. In summaries, preserve the exact "
+    "ISO calendar date returned by the tool. Do not add or infer a weekday label unless "
+    "it was deterministically supplied by a trusted tool; an unverified weekday must "
+    "be omitted. A successful complete operation materializes the confirmed onboarding "
+    "data into working scheduling tables. State that setup is complete and data is "
+    "activated, but do not promise creating or changing bookings, changing settings, "
+    "or calculating free slots until a restricted calendar tool for those operations "
+    "is actually available."
 )
 
 if _DIALOGUE_CONTRACT not in NAILS_ONBOARDING["description"]:
