@@ -22,9 +22,7 @@ production branch: main
 - один живой Telegram-тест выполняется за раз;
 - Issue #34 закрывается только после deployment и ручной приёмки.
 
-## 2. Доказанное production-состояние
-
-Последний полученный production-отчёт:
+## 2. Последнее доказанное production-состояние
 
 ```text
 production HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3
@@ -35,13 +33,7 @@ backend ready: ok
 gateway: active
 nails-onboarding: 0.5.0
 nails-scheduling: 0.1.0
-```
-
-Последний доказанный успешный deployment:
-
-```text
-runbook: ops/deploy/nails-002e4-v3.sh
-success marker: NAILS_002E4_V3_DEPLOYMENT_OK
+last success: NAILS_002E4_V3_DEPLOYMENT_OK
 ```
 
 Проверенные особенности Hermes:
@@ -49,80 +41,24 @@ success marker: NAILS_002E4_V3_DEPLOYMENT_OK
 - gateway управляется root user-level systemd;
 - `_get_platform_tools()` возвращает set-like unordered collection;
 - toolsets сравниваются по множеству, а не по iteration order;
-- read-only verification использует `discover_plugins()`, а `discover_plugins(force=True)` запрещён;
+- verification использует `discover_plugins()`, а `discover_plugins(force=True)` запрещён;
 - V2 rollback доказан маркером `ROLLBACK_PERFORMED=true`;
 - V1 или V2 никогда не запускать повторно.
 
-GitHub `main` содержит PR #44 и PR #45, но пользователь ещё не прислал результат E5. Поэтому нельзя утверждать, что production уже находится на `a0ef8c5c26301a9f6950544afd0e070b7e691582` или plugin `0.2.0`.
+Пользователь не прислал результат E5. Поэтому нельзя утверждать, что production уже находится на `a0ef8c5c26301a9f6950544afd0e070b7e691582` или scheduling `0.2.0`.
 
-## 3. E5 — date resolver и изменение графика
+## 3. Реализованные исправления
 
-Код PR #44 merged:
-
-```text
-merge SHA: c9e400c80398bd4367aad0ed0416ee0fc6a79b2d
-```
-
-Добавлено:
+PR #44 merged как `c9e400c80398bd4367aad0ed0416ee0fc6a79b2d`:
 
 ```text
-POST /api/v1/scheduling/date/resolve
-action=resolve_date
-PUT /api/v1/scheduling/availability
-action=update_availability
+resolve_date
+update_availability
 ```
 
-Модель не вычисляет дату, год или weekday самостоятельно. График меняется по названным датам без повторного onboarding.
+Модель не вычисляет дату, год или weekday самостоятельно. График меняется по конкретным датам без повторного onboarding.
 
-Deployment runbook PR #45 merged:
-
-```text
-branch: ops/nails-002e5-date-availability
-release SHA: a0ef8c5c26301a9f6950544afd0e070b7e691582
-runbook: ops/deploy/nails-002e5-date-availability.sh
-success marker: NAILS_002E5_DEPLOYMENT_OK
-calendar_data_changed_by_deployment=false
-manual_sql_executed=false
-```
-
-E5 запрещено считать выполненным, пока не получен полный VPS-вывод с маркером `NAILS_002E5_DEPLOYMENT_OK` или блоком rollback.
-
-## 4. Найденные UX-дефекты
-
-### 4.1 Неверное разрешение даты
-
-Агент сохранил пятницу как 18 июля 2026 года. Правильно:
-
-```text
-14 июля 2026 — вторник
-15 июля 2026 — среда
-17 июля 2026 — пятница
-18 июля 2026 — суббота
-```
-
-### 4.2 График нельзя было менять после onboarding
-
-Scheduling plugin `0.1.0` не имел availability write-action и предлагал пройти completed onboarding заново. Это исправлено PR #44, но production deployment ещё не подтверждён.
-
-### 4.3 Услуги нельзя было менять после onboarding
-
-Агент сообщил, что изменение цены, длительности, buffers или названия требует перезапуска настройки. Это третий дефект той же архитектурной природы.
-
-Правильный продуктовый принцип:
-
-> Onboarding — только удобный мастер первичного заполнения. После `complete` рабочие услуги, график, клиентки и записи управляются доменными restricted operations. Повторный onboarding не является способом обычного редактирования.
-
-## 5. Активный PR #46 — service management
-
-```text
-PR: #46
-branch: feat/service-management
-candidate scheduling plugin: 0.3.0
-production deployed: false
-Alembic change: none
-```
-
-Новые actions:
+PR #46 добавляет scheduling `0.3.0`:
 
 ```text
 find_service
@@ -130,96 +66,96 @@ create_service
 update_service
 ```
 
-Поддерживается:
+Поддерживаются создание, переименование, описание, цена, валюта, длительность, buffers, архив и восстановление услуги.
 
-- список активных услуг;
-- список активных и архивных услуг;
-- exact lookup, включая архив;
-- создание новой услуги после onboarding;
-- изменение публичного названия и описания;
-- изменение цены и валюты;
-- изменение длительности;
-- изменение buffer до и после;
-- безопасная архивация;
-- восстановление архивной услуги.
+Общий продуктовый принцип:
 
-Правила безопасности и истории:
+> Onboarding — только мастер первичного заполнения. После `complete` услуги, график, клиентки и записи управляются restricted domain operations. Повторный onboarding не используется для обычного редактирования.
 
-- Telegram identity только из trusted context;
+## 4. Безопасность service management
+
+- trusted Telegram owner identity;
 - fixed loopback endpoints;
-- перед write показывается «сейчас → будет»;
-- write требует `confirmed=true`;
-- одинаковое повторное создание возвращает `created=false`;
-- одинаковое повторное изменение возвращает `changed=false`;
-- конфликт имени возвращает `service_name_conflict`;
-- физического удаления услуги нет;
-- «удали услугу» означает `is_active=false`;
-- архивная услуга недоступна для новых записей;
-- существующие записи не отменяются и не пересчитываются;
-- существующие записи сохраняют snapshots цены, валюты, длительности и buffers;
-- новые значения используются только для будущих записей;
-- переименование меняет актуальное связанное название услуги;
-- audit не содержит персонального текста.
+- exact lookup перед изменением;
+- сводка «сейчас → будет»;
+- write только при `confirmed=true`;
+- repeat-safe create/update;
+- `service_name_conflict` при занятом имени;
+- физического удаления нет: «удали услугу» означает `is_active=false`;
+- архив запрещает новые записи, но сохраняет историю;
+- существующие bookings сохраняют snapshots цены, валюты, длительности и buffers;
+- новые значения применяются только к будущим bookings;
+- Alembic остаётся `0006`.
 
-## 6. Текущее состояние PR #46
-
-Реализованы backend endpoints, scheduling plugin `0.3.0`, оба skills и regression tests.
-
-Lint исправлен. Scheduling plugin tests проходят на Python 3.11/3.12; временные diagnostic/autofix workflows удалены из ветки. Финальный обычный CI после документационных правок ещё должен стать полностью зелёным.
-
-PR #46 нельзя merge до двух условий:
-
-1. полный green CI и отсутствие review threads;
-2. получен фактический результат E5 production deployment.
-
-Причина второго условия: E5 runbook проверяет, что `origin/main` равен exact release SHA `a0ef8c5…`. Если раньше времени продвинуть `main`, утверждённый E5 runbook перестанет проходить preflight.
-
-## 7. Старый acceptance отменён
-
-Запрос:
+## 5. Проверки PR #46
 
 ```text
-Что у меня 18 июля?
+head: 81740eb4fedd94a8ccef602837c581bce3105f82
+Agent responsibility contract #52: success
+Production infrastructure contract #26: success
+CI #142: success
+backend: success
+onboarding plugin Python 3.11/3.12: success
+scheduling plugin Python 3.11/3.12: success
+compose-smoke: success
+review threads: none
 ```
 
-и ожидание рабочего интервала на 18 июля основаны на ошибочных данных. Старую последовательность не продолжать.
+Temporary diagnostic workflows удалены. PR #46 готов к merge.
 
-Правильное желаемое состояние после подтверждённого Telegram-flow:
+## 6. Единая deployment-стратегия
+
+Ранее merged E5:
 
 ```text
-2026-07-14 11:00–20:00 — сохранить
-2026-07-15 11:00–20:00 — сохранить
-2026-07-17 11:00–15:00 — добавить
-2026-07-18 — state=unknown
+ops/nails-002e5-date-availability
+ops/deploy/nails-002e5-date-availability.sh
+NAILS_002E5_DEPLOYMENT_OK
+calendar_data_changed_by_deployment=false
+manual_sql_executed=false
 ```
 
-## 8. Следующая production-приёмка после E5
+Отдельный E5 больше не выдаётся VPS-агенту. После merge PR #46 создаётся новый объединённый runbook, который проверит и примет только один из двух исходных состояний:
 
-Строго по одному сообщению:
+```text
+385a92962e3736553335d717adcdf4b83ac8a8b3 + scheduling 0.1.0
+a0ef8c5c26301a9f6950544afd0e070b7e691582 + scheduling 0.2.0
+```
+
+В обоих случаях итогом будет backend с точными датами, редактированием графика и service management, scheduling `0.3.0`, Alembic `0006`, неизменные `nails-db` и Docker daemon.
+
+Runbook обязан создать database/runtime backups, обновить только `nails-api`, plugin и skills, проверить OpenAPI/actions и выполнить rollback к фактически обнаруженному исходному состоянию при ошибке. Deployment не меняет календарь и услуги.
+
+## 7. Acceptance после объединённого deployment
+
+По одному сообщению:
 
 1. `Какая дата у ближайшей пятницы?` → 17 июля 2026, пятница.
-2. `Исправь график: 17 июля работаю с 11:00 до 15:00, а ошибочную дату 18 июля убери.`
-3. Проверить «сейчас → будет» и отсутствие write до подтверждения.
-4. Подтвердить и проверить 17/18 июля, а также неизменность 14/15 июля.
+2. Исправить график: 17 июля 11:00–15:00, ошибочную дату 18 июля убрать как `unknown`.
+3. Проверить, что 14 и 15 июля не изменились.
+4. Изменить цену одной услуги: exact lookup, «сейчас → будет», подтверждение.
+5. Проверить новую цену для будущих записей и старый snapshot существующей записи.
+6. Проверить архив и восстановление услуги без удаления истории.
 
-Управление услугами тестировать только после отдельного deployment service-management release.
+Старый тест `Что у меня 18 июля?` с ожиданием рабочего интервала отменён.
 
-## 9. Запрещённые действия
+## 8. Запрещённые действия
 
-- не считать E5 успешным без VPS-отчёта;
-- не merge PR #46 до результата E5;
+- не запускать отдельный E5;
+- не считать production обновлённым без нового runbook output;
 - не исправлять календарь или услуги SQL-командами;
 - не проходить onboarding заново ради графика или услуг;
 - не запускать V1 или V2;
-- не давать VPS-агенту самостоятельные команды вне merged runbook.
+- не давать VPS-агенту самостоятельные команды.
 
-## 10. Точка продолжения
+## 9. Точка продолжения
 
 ```text
-дождаться полного CI PR #46
-исправить оставшиеся tests при необходимости
-проверить review threads
-получить от пользователя E5 VPS output
-проверить deployment/rollback
-только затем merge PR #46 и готовить отдельный service-management runbook
+merge PR #46
+зафиксировать merge SHA
+подготовить combined deployment runbook
+провести review/CI
+merge runbook
+выдать VPS-агенту одну exact-SHA команду
+после deployment выполнить acceptance по одному сообщению
 ```
