@@ -16,15 +16,25 @@ logger = logging.getLogger(__name__)
 _API_BASE_URL = "http://127.0.0.1:8210"
 _API_KEY_ENV = "NAILS_INTERNAL_API_KEY"
 _ALLOWED_SECTIONS = {"schedule", "services", "buffers", "bookings"}
+_ALLOWED_STYLES = {"business", "friendly", "casual", "playful", "custom"}
 _ALLOWED_ACTIONS = {
     "start",
     "get_state",
+    "get_master_preferences",
+    "save_master_name",
+    "save_master_style",
     "save_schedule_day",
     "save_section",
     "confirm_section",
     "pause",
     "resume",
     "complete",
+}
+_PAYLOAD_ACTIONS = {
+    "save_master_name",
+    "save_master_style",
+    "save_schedule_day",
+    "save_section",
 }
 _RETRYABLE_STATUS_CODES = {502, 503, 504}
 _TIMEOUT = httpx.Timeout(5.0, connect=1.0)
@@ -64,6 +74,46 @@ def _api_key() -> str:
     if len(value) < 32:
         raise RuntimeError("Nails onboarding plugin is not configured")
     return value
+
+
+def _normalize_text(value: Any, field_name: str, max_length: int) -> str:
+    if not isinstance(value, str):
+        raise ToolInputError(f"{field_name} must be a string")
+    candidate = " ".join(value.split())
+    if not candidate or len(candidate) > max_length:
+        raise ToolInputError(f"{field_name} is invalid")
+    return candidate
+
+
+def _normalize_master_name(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {"preferred_name"}:
+        raise ToolInputError("preferred_name payload is required")
+    return {
+        "preferred_name": _normalize_text(value.get("preferred_name"), "preferred_name", 160)
+    }
+
+
+def _normalize_master_style(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ToolInputError("style payload is required")
+    if set(value) - {"style", "details"}:
+        raise ToolInputError("unsupported style fields")
+
+    style = value.get("style")
+    if style not in _ALLOWED_STYLES:
+        raise ToolInputError("unsupported assistant style")
+
+    details_value = value.get("details")
+    details = None
+    if details_value is not None:
+        details = _normalize_text(details_value, "details", 500)
+    if style == "custom" and details is None:
+        raise ToolInputError("custom style requires details")
+
+    result: dict[str, Any] = {"style": style}
+    if details is not None:
+        result["details"] = details
+    return result
 
 
 def _normalize_clock(value: Any, field_name: str) -> wall_time:
@@ -138,14 +188,19 @@ def _validate_args(
     if action not in {"save_section", "confirm_section"} and section is not None:
         raise ToolInputError("section is not allowed for this action")
 
-    if action in {"save_section", "save_schedule_day"} and not isinstance(payload, dict):
+    if action in _PAYLOAD_ACTIONS and not isinstance(payload, dict):
         raise ToolInputError("payload object is required for this action")
-    if action not in {"save_section", "save_schedule_day"} and payload is not None:
+    if action not in _PAYLOAD_ACTIONS and payload is not None:
         raise ToolInputError("payload is not allowed for this action")
 
     normalized_schedule_day = None
-    if action == "save_schedule_day":
+    if action == "save_master_name":
+        payload = _normalize_master_name(payload)
+    elif action == "save_master_style":
+        payload = _normalize_master_style(payload)
+    elif action == "save_schedule_day":
         normalized_schedule_day = _normalize_schedule_day(payload)
+        payload = normalized_schedule_day
 
     return action, section, payload, normalized_schedule_day
 
@@ -159,6 +214,12 @@ def _request_spec(
         return "POST", "/api/v1/onboarding/start", None
     if action == "get_state":
         return "GET", "/api/v1/onboarding", None
+    if action == "get_master_preferences":
+        return "GET", "/api/v1/onboarding/preferences", None
+    if action == "save_master_name":
+        return "PUT", "/api/v1/onboarding/preferences/name", payload
+    if action == "save_master_style":
+        return "PUT", "/api/v1/onboarding/preferences/style", payload
     if action == "save_section":
         return "PUT", f"/api/v1/onboarding/sections/{section}", {"payload": payload}
     if action == "confirm_section":
