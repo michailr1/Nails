@@ -22,6 +22,16 @@ jobs:
           cd backend
           ruff check --fix app/services/scheduling_services.py tests/test_scheduling_services.py
           cd ..
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("hermes/plugins/nails_scheduling/validation.py")
+          text = path.read_text(encoding="utf-8")
+          old = "not isinstance(value, (int, float, str))"
+          new = "not isinstance(value, int | float | str)"
+          assert old in text or new in text
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
           ruff check --fix --config backend/pyproject.toml \
             hermes/plugins/nails_scheduling/validation.py
       - name: Commit safe fixes
@@ -34,5 +44,5 @@ jobs:
           git add backend/app/services/scheduling_services.py \
             backend/tests/test_scheduling_services.py \
             hermes/plugins/nails_scheduling/validation.py
-          git commit -m "fix: apply Ruff service management fixes"
+          git commit -m "fix: apply remaining Ruff service management fixes"
           git push origin HEAD:feat/service-management
