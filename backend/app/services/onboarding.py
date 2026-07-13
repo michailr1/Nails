@@ -17,24 +17,24 @@ from app.models import (
     OnboardingStatus,
 )
 from app.schemas.onboarding import (
+    AvailabilityPayload,
     BookingsPayload,
     BuffersPayload,
     DraftResponse,
     OnboardingStateResponse,
-    SchedulePayload,
     ServicesPayload,
 )
 
 SECTION_ORDER = (
-    OnboardingSection.schedule,
     OnboardingSection.services,
     OnboardingSection.buffers,
+    OnboardingSection.availability,
     OnboardingSection.bookings,
 )
 SECTION_MODELS: dict[OnboardingSection, type[BaseModel]] = {
-    OnboardingSection.schedule: SchedulePayload,
     OnboardingSection.services: ServicesPayload,
     OnboardingSection.buffers: BuffersPayload,
+    OnboardingSection.availability: AvailabilityPayload,
     OnboardingSection.bookings: BookingsPayload,
 }
 
@@ -172,7 +172,7 @@ def start_onboarding(session: Session, identity: RequestIdentity) -> OnboardingS
         state = OnboardingState(
             user_id=identity.user_id,
             status=OnboardingStatus.in_progress,
-            current_step=OnboardingSection.schedule.value,
+            current_step=OnboardingSection.services.value,
             started_at=now,
         )
         session.add(state)
@@ -277,14 +277,6 @@ def _require_prior_sections_confirmed(
 
 
 def _validate_confirmation(state: OnboardingState, draft: OnboardingDraft) -> None:
-    if draft.section == OnboardingSection.schedule:
-        weekdays = {day["weekday"] for day in draft.payload["days"]}
-        if weekdays != set(range(7)):
-            raise OnboardingDomainError(
-                "schedule_requires_all_weekdays",
-                details={"missing_weekdays": sorted(set(range(7)) - weekdays)},
-            )
-
     drafts = _draft_map(state)
     services = drafts.get(OnboardingSection.services)
     if draft.section in {OnboardingSection.buffers, OnboardingSection.bookings}:
