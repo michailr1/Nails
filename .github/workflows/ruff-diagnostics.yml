@@ -1,0 +1,30 @@
+name: Ruff diagnostics
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "hermes/plugins/nails_scheduling/**"
+      - ".github/workflows/ruff-diagnostics.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.9.10"
+          args: "check backend --config backend/pyproject.toml --output-format concise"
+
+  scheduling-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.9.10"
+          args: "check hermes/plugins/nails_scheduling --config backend/pyproject.toml --output-format concise"
