@@ -1,8 +1,8 @@
 # Hermes plugin runtime contract for Nails
 
-Last verified on production: **2026-07-13 21:58 UTC**.
+Last verified production runtime: **2026-07-13 21:58 UTC**.
 
-Read this document with [`production-infrastructure.md`](production-infrastructure.md) and [`../context/current.md`](../context/current.md) before changing profile plugins, skills or Telegram tool visibility.
+Read with [`production-infrastructure.md`](production-infrastructure.md) and [`../context/current.md`](../context/current.md).
 
 ## 1. Installed Hermes runtime
 
@@ -18,9 +18,9 @@ CLI executable: /usr/local/lib/hermes-agent/venv/bin/hermes
 hermes_cli import: /usr/local/lib/hermes-agent/hermes_cli/__init__.py
 ```
 
-A runbook must verify version and import path. A Hermes upgrade requires separate review.
+A Hermes upgrade requires separate review.
 
-## 2. Profile-local plugin discovery
+## 2. Plugin identity
 
 Plugins are discovered under:
 
@@ -28,12 +28,9 @@ Plugins are discovered under:
 /root/.hermes/profiles/nails/plugins
 ```
 
-A runtime directory alone is insufficient. The plugin key/manifest name must appear in `plugins.enabled`.
-
-Onboarding identity:
+Onboarding:
 
 ```text
-runtime directory: /root/.hermes/profiles/nails/plugins/nails_onboarding
 plugin key: nails-onboarding
 manifest name: nails-onboarding
 manifest version: 0.5.0
@@ -41,29 +38,28 @@ tool name: nails_onboarding
 toolset: nails_onboarding
 ```
 
-Scheduling production identity before E5:
-
-```text
-runtime directory: /root/.hermes/profiles/nails/plugins/nails_scheduling
-plugin key: nails-scheduling
-manifest name: nails-scheduling
-manifest version: 0.1.0
-tool name: nails_scheduling
-toolset: nails_scheduling
-```
-
-Scheduling expected identity after successful E5:
+Scheduling allowed pre-E6 identities:
 
 ```text
 plugin key: nails-scheduling
 manifest name: nails-scheduling
-manifest version: 0.2.0
 tool name: nails_scheduling
 toolset: nails_scheduling
-new actions: resolve_date, update_availability
+manifest version: 0.1.0 when HEAD is 385a92962e3736553335d717adcdf4b83ac8a8b3
+manifest version: 0.2.0 when HEAD is a0ef8c5c26301a9f6950544afd0e070b7e691582
 ```
 
-The directory/tool names use underscores; `plugins.enabled` uses hyphenated plugin keys.
+Expected after E6:
+
+```text
+plugin key: nails-scheduling
+manifest name: nails-scheduling
+manifest version: 0.3.0
+tool name: nails_scheduling
+toolset: nails_scheduling
+```
+
+Directory/tool names use underscores; `plugins.enabled` uses hyphenated keys.
 
 ## 3. Authoritative config
 
@@ -71,7 +67,7 @@ The directory/tool names use underscores; `plugins.enabled` uses hyphenated plug
 /root/.hermes/profiles/nails/config.yaml
 ```
 
-Current and post-E5 semantic state must be identical:
+Pre- and post-E6 semantic state is identical:
 
 ```yaml
 plugins:
@@ -108,13 +104,11 @@ platform_toolsets:
     - nails_scheduling
 ```
 
-`custom_toolsets` is absent.
+`custom_toolsets` is absent. The config is structured YAML and must be parsed semantically. String replacement of a fabricated comma-separated allowlist is forbidden.
 
-The config is structured YAML. It must be parsed semantically. String replacement of a fabricated comma-separated allowlist is forbidden.
+Hermes can auto-enable unknown plugin toolsets, but runbooks **must not rely on that implicit behavior**. Telegram visibility remains explicit.
 
-Although this Hermes version can auto-enable previously unknown plugin toolsets, production runbooks **must not rely on that implicit behavior**. Telegram visibility stays explicit.
-
-## 4. Registration contract
+## 4. Registration and actions
 
 Equivalent registration:
 
@@ -123,15 +117,14 @@ ctx.register_tool(name="nails_onboarding", toolset="nails_onboarding", ...)
 ctx.register_tool(name="nails_scheduling", toolset="nails_scheduling", ...)
 ```
 
-Both plugins remain enabled. E5 updates scheduling runtime files and both skills; it does not replace plugin keys, toolsets or config.
-
-## 5. Scheduling 0.2.0 model-visible actions
-
-After E5, the generated `nails_scheduling` definition must include:
+Scheduling `0.3.0` must expose exactly:
 
 ```text
 resolve_date
 list_services
+find_service
+create_service
+update_service
 day_view
 free_slots
 find_client
@@ -140,20 +133,18 @@ update_availability
 create_booking
 ```
 
-New security/UX rules:
+Behavioral rules:
 
-- `resolve_date` delegates all calendar arithmetic to backend application time;
-- the model does not calculate date, year or weekday itself;
-- `update_availability` changes only explicitly named dates after a current/future summary and explicit confirmation;
-- states are `available`, `unavailable`, `unknown`;
-- unrelated dates are preserved;
-- active bookings cannot be displaced;
-- completed onboarding is not restarted for ordinary calendar corrections;
-- deployment never invokes these actions and never changes calendar data.
+- backend resolves all dates, years and weekdays;
+- `update_availability` changes only explicitly named dates after confirmation;
+- `find_service`, `create_service` and `update_service` manage the operational catalog after onboarding;
+- price, duration and buffer changes affect future bookings;
+- existing bookings retain commercial and timing snapshots;
+- service deletion is archive/reactivate, not physical deletion;
+- onboarding is never restarted for ordinary calendar or service corrections;
+- deployment never invokes these actions or changes business data.
 
-## 6. Correct read-only verification
-
-Plugin list command:
+## 5. Correct read-only verification
 
 ```bash
 HERMES_HOME=/root/.hermes/profiles/nails \
@@ -161,21 +152,28 @@ HERMES_HOME=/root/.hermes/profiles/nails \
   --profile nails plugins list --plain --no-bundled
 ```
 
-Expected before E5:
+Allowed before E6:
 
 ```text
 enabled user 0.5.0 nails-onboarding
 enabled user 0.1.0 nails-scheduling
 ```
 
-Expected after E5:
+or:
 
 ```text
 enabled user 0.5.0 nails-onboarding
 enabled user 0.2.0 nails-scheduling
 ```
 
-Required post-change markers:
+Expected after E6:
+
+```text
+enabled user 0.5.0 nails-onboarding
+enabled user 0.3.0 nails-scheduling
+```
+
+Required markers:
 
 ```text
 PLUGIN_LIST_OK=true
@@ -185,7 +183,7 @@ SCHEDULING_ACTIONS_OK=true
 KEYS_MATCH=true
 ```
 
-### 6.1 Discovery must be idempotent
+### Discovery must be idempotent
 
 Use:
 
@@ -199,62 +197,70 @@ Do not use:
 discover_plugins(force=True)
 ```
 
-Forced rediscovery previously attempted duplicate registration of built-in provider `basic`.
+Forced rediscovery previously attempted duplicate registration of bundled provider `basic`.
 
-### 6.2 Platform toolsets are unordered
+### Platform toolsets are unordered
 
-`_get_platform_tools(config, "telegram")` returns a **set-like unordered collection**. Compare exact set membership:
+`_get_platform_tools(config, "telegram")` returns a **set-like unordered collection**:
 
 ```python
 telegram_toolsets = set(_get_platform_tools(config, "telegram"))
 assert telegram_toolsets == expected_telegram_toolsets
 ```
 
-Never compare list iteration order. Sort only when an API requires a deterministic sequence.
+Never compare iteration order. Sort only when an API requires a sequence.
 
-## 7. E5 deployment boundary
+## 6. E6 deployment boundary
 
-Approved candidate files:
+Candidate files:
 
 ```text
-ops/deploy/nails-002e5-date-availability.sh
+ops/deploy/nails-002e6-combined-operations.sh
+ops/deploy/lib/nails-002e6-runtime.sh
 ops/deploy/lib/nails-002e5-common.sh
-ops/deploy/lib/nails-002e5-runtime.sh
 ```
 
-The deployment is a coordinated backend/Hermes release:
+E6:
 
-- build a new `nails-api` image while the old API remains online;
-- stop only the root user-level Hermes gateway;
-- recreate only `nails-api` with `--no-deps`;
-- keep `nails-db` and Docker daemon unchanged;
-- keep Alembic revision `0006` and reject release changes under `backend/alembic`;
-- install scheduling plugin `0.2.0` and updated onboarding/scheduling skills;
-- prove profile config did not change;
-- verify OpenAPI routes, plugin registry, Telegram visibility and new actions;
-- restore old image/runtime/repo/gateway on failure.
+- detects exact E4 `0.1.0` or E5 `0.2.0` baseline;
+- builds a new `nails-api` image while the old API remains online;
+- stops only the root user-level gateway;
+- recreates only `nails-api` with `--no-deps`;
+- keeps `nails-db` and Docker daemon unchanged;
+- keeps Alembic revision `0006` and rejects changes under `backend/alembic`;
+- installs scheduling `0.3.0` and both skills;
+- proves profile config did not change;
+- verifies date, availability and service-management routes and actions;
+- restores the detected repository/image/runtime/config/gateway baseline on failure.
 
-The prior generic rule “never rebuild nails-api during a plugin deployment” still applies to Hermes-only changes. E5 is not plugin-only: it is an explicitly reviewed coordinated backend/plugin deployment. It must not rebuild or restart `nails-db` or the Docker daemon.
-
-E5 must not:
+E6 must not:
 
 - execute ad-hoc SQL;
-- change availability/calendar rows;
+- change calendar, service, client or booking rows;
 - invoke `nails_onboarding` or `nails_scheduling`;
-- change `plugins.enabled`, `platform_toolsets` or other Hermes config;
-- expose broad terminal, filesystem, HTTP, browser, SQL, SSH, GitHub, MCP or deployment tools;
+- change `plugins.enabled` or `platform_toolsets`;
+- restart/recreate `nails-db` or Docker daemon;
 - print secrets, Telegram identifiers or complete environment files.
 
-## 8. Historical evidence
+## 7. Historical evidence
 
-Successful E4 V3:
+E4 V3 success:
 
 ```text
 release: 385a92962e3736553335d717adcdf4b83ac8a8b3
 success marker: NAILS_002E4_V3_DEPLOYMENT_OK
 ```
 
-V2 remains permanently blocked. It failed in read-only verification and rolled back successfully:
+E5 candidate:
+
+```text
+release: a0ef8c5c26301a9f6950544afd0e070b7e691582
+success marker: NAILS_002E5_DEPLOYMENT_OK
+```
+
+Its production result was not reported, so E6 supports both sides explicitly.
+
+V2 rollback evidence:
 
 ```text
 ROLLBACK_PERFORMED=true
@@ -262,4 +268,4 @@ ROLLBACK_HEAD_CURRENT=5565a524b75a04fe5d8bc2c3e758d2994e9d9c12
 ROLLBACK_GATEWAY_STATE=active
 ```
 
-Manual Telegram acceptance remains mandatory after E5. Plugin list, registry and OpenAPI checks do not prove the user-facing resolver or confirmed calendar correction flow.
+Manual Telegram acceptance remains mandatory after E6. Plugin list, registry and OpenAPI checks do not prove the user-facing confirmation flows.
