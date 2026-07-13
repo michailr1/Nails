@@ -47,7 +47,10 @@ def date_resolve(
     identity: IdentityDependency,
 ) -> DateResolveResponse:
     del identity
-    return resolve_date(body)
+    try:
+        return resolve_date(body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
 
 
 @router.get("/services", response_model=ServiceListResponse)
