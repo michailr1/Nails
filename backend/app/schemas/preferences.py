@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import time
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -42,8 +43,40 @@ class AssistantStyleUpdateRequest(BaseModel):
         return self
 
 
+class DefaultWorkInterval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_time: time
+    end_time: time
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> DefaultWorkInterval:
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be later than start_time")
+        return self
+
+
+class DefaultWorkHoursUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    intervals: list[DefaultWorkInterval] = Field(default_factory=list, max_length=4)
+
+    @field_validator("intervals")
+    @classmethod
+    def sort_and_reject_overlaps(
+        cls,
+        value: list[DefaultWorkInterval],
+    ) -> list[DefaultWorkInterval]:
+        ordered = sorted(value, key=lambda item: item.start_time)
+        for previous, current in zip(ordered, ordered[1:], strict=False):
+            if current.start_time < previous.end_time:
+                raise ValueError("default work intervals must not overlap")
+        return ordered
+
+
 class MasterPreferencesResponse(BaseModel):
     preferred_name: str | None
     assistant_style: AssistantStyle | None
     assistant_style_details: str | None
+    default_work_intervals: list[DefaultWorkInterval] | None
     is_complete: bool

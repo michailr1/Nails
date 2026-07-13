@@ -9,6 +9,7 @@ from app.models import OnboardingSection
 from app.schemas.onboarding import DraftUpdateRequest, OnboardingStateResponse
 from app.schemas.preferences import (
     AssistantStyleUpdateRequest,
+    DefaultWorkHoursUpdateRequest,
     MasterPreferencesResponse,
     PreferredNameUpdateRequest,
 )
@@ -25,6 +26,7 @@ from app.services.onboarding import (
 from app.services.preferences import (
     get_master_preferences,
     save_assistant_style,
+    save_default_work_hours,
     save_preferred_name,
 )
 
@@ -87,6 +89,15 @@ def update_assistant_style(
     identity: IdentityDependency,
 ) -> MasterPreferencesResponse:
     return save_assistant_style(session, identity, body)
+
+
+@router.put("/preferences/default-work-hours", response_model=MasterPreferencesResponse)
+def update_default_work_hours(
+    body: DefaultWorkHoursUpdateRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> MasterPreferencesResponse:
+    return save_default_work_hours(session, identity, body)
 
 
 @router.put("/sections/{section}", response_model=OnboardingStateResponse)

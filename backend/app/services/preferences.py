@@ -10,6 +10,7 @@ from app.models import AuditEvent
 from app.models_preferences import MasterPreferences
 from app.schemas.preferences import (
     AssistantStyleUpdateRequest,
+    DefaultWorkHoursUpdateRequest,
     MasterPreferencesResponse,
     PreferredNameUpdateRequest,
 )
@@ -33,6 +34,7 @@ def _serialize(preferences: MasterPreferences | None) -> MasterPreferencesRespon
             preferred_name=None,
             assistant_style=None,
             assistant_style_details=None,
+            default_work_intervals=None,
             is_complete=False,
         )
 
@@ -40,7 +42,12 @@ def _serialize(preferences: MasterPreferences | None) -> MasterPreferencesRespon
         preferred_name=preferences.preferred_name,
         assistant_style=preferences.assistant_style,
         assistant_style_details=preferences.assistant_style_details,
-        is_complete=bool(preferences.preferred_name and preferences.assistant_style),
+        default_work_intervals=preferences.default_work_intervals,
+        is_complete=bool(
+            preferences.preferred_name
+            and preferences.assistant_style
+            and preferences.default_work_intervals is not None
+        ),
     )
 
 
@@ -117,6 +124,33 @@ def save_assistant_style(
             {
                 "assistant_style": body.style,
                 "details_set": body.details is not None,
+            },
+        )
+        session.commit()
+
+    return _serialize(_load_preferences(session, identity.user_id, lock=False))
+
+
+def save_default_work_hours(
+    session: Session,
+    identity: RequestIdentity,
+    body: DefaultWorkHoursUpdateRequest,
+) -> MasterPreferencesResponse:
+    preferences = _load_preferences(session, identity.user_id, lock=True)
+    if preferences is None:
+        preferences = MasterPreferences(user_id=identity.user_id)
+        session.add(preferences)
+
+    intervals = [item.model_dump(mode="json") for item in body.intervals]
+    if preferences.default_work_intervals != intervals:
+        preferences.default_work_intervals = intervals
+        _add_audit(
+            session,
+            identity,
+            "master_preferences.default_work_hours_saved",
+            {
+                "uses_default_work_hours": bool(intervals),
+                "interval_count": len(intervals),
             },
         )
         session.commit()
