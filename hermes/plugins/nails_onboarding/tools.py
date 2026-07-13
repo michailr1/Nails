@@ -80,11 +80,11 @@ def _normalize_clock(value: Any, field_name: str) -> wall_time:
 
 def _normalize_schedule_day(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise ToolInputError("schedule_day object is required")
+        raise ToolInputError("payload object is required for save_schedule_day")
 
     allowed_keys = {"weekday", "is_working", "start_time", "end_time"}
     if set(value) - allowed_keys:
-        raise ToolInputError("unsupported schedule_day fields")
+        raise ToolInputError("unsupported schedule day fields")
 
     weekday = value.get("weekday")
     if isinstance(weekday, bool) or not isinstance(weekday, int) or not 0 <= weekday <= 6:
@@ -121,7 +121,7 @@ def _validate_args(
     if not isinstance(args, dict):
         raise ToolInputError("tool arguments must be an object")
 
-    allowed_keys = {"action", "section", "payload", "schedule_day"}
+    allowed_keys = {"action", "section", "payload"}
     unexpected = sorted(set(args) - allowed_keys)
     if unexpected:
         raise ToolInputError("unsupported tool arguments")
@@ -132,23 +132,20 @@ def _validate_args(
 
     section = args.get("section")
     payload = args.get("payload")
-    schedule_day = args.get("schedule_day")
 
     if action in {"save_section", "confirm_section"} and section not in _ALLOWED_SECTIONS:
         raise ToolInputError("a valid onboarding section is required")
     if action not in {"save_section", "confirm_section"} and section is not None:
         raise ToolInputError("section is not allowed for this action")
 
-    if action == "save_section" and not isinstance(payload, dict):
-        raise ToolInputError("payload object is required for save_section")
-    if action != "save_section" and payload is not None:
+    if action in {"save_section", "save_schedule_day"} and not isinstance(payload, dict):
+        raise ToolInputError("payload object is required for this action")
+    if action not in {"save_section", "save_schedule_day"} and payload is not None:
         raise ToolInputError("payload is not allowed for this action")
 
     normalized_schedule_day = None
     if action == "save_schedule_day":
-        normalized_schedule_day = _normalize_schedule_day(schedule_day)
-    elif schedule_day is not None:
-        raise ToolInputError("schedule_day is not allowed for this action")
+        normalized_schedule_day = _normalize_schedule_day(payload)
 
     return action, section, payload, normalized_schedule_day
 
@@ -391,7 +388,7 @@ def nails_onboarding(args: dict[str, Any], **kwargs: Any) -> str:
         api_key = _api_key()
         if action == "save_schedule_day":
             if schedule_day is None:
-                raise ToolInputError("schedule_day is required")
+                raise ToolInputError("schedule day is required")
             result = _save_schedule_day(
                 schedule_day=schedule_day,
                 telegram_user_id=telegram_user_id,
