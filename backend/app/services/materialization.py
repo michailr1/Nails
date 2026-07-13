@@ -20,6 +20,7 @@ from app.models import (
     OnboardingDraft,
     OnboardingSection,
     OnboardingState,
+    OnboardingStatus,
     Service,
 )
 from app.services.normalization import normalize_public_name
@@ -54,6 +55,23 @@ class MaterializationSummary:
             "clients_updated": self.clients_updated,
             "bookings_created": self.bookings_created,
         }
+
+
+def _was_materialized(
+    session: Session,
+    identity: RequestIdentity,
+    state: OnboardingState,
+) -> bool:
+    marker = session.scalar(
+        select(AuditEvent.id)
+        .where(
+            AuditEvent.owner_user_id == identity.user_id,
+            AuditEvent.object_id == state.id,
+            AuditEvent.action == "onboarding.materialized",
+        )
+        .limit(1)
+    )
+    return marker is not None
 
 
 def _confirmed_drafts(state: OnboardingState) -> dict[OnboardingSection, OnboardingDraft]:
@@ -390,6 +408,13 @@ def materialize_confirmed_onboarding(
     state: OnboardingState,
 ) -> MaterializationSummary:
     """Materialize confirmed onboarding data without committing the transaction."""
+
+    if state.status == OnboardingStatus.completed and _was_materialized(
+        session,
+        identity,
+        state,
+    ):
+        return MaterializationSummary()
 
     drafts = _confirmed_drafts(state)
     summary = MaterializationSummary()
