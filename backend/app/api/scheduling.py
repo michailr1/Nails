@@ -7,18 +7,24 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity, require_request_identity
 from app.db import get_db_session
 from app.schemas.scheduling import (
+    AvailabilityReplaceRequest,
+    AvailabilityReplaceResponse,
     BookingCreateRequest,
     BookingCreateResponse,
     ClientCreateRequest,
     ClientCreateResponse,
     ClientLookupResponse,
+    DateResolveRequest,
+    DateResolveResponse,
     DayViewResponse,
     FreeSlotsResponse,
     ServiceListResponse,
 )
+from app.services.scheduling_availability import replace_availability
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_clients import create_or_reuse_client
 from app.services.scheduling_common import SchedulingDomainError
+from app.services.scheduling_dates import resolve_date
 from app.services.scheduling_lookup import find_client_exact, list_active_services
 from app.services.scheduling_queries import find_free_slots, get_day_view
 
@@ -33,6 +39,15 @@ def _translate_domain_error(exc: SchedulingDomainError) -> HTTPException:
     if exc.details is not None:
         detail["details"] = exc.details
     return HTTPException(status_code=exc.status_code, detail=detail)
+
+
+@router.post("/date/resolve", response_model=DateResolveResponse)
+def date_resolve(
+    body: DateResolveRequest,
+    identity: IdentityDependency,
+) -> DateResolveResponse:
+    del identity
+    return resolve_date(body)
 
 
 @router.get("/services", response_model=ServiceListResponse)
@@ -82,6 +97,18 @@ def slots(
 ) -> FreeSlotsResponse:
     try:
         return find_free_slots(session, identity, day, service_name)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
+@router.put("/availability", response_model=AvailabilityReplaceResponse)
+def availability_replace(
+    body: AvailabilityReplaceRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> AvailabilityReplaceResponse:
+    try:
+        return replace_availability(session, identity, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
 
