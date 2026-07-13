@@ -6,9 +6,10 @@ Before preparing or executing any production runbook, read:
 
 - [`../../AGENTS.md`](../../AGENTS.md);
 - [`../../docs/operations/agent-responsibilities.md`](../../docs/operations/agent-responsibilities.md);
-- [`../../docs/operations/production-infrastructure.md`](../../docs/operations/production-infrastructure.md).
+- [`../../docs/operations/production-infrastructure.md`](../../docs/operations/production-infrastructure.md);
+- [`../../docs/operations/hermes-plugin-runtime.md`](../../docs/operations/hermes-plugin-runtime.md).
 
-The production infrastructure document is the source of truth for the service manager, runtime paths, profile configuration, and restart boundary. Runbooks must not reconstruct those facts from chat memory.
+The production infrastructure and Hermes plugin runtime documents are the sources of truth for the service manager, runtime paths, profile configuration, plugin keys, and tool visibility. Runbooks must not reconstruct those facts from chat memory.
 
 ## Execution contract
 
@@ -26,7 +27,49 @@ git show "${NAILS_RELEASE_SHA}:ops/deploy/<APPROVED_RUNBOOK>.sh" | bash
 '
 ```
 
-The placeholder is never resolved by the VPS agent. It is replaced by the main agent in the exact deployment prompt.
+The placeholders are never resolved by the VPS agent. They are replaced by the main agent in the exact deployment prompt.
+
+## NAILS-002E4 V2 — corrected deployment runbook
+
+Eligible runbook after merge and explicit release approval:
+
+```text
+ops/deploy/nails-002e4-v2.sh
+```
+
+It corrects both invalid assumptions from the first attempt:
+
+- addresses `hermes-gateway-nails.service` through root user-level systemd using `XDG_RUNTIME_DIR=/run/user/0 systemctl --user`;
+- parses and atomically updates `/root/.hermes/profiles/nails/config.yaml` as structured YAML.
+
+The runbook:
+
+- requires the verified production baseline `5565a524b75a04fe5d8bc2c3e758d2994e9d9c12`;
+- verifies the approved release contains the reviewed scheduling implementation and infrastructure contracts;
+- verifies Hermes Agent `v0.18.2 (2026.7.7.2)` and the exact import path;
+- verifies the root user-level unit, fragment, process command, parent manager, PID, restart policy, and current active state;
+- verifies the existing onboarding plugin remains the only enabled Nails plugin before mutation;
+- verifies the exact semantic YAML pre-state;
+- creates a root-only backup before any production mutation;
+- fast-forwards the repository to the exact approved release SHA;
+- installs only the reviewed scheduling plugin files and scheduling skill;
+- appends `nails-scheduling` to `plugins.enabled` without replacing `nails-onboarding`;
+- explicitly appends `nails_scheduling` to `platform_toolsets.telegram`;
+- keeps `plugins.entries.nails-onboarding`, `toolsets`, `tools.tool_search`, and `agent.disabled_toolsets` unchanged;
+- validates Hermes config, plugin discovery, registered tools/toolsets, and Telegram tool definitions before and after the gateway restart;
+- stops and starts only the root user-level Nails gateway;
+- proves `nails-api`, `nails-db`, and the Docker daemon were not restarted or replaced;
+- performs no migration, SQL, backend deployment, backend restart, or plugin tool invocation;
+- restores config, runtime files, repository HEAD, and gateway state on any failure after mutation begins;
+- reports `ROLLBACK_PERFORMED=false` for failures before production mutation starts.
+
+Success marker:
+
+```text
+NAILS_002E4_DEPLOYMENT_OK
+```
+
+This runbook is not authorized merely because it exists on a branch. It may be executed only after PR review, green CI, merge to `main`, and issuance of an exact approved release SHA by the main agent.
 
 ## NAILS-002E4 — blocked legacy runbook
 
@@ -45,15 +88,5 @@ The correct gateway control boundary is:
 XDG_RUNTIME_DIR=/run/user/0 systemctl --user \
   <status|show|stop|start|restart> hermes-gateway-nails.service
 ```
-
-The next E4 deployment requires a new reviewed runbook with a new filename. It must:
-
-- verify the root user-level unit is loaded and active;
-- back up and parse `/root/.hermes/profiles/nails/config.yaml` as YAML;
-- verify the actual installed Hermes plugin-discovery/tool-search contract before changing configuration;
-- install only reviewed scheduling plugin and skill files;
-- restart only the root user-level Nails gateway;
-- prove backend container identity and start time are unchanged;
-- provide an exact rollback that restores the YAML config, runtime files, repository HEAD, and gateway state.
 
 No deployment is authorized merely because `nails-002e4.sh` exists in a release commit.
