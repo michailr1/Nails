@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 
@@ -7,38 +7,65 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.models import OnboardingSection, OnboardingStatus
 
 
-class ScheduleDayInput(BaseModel):
+class AvailabilityWindowInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    weekday: int = Field(ge=0, le=6)
-    is_working: bool = True
-    start_time: time | None = None
-    end_time: time | None = None
+    start_time: time
+    end_time: time
 
     @model_validator(mode="after")
-    def validate_interval(self) -> "ScheduleDayInput":
-        if self.is_working:
-            if self.start_time is None or self.end_time is None:
-                raise ValueError("working day requires start_time and end_time")
-            if self.end_time <= self.start_time:
-                raise ValueError("end_time must be later than start_time")
-        elif self.start_time is not None or self.end_time is not None:
-            raise ValueError("non-working day must not contain a time interval")
+    def validate_interval(self) -> "AvailabilityWindowInput":
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be later than start_time")
         return self
 
 
-class SchedulePayload(BaseModel):
+class AvailabilityDayInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    days: list[ScheduleDayInput] = Field(min_length=1, max_length=7)
+    day: date
+    is_available: bool = True
+    intervals: list[AvailabilityWindowInput] = Field(default_factory=list, max_length=12)
+    note: str | None = Field(default=None, max_length=255)
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = " ".join(value.split())
+        return candidate or None
+
+    @model_validator(mode="after")
+    def validate_day(self) -> "AvailabilityDayInput":
+        if not self.is_available:
+            if self.intervals:
+                raise ValueError("unavailable day must not contain intervals")
+            return self
+
+        if not self.intervals:
+            raise ValueError("available day requires at least one interval")
+
+        ordered = sorted(self.intervals, key=lambda item: item.start_time)
+        for previous, current in zip(ordered, ordered[1:], strict=False):
+            if current.start_time < previous.end_time:
+                raise ValueError("availability intervals must not overlap")
+        self.intervals = ordered
+        return self
+
+
+class AvailabilityPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    days: list[AvailabilityDayInput] = Field(min_length=1, max_length=90)
 
     @field_validator("days")
     @classmethod
-    def unique_weekdays(cls, value: list[ScheduleDayInput]) -> list[ScheduleDayInput]:
-        weekdays = [item.weekday for item in value]
-        if len(weekdays) != len(set(weekdays)):
-            raise ValueError("weekday values must be unique")
-        return sorted(value, key=lambda item: item.weekday)
+    def unique_days(cls, value: list[AvailabilityDayInput]) -> list[AvailabilityDayInput]:
+        days = [item.day for item in value]
+        if len(days) != len(set(days)):
+            raise ValueError("availability days must be unique")
+        return sorted(value, key=lambda item: item.day)
 
 
 class ServiceInput(BaseModel):
