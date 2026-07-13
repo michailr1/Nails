@@ -124,13 +124,25 @@ Success marker reached in production:
 NAILS_002E4_V3_DEPLOYMENT_OK
 ```
 
-V3 installed both Nails plugins, preserved backend/Docker and established the correct root user-level systemd and plugin verification boundaries. It remains an audit record; it must not be rerun for E5.
+V3 installed both Nails plugins, preserved backend/Docker and established the correct root user-level systemd and plugin verification boundaries. Its verification used `discover_plugins()` and never with `force=True`; Telegram toolsets were compared by exact membership, not iteration order. It remains an audit record and must not be rerun for E5.
 
 ## NAILS-002E4 V2 — blocked after verified rollback
 
 `ops/deploy/nails-002e4-v2.sh` must **not** be executed again.
 
-It incorrectly compared unordered Telegram toolsets by list order and called `discover_plugins(force=True)`. Its predefined rollback restored the old repository/runtime/config and returned the gateway to active.
+V2 atomically updates structured YAML and historically appended `nails-scheduling` to `plugins.enabled` and `nails_scheduling` to `platform_toolsets.telegram`, but its final read-only assertion was defective. The unused success marker was:
+
+```text
+NAILS_002E4_DEPLOYMENT_OK
+```
+
+It incorrectly compared unordered Telegram toolsets by list order and called `discover_plugins(force=True)`. Its predefined rollback restored the old repository/runtime/config and returned the gateway to active:
+
+```text
+ROLLBACK_GATEWAY_STATE=active
+```
+
+This runbook is not authorized merely because it exists on a branch.
 
 ## NAILS-002E4 V1 — blocked legacy runbook
 
