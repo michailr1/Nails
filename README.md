@@ -105,6 +105,8 @@
 
 ## Для разработчиков
 
+- [Обязательный контракт агентов](AGENTS.md)
+- [Разделение ответственности основного и VPS-агента](docs/operations/agent-responsibilities.md)
 - [Фактическое состояние проекта](docs/status.md)
 - [План разработки](docs/roadmap.md)
 - [Архитектура](docs/architecture.md)
