@@ -29,58 +29,97 @@ git show "${NAILS_RELEASE_SHA}:ops/deploy/<APPROVED_RUNBOOK>.sh" | bash
 
 The placeholders are never resolved by the VPS agent. They are replaced by the main agent in the exact deployment prompt.
 
-## NAILS-002E4 V2 — corrected deployment runbook
+## NAILS-002E4 V3 — current candidate
 
-Eligible runbook after merge and explicit release approval:
+The only E4 runbook eligible for approval after merge is:
 
 ```text
-ops/deploy/nails-002e4-v2.sh
+ops/deploy/nails-002e4-v3.sh
 ```
 
-It corrects both invalid assumptions from the first attempt:
+V3 preserves the verified V2 safety boundary and corrects the verification defect found during the rolled-back production attempt:
 
-- addresses `hermes-gateway-nails.service` through root user-level systemd using `XDG_RUNTIME_DIR=/run/user/0 systemctl --user`;
-- parses and atomically updates `/root/.hermes/profiles/nails/config.yaml` as structured YAML.
+- Hermes plugin discovery is called idempotently with `discover_plugins()` and never with `force=True`;
+- `_get_platform_tools(config, "telegram")` is treated as an unordered set-like collection;
+- Telegram toolsets are compared by exact membership, not iteration order;
+- diagnostic assertions include observed values instead of returning an unexplained bare assertion.
 
-The runbook:
+The runbook still:
 
-- requires the verified production baseline `5565a524b75a04fe5d8bc2c3e758d2994e9d9c12`;
-- verifies the approved release contains the reviewed scheduling implementation and infrastructure contracts;
+- requires production baseline `5565a524b75a04fe5d8bc2c3e758d2994e9d9c12`;
+- requires the approved release to contain the reviewed scheduling implementation and the V2 rollback evidence;
 - verifies Hermes Agent `v0.18.2 (2026.7.7.2)` and the exact import path;
-- verifies the root user-level unit, fragment, process command, parent manager, PID, restart policy, and current active state;
-- verifies the existing onboarding plugin remains the only enabled Nails plugin before mutation;
+- verifies root user-level systemd, the exact unit fragment, process command, parent manager, PID, restart policy, and active state;
+- verifies onboarding is the only enabled Nails plugin before mutation;
 - verifies the exact semantic YAML pre-state;
 - creates a root-only backup before any production mutation;
-- fast-forwards the repository to the exact approved release SHA;
+- fast-forwards to the exact approved release SHA;
 - installs only the reviewed scheduling plugin files and scheduling skill;
 - appends `nails-scheduling` to `plugins.enabled` without replacing `nails-onboarding`;
 - explicitly appends `nails_scheduling` to `platform_toolsets.telegram`;
-- keeps `plugins.entries.nails-onboarding`, `toolsets`, `tools.tool_search`, and `agent.disabled_toolsets` unchanged;
-- validates Hermes config, plugin discovery, registered tools/toolsets, and Telegram tool definitions before and after the gateway restart;
+- atomically updates and re-parses `/root/.hermes/profiles/nails/config.yaml`;
+- verifies config, plugin list, registry, toolsets, Telegram definitions, logs, and matching internal keys;
 - stops and starts only the root user-level Nails gateway;
 - proves `nails-api`, `nails-db`, and the Docker daemon were not restarted or replaced;
 - performs no migration, SQL, backend deployment, backend restart, or plugin tool invocation;
-- restores config, runtime files, repository HEAD, and gateway state on any failure after mutation begins;
-- reports `ROLLBACK_PERFORMED=false` for failures before production mutation starts.
+- restores config, runtime files, repository HEAD, and gateway state after any failure once mutation begins.
 
-Success marker:
+V3 success marker:
 
 ```text
-NAILS_002E4_DEPLOYMENT_OK
+NAILS_002E4_V3_DEPLOYMENT_OK
 ```
 
-This runbook is not authorized merely because it exists on a branch. It may be executed only after PR review, green CI, merge to `main`, and issuance of an exact approved release SHA by the main agent.
+V3 is not authorized merely because it exists on a branch. It may be executed only after PR review, green CI, merge to `main`, and issuance of an exact approved release SHA by the main agent.
 
-## NAILS-002E4 — blocked legacy runbook
+## NAILS-002E4 V2 — blocked after verified rollback
 
-`nails-002e4.sh` must **not** be executed again.
+`ops/deploy/nails-002e4-v2.sh` must **not** be executed again.
+
+The production attempt reached runtime installation and passed:
+
+```text
+CONFIG_UPDATED_ATOMICALLY=true
+CONFIG_POSTSTATE_OK=true
+PLUGIN_LIST_OK=true
+```
+
+It then failed inside its own read-only registry/visibility assertion. The failure was not evidence that `nails-scheduling` failed to install or appear in the plugin list.
+
+Exact defect:
+
+1. V2 converted `_get_platform_tools(...)` to a list and compared it with a fixed-order list, although the installed Hermes version returns a set-like, unordered collection.
+2. V2 called `discover_plugins(force=True)` in a process where imports could already initialize bundled providers, producing the warning that dashboard-auth provider `basic` was already registered.
+
+Rollback completed successfully:
+
+```text
+ROLLBACK_PERFORMED=true
+ROLLBACK_TARGET_HEAD=5565a524b75a04fe5d8bc2c3e758d2994e9d9c12
+ROLLBACK_HEAD_CURRENT=5565a524b75a04fe5d8bc2c3e758d2994e9d9c12
+ROLLBACK_GATEWAY_STATE=active
+```
+
+The V2 file remains in Git as an auditable artifact. Its previous success marker was `NAILS_002E4_DEPLOYMENT_OK`, but that marker was never reached in production.
+
+The following historical V2 statements remain true but do not authorize execution:
+
+- it used root user-level systemd;
+- it atomically updates structured YAML;
+- it appends `nails-scheduling` to `plugins.enabled`;
+- it appends `nails_scheduling` to `platform_toolsets.telegram`;
+- “This runbook is not authorized merely because it exists on a branch.”
+
+## NAILS-002E4 V1 — blocked legacy runbook
+
+`ops/deploy/nails-002e4.sh` must **not** be executed again.
 
 The first production attempt proved that two of its infrastructure assumptions were wrong:
 
 1. it addressed `hermes-gateway-nails.service` through the system service manager, while the real gateway is a root user-level systemd service;
 2. it searched for an assumed comma-separated tool allowlist, while the authoritative profile configuration is structured YAML at `/root/.hermes/profiles/nails/config.yaml`.
 
-The script failed before repository or runtime mutation, but its service and configuration logic is superseded. It remains in Git only as an auditable record of the failed deployment attempt.
+The script failed before repository or runtime mutation. It remains in Git only as an auditable record.
 
 The correct gateway control boundary is:
 
@@ -89,4 +128,4 @@ XDG_RUNTIME_DIR=/run/user/0 systemctl --user \
   <status|show|stop|start|restart> hermes-gateway-nails.service
 ```
 
-No deployment is authorized merely because `nails-002e4.sh` exists in a release commit.
+No deployment is authorized merely because an old E4 runbook exists in a release commit.
