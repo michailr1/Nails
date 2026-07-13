@@ -8,9 +8,9 @@ RUN groupadd --system nails && useradd --system --gid nails --home-dir /app nail
 
 WORKDIR /app
 
-COPY pyproject.toml alembic.ini ./
-COPY app ./app
-COPY alembic ./alembic
+COPY --chown=nails:nails pyproject.toml alembic.ini ./
+COPY --chown=nails:nails app ./app
+COPY --chown=nails:nails alembic ./alembic
 
 RUN pip install --no-cache-dir .
 
