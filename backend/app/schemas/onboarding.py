@@ -74,7 +74,12 @@ class ServiceInput(BaseModel):
     public_name: str = Field(min_length=1, max_length=160)
     public_description: str | None = Field(default=None, max_length=2000)
     price_amount: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
-    currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    currency: str = Field(
+        default="RUB",
+        min_length=3,
+        max_length=3,
+        pattern=r"^[A-Z]{3}$",
+    )
     duration_minutes: int = Field(ge=5, le=1440)
 
     @field_validator("public_name")
