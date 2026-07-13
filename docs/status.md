@@ -13,9 +13,9 @@
 | Alembic | `0006` |
 | Hermes gateway | active по последнему production-отчёту |
 | Onboarding plugin | production `0.5.0` |
-| Scheduling plugin | доказанный production `0.1.0`; возможный E5 state `0.2.0`; итоговый candidate `0.3.0` |
+| Scheduling plugin | доказанный production `0.1.0`; E5 candidate `0.2.0`; итоговый candidate `0.3.0` |
 | Date/availability fix | PR #44 merged, `c9e400c80398bd4367aad0ed0416ee0fc6a79b2d` |
-| E5 runbook | PR #45 merged, но отдельный запуск больше не используется |
+| NAILS-002E5 | PR #45 merged, но отдельный запуск больше не используется |
 | Service management | PR #46 green, готов к merge, ещё не deployed |
 | Last proven deployment | `NAILS_002E4_V3_DEPLOYMENT_OK` |
 | Active issue | Issue #34 |
