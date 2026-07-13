@@ -20,12 +20,13 @@ def _set_key(monkeypatch):
     monkeypatch.setenv("NAILS_INTERNAL_API_KEY", "k" * 64)
 
 
-def test_schema_exposes_acquaintance_actions():
+def test_schema_exposes_master_preference_actions():
     actions = schemas.NAILS_ONBOARDING["parameters"]["properties"]["action"]["enum"]
 
     assert "get_master_preferences" in actions
     assert "save_master_name" in actions
     assert "save_master_style" in actions
+    assert "save_default_work_hours" in actions
 
 
 def test_get_master_preferences_uses_fixed_endpoint(monkeypatch):
@@ -105,6 +106,66 @@ def test_save_master_style_normalizes_details(monkeypatch):
     }
 
 
+def test_save_default_work_hours_sorts_and_normalizes_intervals(monkeypatch):
+    _set_context(monkeypatch)
+    _set_key(monkeypatch)
+    captured = {}
+
+    def fake_call_backend(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "result": {"is_complete": True}}
+
+    monkeypatch.setattr(tools, "_call_backend", fake_call_backend)
+
+    result = json.loads(
+        tools.nails_onboarding(
+            {
+                "action": "save_default_work_hours",
+                "payload": {
+                    "intervals": [
+                        {"start_time": "16:00", "end_time": "20:00"},
+                        {"start_time": "10:00", "end_time": "14:00"},
+                    ]
+                },
+            }
+        )
+    )
+
+    assert result["ok"] is True
+    assert captured["method"] == "PUT"
+    assert captured["path"] == "/api/v1/onboarding/preferences/default-work-hours"
+    assert captured["json_body"] == {
+        "intervals": [
+            {"start_time": "10:00", "end_time": "14:00"},
+            {"start_time": "16:00", "end_time": "20:00"},
+        ]
+    }
+
+
+def test_save_no_default_work_hours_uses_empty_intervals(monkeypatch):
+    _set_context(monkeypatch)
+    _set_key(monkeypatch)
+    captured = {}
+
+    def fake_call_backend(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True, "result": {"default_work_intervals": []}}
+
+    monkeypatch.setattr(tools, "_call_backend", fake_call_backend)
+
+    result = json.loads(
+        tools.nails_onboarding(
+            {
+                "action": "save_default_work_hours",
+                "payload": {"intervals": []},
+            }
+        )
+    )
+
+    assert result["ok"] is True
+    assert captured["json_body"] == {"intervals": []}
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -115,10 +176,28 @@ def test_save_master_style_normalizes_details(monkeypatch):
         },
         {"action": "save_master_style", "payload": {"style": "unknown"}},
         {"action": "save_master_style", "payload": {"style": "custom"}},
+        {"action": "save_default_work_hours", "payload": {}},
         {
-            "action": "save_master_style",
-            "section": "schedule",
-            "payload": {"style": "friendly"},
+            "action": "save_default_work_hours",
+            "payload": {
+                "intervals": [
+                    {"start_time": "20:00", "end_time": "11:00"},
+                ]
+            },
+        },
+        {
+            "action": "save_default_work_hours",
+            "payload": {
+                "intervals": [
+                    {"start_time": "10:00", "end_time": "15:00"},
+                    {"start_time": "14:00", "end_time": "18:00"},
+                ]
+            },
+        },
+        {
+            "action": "save_default_work_hours",
+            "section": "availability",
+            "payload": {"intervals": []},
         },
     ],
 )
