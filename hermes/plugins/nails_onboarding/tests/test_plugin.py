@@ -34,6 +34,13 @@ def test_schema_exposes_no_identity_url_headers_or_secret():
     parameters = schemas.NAILS_ONBOARDING["parameters"]
     assert parameters["additionalProperties"] is False
     assert set(parameters["properties"]) == {"action", "section", "payload"}
+    assert "save_schedule_day" not in parameters["properties"]["action"]["enum"]
+    assert parameters["properties"]["section"]["enum"] == [
+        "services",
+        "buffers",
+        "availability",
+        "bookings",
+    ]
     serialized = json.dumps(schemas.NAILS_ONBOARDING).lower()
     for forbidden in (
         "telegram_user_id",
@@ -43,15 +50,15 @@ def test_schema_exposes_no_identity_url_headers_or_secret():
         "internal_key",
         "headers",
         "url",
+        "weekday",
+        "weekly schedule",
     ):
         assert forbidden not in serialized
 
 
 def test_plugin_registers_one_dedicated_toolset():
     calls = []
-    ctx = SimpleNamespace(
-        register_tool=lambda **kwargs: calls.append(kwargs),
-    )
+    ctx = SimpleNamespace(register_tool=lambda **kwargs: calls.append(kwargs))
 
     register(ctx)
 
@@ -156,7 +163,7 @@ def test_missing_plugin_key_fails_without_http(monkeypatch):
     assert called is False
 
 
-def test_save_section_uses_fixed_endpoint_and_body(monkeypatch):
+def test_save_availability_section_uses_fixed_endpoint_and_body(monkeypatch):
     _set_context(monkeypatch)
     _set_key(monkeypatch)
     captured = {}
@@ -166,13 +173,24 @@ def test_save_section_uses_fixed_endpoint_and_body(monkeypatch):
         return {"ok": True, "result": {}}
 
     monkeypatch.setattr(tools, "_call_backend", fake_call_backend)
-    payload = {"days": [{"weekday": 0, "is_working": False}]}
+    payload = {
+        "days": [
+            {
+                "day": "2026-07-15",
+                "is_available": True,
+                "intervals": [
+                    {"start_time": "10:00", "end_time": "14:00"},
+                    {"start_time": "16:00", "end_time": "20:00"},
+                ],
+            }
+        ]
+    }
 
     result = json.loads(
         tools.nails_onboarding(
             {
                 "action": "save_section",
-                "section": "schedule",
+                "section": "availability",
                 "payload": payload,
             }
         )
@@ -180,16 +198,18 @@ def test_save_section_uses_fixed_endpoint_and_body(monkeypatch):
 
     assert result["ok"] is True
     assert captured["method"] == "PUT"
-    assert captured["path"] == "/api/v1/onboarding/sections/schedule"
+    assert captured["path"] == "/api/v1/onboarding/sections/availability"
     assert captured["json_body"] == {"payload": payload}
 
 
 @pytest.mark.parametrize(
     "args",
     [
-        {"action": "start", "section": "schedule"},
+        {"action": "start", "section": "availability"},
         {"action": "pause", "payload": {}},
-        {"action": "save_section", "section": "schedule"},
+        {"action": "save_section", "section": "availability"},
+        {"action": "save_section", "section": "schedule", "payload": {}},
+        {"action": "save_schedule_day", "payload": {}},
         {"action": "confirm_section"},
         {"action": "unknown"},
     ],
@@ -296,7 +316,7 @@ def test_safe_backend_validation_details_are_preserved():
         telegram_user_id="700000001",
         api_key="s" * 64,
         method="PUT",
-        path="/api/v1/onboarding/sections/schedule",
+        path="/api/v1/onboarding/sections/availability",
         json_body={"payload": {}},
         request=lambda *args, **kwargs: _response(
             422,
