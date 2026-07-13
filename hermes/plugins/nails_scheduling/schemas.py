@@ -152,7 +152,9 @@ NAILS_SCHEDULING = {
             },
             "currency": {
                 "type": "string",
-                "description": "Three-letter currency code; use RUB when no other currency was named.",
+                "description": (
+                    "Three-letter currency code; use RUB when no other currency was named."
+                ),
             },
             "duration_minutes": {
                 "type": "integer",
