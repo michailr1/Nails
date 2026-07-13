@@ -21,10 +21,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate Bash syntax
+      - name: Validate historical runbook Bash syntax
         run: bash -n ops/deploy/nails-002e4.sh
 
-      - name: Validate embedded Python and deployment boundary
+      - name: Validate historical artifact and deployment boundary
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -33,6 +33,8 @@ jobs:
           text = path.read_text(encoding="utf-8")
           lines = text.splitlines()
 
+          # The failed E4 runbook remains immutable and syntactically valid as an
+          # auditable record. These assertions do not authorize its execution.
           assert text.startswith("#!/usr/bin/env bash\n")
           assert "\r" not in text
           assert 'EXPECTED_BEFORE="5565a524b75a04fe5d8bc2c3e758d2994e9d9c12"' in text
@@ -106,8 +108,14 @@ jobs:
 
           readme = Path("ops/deploy/README.md").read_text(encoding="utf-8")
           assert "VPS agent never writes or edits" in readme
-          assert 'git show "${NAILS_RELEASE_SHA}:ops/deploy/nails-002e4.sh" | bash' in readme
+          assert "nails-002e4.sh` must **not** be executed again" in readme
+          assert "blocked legacy runbook" in readme
+          assert "root user-level systemd" in readme
+          assert "/root/.hermes/profiles/nails/config.yaml" in readme
+          assert "new reviewed runbook with a new filename" in readme
+          assert "<APPROVED_RUNBOOK>.sh" in readme
+          assert 'git show "${NAILS_RELEASE_SHA}:ops/deploy/nails-002e4.sh" | bash' not in readme
           assert "<EXACT_APPROVED_RELEASE_SHA>" in readme
 
-          print("DEPLOYMENT_RUNBOOK_CONTRACT_OK")
+          print("DEPLOYMENT_RUNBOOK_ARCHIVE_CONTRACT_OK")
           PY
