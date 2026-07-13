@@ -6,7 +6,6 @@ import os
 import time
 import uuid
 from collections.abc import Callable
-from datetime import time as wall_time
 from typing import Any
 
 import httpx
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 _API_BASE_URL = "http://127.0.0.1:8210"
 _API_KEY_ENV = "NAILS_INTERNAL_API_KEY"
-_ALLOWED_SECTIONS = {"schedule", "services", "buffers", "bookings"}
+_ALLOWED_SECTIONS = {"services", "buffers", "availability", "bookings"}
 _ALLOWED_STYLES = {"business", "friendly", "casual", "playful", "custom"}
 _ALLOWED_ACTIONS = {
     "start",
@@ -23,7 +22,6 @@ _ALLOWED_ACTIONS = {
     "get_master_preferences",
     "save_master_name",
     "save_master_style",
-    "save_schedule_day",
     "save_section",
     "confirm_section",
     "pause",
@@ -33,7 +31,6 @@ _ALLOWED_ACTIONS = {
 _PAYLOAD_ACTIONS = {
     "save_master_name",
     "save_master_style",
-    "save_schedule_day",
     "save_section",
 }
 _RETRYABLE_STATUS_CODES = {502, 503, 504}
@@ -116,58 +113,9 @@ def _normalize_master_style(value: Any) -> dict[str, Any]:
     return result
 
 
-def _normalize_clock(value: Any, field_name: str) -> wall_time:
-    if not isinstance(value, str):
-        raise ToolInputError(f"{field_name} must be a time string")
-    try:
-        parsed = wall_time.fromisoformat(value)
-    except ValueError as exc:
-        raise ToolInputError(f"{field_name} must use HH:MM format") from exc
-    if parsed.second or parsed.microsecond:
-        raise ToolInputError(f"{field_name} must use minute precision")
-    return parsed
-
-
-def _normalize_schedule_day(value: Any) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ToolInputError("payload object is required for save_schedule_day")
-
-    allowed_keys = {"weekday", "is_working", "start_time", "end_time"}
-    if set(value) - allowed_keys:
-        raise ToolInputError("unsupported schedule day fields")
-
-    weekday = value.get("weekday")
-    if isinstance(weekday, bool) or not isinstance(weekday, int) or not 0 <= weekday <= 6:
-        raise ToolInputError("weekday must be an integer from 0 to 6")
-
-    is_working = value.get("is_working")
-    if not isinstance(is_working, bool):
-        raise ToolInputError("is_working must be a boolean")
-
-    start_value = value.get("start_time")
-    end_value = value.get("end_time")
-
-    if not is_working:
-        if start_value is not None or end_value is not None:
-            raise ToolInputError("a non-working day must not include working hours")
-        return {"weekday": weekday, "is_working": False}
-
-    start_time = _normalize_clock(start_value, "start_time")
-    end_time = _normalize_clock(end_value, "end_time")
-    if end_time <= start_time:
-        raise ToolInputError("end_time must be later than start_time")
-
-    return {
-        "weekday": weekday,
-        "is_working": True,
-        "start_time": start_time.isoformat(timespec="minutes"),
-        "end_time": end_time.isoformat(timespec="minutes"),
-    }
-
-
 def _validate_args(
     args: dict[str, Any],
-) -> tuple[str, str | None, dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[str, str | None, dict[str, Any] | None]:
     if not isinstance(args, dict):
         raise ToolInputError("tool arguments must be an object")
 
@@ -193,16 +141,12 @@ def _validate_args(
     if action not in _PAYLOAD_ACTIONS and payload is not None:
         raise ToolInputError("payload is not allowed for this action")
 
-    normalized_schedule_day = None
     if action == "save_master_name":
         payload = _normalize_master_name(payload)
     elif action == "save_master_style":
         payload = _normalize_master_style(payload)
-    elif action == "save_schedule_day":
-        normalized_schedule_day = _normalize_schedule_day(payload)
-        payload = normalized_schedule_day
 
-    return action, section, payload, normalized_schedule_day
+    return action, section, payload
 
 
 def _request_spec(
@@ -383,88 +327,22 @@ def _call_backend(
     }
 
 
-def _existing_schedule_days(state_result: dict[str, Any]) -> list[dict[str, Any]]:
-    result = state_result.get("result")
-    if not isinstance(result, dict):
-        return []
-
-    sections = result.get("sections")
-    if not isinstance(sections, list):
-        return []
-
-    for section in sections:
-        if not isinstance(section, dict) or section.get("section") != "schedule":
-            continue
-        draft_payload = section.get("draft_payload")
-        if not isinstance(draft_payload, dict):
-            return []
-        days = draft_payload.get("days")
-        if not isinstance(days, list):
-            return []
-        return [day for day in days if isinstance(day, dict)]
-    return []
-
-
-def _save_schedule_day(
-    *,
-    schedule_day: dict[str, Any],
-    telegram_user_id: str,
-    api_key: str,
-) -> dict[str, Any]:
-    state_result = _call_backend(
-        action="get_state",
-        telegram_user_id=telegram_user_id,
-        api_key=api_key,
-        method="GET",
-        path="/api/v1/onboarding",
-        json_body=None,
-    )
-    if not state_result.get("ok"):
-        return state_result
-
-    merged_days: dict[int, dict[str, Any]] = {}
-    for day in _existing_schedule_days(state_result):
-        weekday = day.get("weekday")
-        if isinstance(weekday, int) and not isinstance(weekday, bool) and 0 <= weekday <= 6:
-            merged_days[weekday] = day
-    merged_days[schedule_day["weekday"]] = schedule_day
-
-    payload = {"days": [merged_days[key] for key in sorted(merged_days)]}
-    return _call_backend(
-        action="save_schedule_day",
-        telegram_user_id=telegram_user_id,
-        api_key=api_key,
-        method="PUT",
-        path="/api/v1/onboarding/sections/schedule",
-        json_body={"payload": payload},
-    )
-
-
 def nails_onboarding(args: dict[str, Any], **kwargs: Any) -> str:
     del kwargs
 
     try:
-        action, section, payload, schedule_day = _validate_args(args)
+        action, section, payload = _validate_args(args)
         telegram_user_id = _trusted_telegram_user_id()
         api_key = _api_key()
-        if action == "save_schedule_day":
-            if schedule_day is None:
-                raise ToolInputError("schedule day is required")
-            result = _save_schedule_day(
-                schedule_day=schedule_day,
-                telegram_user_id=telegram_user_id,
-                api_key=api_key,
-            )
-        else:
-            method, path, json_body = _request_spec(action, section, payload)
-            result = _call_backend(
-                action=action,
-                telegram_user_id=telegram_user_id,
-                api_key=api_key,
-                method=method,
-                path=path,
-                json_body=json_body,
-            )
+        method, path, json_body = _request_spec(action, section, payload)
+        result = _call_backend(
+            action=action,
+            telegram_user_id=telegram_user_id,
+            api_key=api_key,
+            method=method,
+            path=path,
+            json_body=json_body,
+        )
         return _json_response(result)
     except ToolInputError:
         return _json_response(
