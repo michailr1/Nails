@@ -3,11 +3,15 @@ from __future__ import annotations
 import calendar
 from datetime import date
 from datetime import time as wall_time
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 _ALLOWED_ACTIONS = {
     "resolve_date",
     "list_services",
+    "find_service",
+    "create_service",
+    "update_service",
     "day_view",
     "free_slots",
     "find_client",
@@ -32,6 +36,17 @@ def _normalize_text(value: Any, field_name: str, max_length: int) -> str:
     if not candidate or len(candidate) > max_length:
         raise ToolInputError(f"{field_name} is invalid")
     return candidate
+
+
+def _normalize_optional_text(value: Any, field_name: str, max_length: int) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ToolInputError(f"{field_name} must be a string or null")
+    candidate = " ".join(value.split())
+    if len(candidate) > max_length:
+        raise ToolInputError(f"{field_name} is invalid")
+    return candidate or None
 
 
 def _normalize_day(value: Any) -> str:
@@ -73,6 +88,33 @@ def _bounded_int(value: Any, field_name: str, minimum: int, maximum: int) -> int
         raise ToolInputError(f"{field_name} is invalid")
     if not minimum <= value <= maximum:
         raise ToolInputError(f"{field_name} is invalid")
+    return value
+
+
+def _normalize_price(value: Any) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ToolInputError("price_amount is invalid")
+    try:
+        amount = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise ToolInputError("price_amount is invalid") from exc
+    if not amount.is_finite() or amount < 0 or amount > Decimal("9999999999.99"):
+        raise ToolInputError("price_amount is invalid")
+    if amount.as_tuple().exponent < -2:
+        raise ToolInputError("price_amount must have at most two decimal places")
+    return f"{amount:.2f}"
+
+
+def _normalize_currency(value: Any) -> str:
+    currency = _normalize_text(value, "currency", 3).upper()
+    if len(currency) != 3 or not currency.isascii() or not currency.isalpha():
+        raise ToolInputError("currency is invalid")
+    return currency
+
+
+def _require_bool(value: Any, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ToolInputError(f"{field_name} must be a boolean")
     return value
 
 
@@ -134,6 +176,38 @@ def _normalize_date_resolution(args: dict[str, Any]) -> dict[str, Any]:
         "kind": kind,
         "weekday_iso": weekday_iso,
         "occurrence": occurrence,
+    }
+
+
+def _normalize_service_values(args: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "service_name": _normalize_text(args.get("service_name"), "service_name", 160),
+        "service_description": _normalize_optional_text(
+            args.get("service_description"),
+            "service_description",
+            1000,
+        ),
+        "price_amount": _normalize_price(args.get("price_amount")),
+        "currency": _normalize_currency(args.get("currency")),
+        "duration_minutes": _bounded_int(
+            args.get("duration_minutes"),
+            "duration_minutes",
+            1,
+            1440,
+        ),
+        "buffer_before_minutes": _bounded_int(
+            args.get("buffer_before_minutes"),
+            "buffer_before_minutes",
+            0,
+            1440,
+        ),
+        "buffer_after_minutes": _bounded_int(
+            args.get("buffer_after_minutes"),
+            "buffer_after_minutes",
+            0,
+            1440,
+        ),
+        "is_active": _require_bool(args.get("is_active"), "is_active"),
     }
 
 
@@ -222,8 +296,51 @@ def _validate_args(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         return action, _normalize_date_resolution(args)
 
     if action == "list_services":
-        _require_exact_keys(args, {"action"}, {"action"})
-        return action, {}
+        allowed = {"action", "include_inactive"}
+        _require_exact_keys(args, allowed, {"action"})
+        include_inactive = args.get("include_inactive", False)
+        return action, {
+            "include_inactive": _require_bool(include_inactive, "include_inactive")
+        }
+
+    if action == "find_service":
+        allowed = {"action", "service_name"}
+        _require_exact_keys(args, allowed, allowed)
+        return action, {
+            "service_name": _normalize_text(args.get("service_name"), "service_name", 160)
+        }
+
+    service_fields = {
+        "service_name",
+        "service_description",
+        "price_amount",
+        "currency",
+        "duration_minutes",
+        "buffer_before_minutes",
+        "buffer_after_minutes",
+        "is_active",
+    }
+    if action == "create_service":
+        allowed = {"action", "confirmed", *service_fields}
+        required = allowed - {"service_description"}
+        _require_exact_keys(args, allowed, required)
+        if args.get("confirmed") is not True:
+            raise ToolInputError("explicit confirmation is required")
+        return action, _normalize_service_values(args)
+
+    if action == "update_service":
+        allowed = {"action", "confirmed", "current_service_name", *service_fields}
+        required = allowed - {"service_description"}
+        _require_exact_keys(args, allowed, required)
+        if args.get("confirmed") is not True:
+            raise ToolInputError("explicit confirmation is required")
+        values = _normalize_service_values(args)
+        values["current_service_name"] = _normalize_text(
+            args.get("current_service_name"),
+            "current_service_name",
+            160,
+        )
+        return action, values
 
     if action == "day_view":
         _require_exact_keys(args, {"action", "day"}, {"action", "day"})
@@ -301,6 +418,19 @@ def _validate_args(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     }
 
 
+def _service_json(values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "public_name": values["service_name"],
+        "public_description": values["service_description"],
+        "price_amount": values["price_amount"],
+        "currency": values["currency"],
+        "duration_minutes": values["duration_minutes"],
+        "buffer_before_minutes": values["buffer_before_minutes"],
+        "buffer_after_minutes": values["buffer_after_minutes"],
+        "is_active": values["is_active"],
+    }
+
+
 def _request_spec(
     action: str,
     values: dict[str, Any],
@@ -308,7 +438,25 @@ def _request_spec(
     if action == "resolve_date":
         return "POST", "/api/v1/scheduling/date/resolve", None, values
     if action == "list_services":
-        return "GET", "/api/v1/scheduling/services", None, None
+        return (
+            "GET",
+            "/api/v1/scheduling/services",
+            {"include_inactive": str(values["include_inactive"]).lower()},
+            None,
+        )
+    if action == "find_service":
+        return (
+            "GET",
+            "/api/v1/scheduling/services/exact",
+            {"public_name": values["service_name"]},
+            None,
+        )
+    if action == "create_service":
+        return "POST", "/api/v1/scheduling/services", None, _service_json(values)
+    if action == "update_service":
+        body = _service_json(values)
+        body["current_public_name"] = values["current_service_name"]
+        return "PUT", "/api/v1/scheduling/services", None, body
     if action == "day_view":
         return "GET", "/api/v1/scheduling/day", {"day": values["day"]}, None
     if action == "free_slots":
