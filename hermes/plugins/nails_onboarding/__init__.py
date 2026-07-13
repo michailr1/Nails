@@ -1,17 +1,19 @@
-from .handler import nails_onboarding
 from .schemas import NAILS_ONBOARDING
+from .tools import nails_onboarding
 
 
 def _registered_schema() -> dict:
     schema = dict(NAILS_ONBOARDING)
     schema["description"] = (
         f"{NAILS_ONBOARDING['description']} "
-        "Every successful onboarding state response includes dialogue_guidance. "
-        "Treat authoritative_current_step, do_not_reconfirm_sections, "
-        "confirmation_policy and next_prompt as mandatory. Never reconfirm a section "
-        "listed in do_not_reconfirm_sections, never demand a specific confirmation "
-        "word, and never replace a concrete-date availability question with weekdays "
-        "or a repeating weekly schedule."
+        "For every successful onboarding state response, treat result.current_step as "
+        "the authoritative next section. Inspect each result.sections item before asking "
+        "for confirmation: when is_current_revision_confirmed is true, never ask to "
+        "confirm that section again unless its revision changes. One clear affirmative "
+        "reply such as yes, correct or confirm to the immediately preceding summary is "
+        "enough; never demand a particular word. When current_step is availability, ask "
+        "only for concrete nearby calendar dates or an exact date range. Never ask for "
+        "weekdays alone or a repeating weekly schedule."
     )
     return schema
 
