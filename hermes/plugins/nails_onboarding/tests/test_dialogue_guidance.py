@@ -1,67 +1,32 @@
-"""Regression checks for deterministic onboarding dialogue progression."""
+"""Regression checks for onboarding confirmation and availability prompts."""
 
-import runpy
 from pathlib import Path
 
 
-def _build(result: dict) -> dict:
+def test_registered_schema_uses_authoritative_server_state() -> None:
     plugin_dir = Path(__file__).resolve().parents[1]
-    namespace = runpy.run_path(str(plugin_dir / "guidance.py"))
-    return namespace["build_dialogue_guidance"](result)
+    init_text = (plugin_dir / "__init__.py").read_text(encoding="utf-8")
 
-
-def _section(name: str, confirmed: bool) -> dict:
-    return {
-        "section": name,
-        "is_current_revision_confirmed": confirmed,
-    }
-
-
-def test_buffers_step_never_reconfirms_services() -> None:
-    guidance = _build(
-        {
-            "current_step": "buffers",
-            "sections": [
-                _section("services", True),
-                _section("buffers", False),
-            ],
-        }
+    required_phrases = (
+        "from .tools import nails_onboarding",
+        "result.current_step",
+        "authoritative next section",
+        "is_current_revision_confirmed",
+        "never ask to confirm that section again",
+        "One clear affirmative reply",
+        "never demand a particular word",
+        "current_step is availability",
+        "concrete nearby calendar dates",
+        "Never ask for weekdays alone",
+        "repeating weekly schedule",
     )
 
-    assert guidance["authoritative_current_step"] == "buffers"
-    assert guidance["do_not_reconfirm_sections"] == ["services"]
-    assert "Do not ask to confirm services again" in guidance["next_prompt"]
-    assert "one clear affirmative reply" in guidance["next_prompt"]
+    for phrase in required_phrases:
+        assert phrase in init_text
 
 
-def test_availability_step_forbids_weekday_or_recurring_schedule_question() -> None:
-    guidance = _build(
-        {
-            "current_step": "availability",
-            "sections": [
-                _section("services", True),
-                _section("buffers", True),
-                _section("availability", False),
-            ],
-        }
-    )
+def test_plugin_keeps_original_handler_contract() -> None:
+    plugin_dir = Path(__file__).resolve().parents[1]
 
-    assert guidance["do_not_reconfirm_sections"] == ["services", "buffers"]
-    assert "concrete nearby calendar dates" in guidance["next_prompt"]
-    assert "Never ask for weekdays alone" in guidance["next_prompt"]
-    assert "repeating weekly schedule" in guidance["next_prompt"]
-
-
-def test_confirmation_policy_accepts_normal_affirmative_reply_once() -> None:
-    guidance = _build(
-        {
-            "current_step": "buffers",
-            "sections": [_section("services", True)],
-        }
-    )
-
-    policy = guidance["confirmation_policy"]
-    assert "One explicit confirmation is enough" in policy
-    assert "yes, correct or confirm" in policy
-    assert "Never demand a particular confirmation word" in policy
-    assert "never ask again" in policy
+    assert not (plugin_dir / "handler.py").exists()
+    assert not (plugin_dir / "guidance.py").exists()
