@@ -1,5 +1,5 @@
 name: nails-onboarding
-version: 0.3.0
+version: 0.4.0
 description: Restricted onboarding bridge from the Nails Hermes profile to the local Booking API
 requires_env:
   - name: NAILS_INTERNAL_API_KEY

@@ -17,7 +17,6 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
-    SmallInteger,
     String,
     Text,
     Time,
@@ -56,9 +55,9 @@ class OnboardingStatus(StrEnum):
 
 
 class OnboardingSection(StrEnum):
-    schedule = "schedule"
     services = "services"
     buffers = "buffers"
+    availability = "availability"
     bookings = "bookings"
 
 
@@ -174,43 +173,16 @@ class Booking(TimestampMixin, Base):
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
-class ScheduleRule(TimestampMixin, Base):
-    __tablename__ = "schedule_rules"
-    __table_args__ = (
-        Index("ix_schedule_rules_owner_weekday", "owner_user_id", "weekday"),
-        CheckConstraint("weekday BETWEEN 0 AND 6", name="weekday_range"),
-        CheckConstraint(
-            "(is_working = false) OR "
-            "(start_time IS NOT NULL AND end_time IS NOT NULL AND end_time > start_time)",
-            name="working_interval_valid",
-        ),
-        CheckConstraint(
-            "valid_until IS NULL OR valid_from IS NULL OR valid_until >= valid_from",
-            name="valid_date_range",
-        ),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    owner_user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
-    )
-    weekday: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    start_time: Mapped[time | None] = mapped_column(Time(timezone=False))
-    end_time: Mapped[time | None] = mapped_column(Time(timezone=False))
-    is_working: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    valid_from: Mapped[date | None] = mapped_column(Date)
-    valid_until: Mapped[date | None] = mapped_column(Date)
-
-
-class ScheduleException(TimestampMixin, Base):
-    __tablename__ = "schedule_exceptions"
+class AvailabilityInterval(TimestampMixin, Base):
+    __tablename__ = "availability_intervals"
     __table_args__ = (
         CheckConstraint(
-            "(is_working = false) OR "
-            "(start_time IS NOT NULL AND end_time IS NOT NULL AND end_time > start_time)",
-            name="working_interval_valid",
+            "(is_available = false AND start_time IS NULL AND end_time IS NULL) OR "
+            "(is_available = true AND start_time IS NOT NULL AND end_time IS NOT NULL "
+            "AND end_time > start_time)",
+            name="availability_interval_valid",
         ),
-        Index("ix_schedule_exceptions_owner_day", "owner_user_id", "day"),
+        Index("ix_availability_intervals_owner_day", "owner_user_id", "day"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -220,8 +192,8 @@ class ScheduleException(TimestampMixin, Base):
     day: Mapped[date] = mapped_column(Date, nullable=False)
     start_time: Mapped[time | None] = mapped_column(Time(timezone=False))
     end_time: Mapped[time | None] = mapped_column(Time(timezone=False))
-    is_working: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    reason: Mapped[str | None] = mapped_column(String(255))
+    is_available: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(255))
 
 
 class AuditEvent(Base):
