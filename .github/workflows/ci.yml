@@ -163,7 +163,7 @@ jobs:
         run: |
           flags="$(docker compose --env-file .env.example exec -T nails-db \
             psql -U nails_admin -d nails -Atc \
-            "SELECT CASE WHEN rolsuper THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreatedb THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreaterole THEN 1 ELSE 0 END || '|' || CASE WHEN rolreplication THEN 1 ELSE 0 END FROM pg_roles WHERE rolname = 'nails_app')"
+            "SELECT CASE WHEN rolsuper THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreatedb THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreaterole THEN 1 ELSE 0 END || '|' || CASE WHEN rolreplication THEN 1 ELSE 0 END FROM pg_roles WHERE rolname = 'nails_app'")"
           test "$flags" = "0|0|0|0"
 
       - name: Verify API connects as the restricted role
@@ -183,6 +183,7 @@ jobs:
           docker compose --env-file .env.example exec -T nails-db \
             psql -U nails_admin -d nails -v ON_ERROR_STOP=1 -c \
             "INSERT INTO users (id, telegram_user_id, role, is_active) VALUES ('00000000-0000-4000-8000-000000000003', 900000003, 'admin', true)"
+
           headers=(-H "X-Nails-Internal-Key: example-only-internal-api-key-not-secret" \
                    -H "X-Telegram-User-ID: 900000003" \
                    -H "X-Request-ID: compose-smoke")
