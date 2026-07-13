@@ -2,7 +2,7 @@
 
 Дата актуализации: **13 июля 2026 года**.
 
-Документ разделяет состояние production, Hermes-интеграции и следующих срезов.
+Документ разделяет состояние Git checkout, backend runtime, Hermes runtime и следующие этапы.
 
 ## 1. Сводка
 
@@ -10,40 +10,48 @@
 |---|---|
 | Бизнес-правила MVP | базово согласованы, NAILS-001 ещё открыт |
 | Hermes Telegram Gateway | production, работает |
-| Профиль `nails` | production, безопасный whitelist tools |
+| Профиль `nails` | production, restricted plugin установлен |
 | Backend foundation | NAILS-002A production |
-| Onboarding API | NAILS-002B production, проверен synthetic smoke |
+| Onboarding API | NAILS-002B production |
+| Hermes → Onboarding API | NAILS-002C установлен и проверен synthetic smoke |
+| Реальный Telegram two-user test | остался последний acceptance step |
 | Production migration | `0002 (head)` |
-| Hermes → Onboarding API | код NAILS-002C смержен (PR #14), production deployment впереди |
 | Scheduling happy path | не реализован |
 | Backup/restore-test | автоматизация и restore-test не реализованы |
 | Пилот с мастером | не начат |
 
-## 2. Production
+## 2. Production versions
 
-VPS:
+Host:
 
 ```text
 de.funti.cc
 ```
 
-Repository:
+Repository checkout:
 
 ```text
 /opt/nails/repo
+HEAD = ae761e5042e2af4685df7bdb1de9485e96bdac74
+working tree = clean
 ```
 
-Production environment:
+Commit `ae761e…` включает runtime plugin commit:
 
 ```text
-/opt/nails/.env
+d8264266256f6fc2c53b6eebd3b9bb6bbc722f7c
 ```
 
-Production commit:
+Последующие три commit после `d826426…` меняли только документацию.
+
+Backend containers не пересобирались при NAILS-002C и продолжают проверенный NAILS-002B runtime:
 
 ```text
-40b25ff5fe519eda8602d0eeac7d06a1b191138d
+backend release code = 40b25ff5fe519eda8602d0eeac7d06a1b191138d
+Alembic = 0002 (head)
 ```
+
+## 3. Backend production
 
 Containers:
 
@@ -62,11 +70,10 @@ GET /ready  → {"status":"ready"}
 
 PostgreSQL:
 
-- Alembic `0002 (head)`;
-- PostgreSQL не публикует host port;
-- API подключается как `nails_app`;
+- host port отсутствует;
+- API current user: `nails_app`;
 - role flags: `0|0|0|0` для SUPERUSER/CREATEDB/CREATEROLE/REPLICATION;
-- `nails_admin` используется только для bootstrap и controlled administration.
+- `nails_admin` используется только для bootstrap and controlled administration.
 
 API container:
 
@@ -74,50 +81,11 @@ API container:
 - read-only root filesystem;
 - `CapDrop=["ALL"]`;
 - `no-new-privileges:true`;
-- bind только на loopback.
+- bind only on loopback.
 
-Production authentication setting:
+## 4. NAILS-002B baseline
 
-- создан отдельно на VPS;
-- хранится в `/opt/nails/.env`;
-- файл `600 root:root`;
-- значение не выводилось и не хранится в GitHub.
-
-## 3. Production deployment NAILS-002B
-
-Deployment выполнен с commit:
-
-```text
-40b25ff5fe519eda8602d0eeac7d06a1b191138d
-```
-
-Перед migration создан backup:
-
-```text
-/opt/nails/backups/nails_before_0002_20260712T224019Z.dump
-```
-
-Проверка `pg_restore --list` успешна.
-
-Подтверждено:
-
-- fast-forward `main` и чистое рабочее дерево;
-- migration `0001 → 0002`;
-- repeated `alembic upgrade head` без изменений;
-- наличие `confirmed_payload`, `confirmed_revision`, `revision`;
-- `/health` и `/ready`;
-- restricted DB role и API identity;
-- loopback-only API и отсутствие DB host port;
-- container hardening;
-- Docker daemon не перезапускался;
-- Amnezia container IDs и `StartedAt` не изменились;
-- Hermes, Telegram, Nginx/Traefik и другие проекты не изменялись.
-
-Полный deployment record: [`deployments/2026-07-13-nails-002b.md`](deployments/2026-07-13-nails-002b.md).
-
-## 4. Onboarding API в production
-
-Endpoints:
+Onboarding API supports:
 
 ```text
 POST /api/v1/onboarding/start
@@ -138,46 +106,67 @@ buffers
 bookings
 ```
 
-Поддерживается:
+Verified in production:
 
 - active user and role checks;
 - draft/confirmed separation;
-- revision and confirmed revision;
-- ordered confirmation;
+- revision tracking;
+- ordered confirmations;
 - downstream invalidation;
 - idempotent confirmation/completion;
-- pause/resume;
-- persistence after API restart;
+- pause/resume after API restart;
 - safe audit metadata;
-- JSON-safe validation errors without echoing source payload.
+- synthetic cleanup `0|0|0`.
 
-## 5. Production synthetic smoke
+Deployment record: [`deployments/2026-07-13-nails-002b.md`](deployments/2026-07-13-nails-002b.md).
 
-Проверки завершились результатом:
+## 5. NAILS-002C production installation
+
+Plugin source:
 
 ```text
-NAILS_002B_SMOKE_OK
+/opt/nails/repo/hermes/plugins/nails_onboarding
 ```
 
-Подтверждено:
+Installed to:
 
-- missing/wrong authentication → `401`;
-- unknown/inactive synthetic user → `403`;
-- active synthetic admin starts onboarding;
-- invalid schedule → `422 invalid_onboarding_payload`;
-- services before schedule confirmation → `409 prior_sections_not_confirmed`;
-- schedule revision 1 confirmation idempotent;
-- revision 2 preserves previous effective payload until confirmation;
-- services/buffers/bookings flow works;
-- unknown service reference → `409 unknown_service_reference`;
-- pause survives restart of only `nails-api`;
-- resume works;
-- completion is idempotent;
-- schedule revision 1 confirmation audit count = `1`;
-- completion audit count = `1`;
-- audit privacy leak count = `0`;
-- cleanup result = `0|0|0`;
-- temporary test script removed.
+```text
+/root/.hermes/profiles/nails/plugins/nails_onboarding
+```
+
+Plugin:
+
+```text
+name = nails-onboarding
+version = 0.1.0
+status = enabled
+```
+
+Source and target file hashes matched before activation.
+
+Profile backup:
+
+```text
+/root/.hermes/profiles/nails/backups/nails-002c-20260713T092318Z
+```
+
+Backup mode:
+
+```text
+700 root:root
+```
+
+Profile environment:
+
+- `NAILS_INTERNAL_API_KEY` synchronized from backend runtime setting;
+- values matched;
+- length check passed;
+- value was not printed;
+- `.env` remains `600 root:root`.
+
+SOUL source/target hash matched.
+
+Full record: [`deployments/2026-07-13-nails-002c.md`](deployments/2026-07-13-nails-002c.md).
 
 ## 6. Hermes production
 
@@ -187,17 +176,18 @@ Profile:
 nails
 ```
 
-Allowed Telegram tools:
+Enabled Telegram tools exactly:
 
 ```text
-vision
-image_gen
-tts
-skills
 clarify
+image_gen
+nails_onboarding
+skills
+tts
+vision
 ```
 
-Disabled:
+Forbidden tools remain disabled:
 
 ```text
 terminal
@@ -219,57 +209,125 @@ SSH
 deploy tools
 ```
 
-Built-in memory/user profile отключены. Persistent business state должен поступать только из PostgreSQL через restricted domain tools.
+Built-in memory/user profile remain disabled.
 
 `skills.write_approval=true`.
 
-## 7. Активный этап NAILS-002C
+Gateway restart:
 
-Код плагина реализован и смержен в `main` (PR #14). До production deployment инструмент нельзя считать доступным в Telegram: остаются установка в профиль `nails`, передача authentication setting, добавление toolset `nails_onboarding` в whitelist и production-проверки (identity spoofing, two-user isolation, pause/resume после restart gateway, очистка synthetic data).
+```text
+old PID = 991980
+new PID = 1677495
+state = active (running)
+```
 
-Issue #5 обновлена под фактическое состояние production.
+Recent logs contained no plugin import error, manifest error, missing environment error, polling conflict, traceback or secret leak.
 
-Нужно:
+## 7. Trusted identity and plugin boundary
 
-- один restricted onboarding domain tool;
-- Telegram ID только из trusted gateway context;
-- отсутствие identity argument в model-visible schema;
-- только start/get/save/confirm/pause/resume/complete;
-- отсутствие generic HTTP, arbitrary URL/headers, SQL и filesystem;
-- runtime-generated request ID;
-- безопасное отображение backend errors;
-- owner isolation для двух synthetic users;
-- безопасный отказ unknown/inactive user;
-- работа после restart Hermes;
-- отсутствие authentication setting и bot token в model-visible data и logs.
+Tool:
 
-## 8. Что пока не реализовано
+```text
+nails_onboarding
+```
 
-- Hermes onboarding domain tool;
-- production onboarding skill;
-- automatic user provisioning;
-- materialization confirmed blocks into working services/schedule/bookings;
+Model-visible arguments:
+
+```text
+action
+section
+payload
+```
+
+Identity does not appear in tool schema.
+
+Runtime identity source:
+
+```python
+get_session_env("HERMES_SESSION_PLATFORM", "")
+get_session_env("HERMES_SESSION_USER_ID", "")
+```
+
+Properties:
+
+- fail closed unless platform is `telegram`;
+- Telegram ID cannot be supplied by the model;
+- URL is fixed to `http://127.0.0.1:8210`;
+- headers and request ID are generated inside runtime;
+- generic HTTP is not exposed;
+- backend performs its own active user and role checks;
+- backend `401` and `403` map to the same safe response.
+
+## 8. NAILS-002C production smoke
+
+Result:
+
+```text
+NAILS_002C_PLUGIN_SMOKE_OK
+```
+
+Verified:
+
+- non-Telegram context fails closed;
+- spoofed `telegram_user_id` argument rejected as `invalid_arguments` before network access;
+- unknown and inactive users receive identical `access_denied`;
+- two synthetic users receive distinct onboarding state and drafts;
+- plugin calls production backend through loopback;
+- synthetic cleanup result: `0|0|0`;
+- backend health/readiness remained green;
+- Docker daemon was not restarted;
+- backend containers were not rebuilt;
+- Amnezia IDs and `StartedAt` did not change;
+- default Hermes profile, bot token and allowlist were not changed.
+
+## 9. Production users
+
+Two existing allowlisted Telegram users are provisioned in backend roles without publishing their IDs:
+
+- one `admin`;
+- one `master`.
+
+Telegram allowlist itself was not changed during deployment.
+
+## 10. Remaining NAILS-002C acceptance
+
+Issue #5 remains open only for a short real Telegram test:
+
+1. account A starts onboarding through the Telegram bot;
+2. account B starts independently and cannot see A state;
+3. account A pauses onboarding;
+4. only `hermes-gateway-nails` is restarted;
+5. account A resumes and receives its own preserved state;
+6. a text request to access another user does not change trusted identity;
+7. logs are checked for secrets and disclosure.
+
+After these checks NAILS-002C can be marked production-complete and issue #5 closed.
+
+## 11. What is not implemented yet
+
+- production onboarding conversation skill;
+- materialization of confirmed onboarding blocks into working services/schedule/bookings;
 - availability search;
-- booking creation/transfer/cancellation;
-- automated backups and off-host/off-disk copy;
+- booking create/transfer/cancel;
+- automatic backup schedule;
+- off-host/off-disk backup copy;
 - verified restore;
 - Google Calendar.
 
-## 9. Следующие шаги
+## 12. Next steps
 
-1. Реализовать NAILS-002C через GitHub PR и CI.
-2. Развернуть restricted domain tool без расширения Hermes toolsets.
-3. Выполнить two-user isolation and identity spoofing tests.
-4. Реализовать NAILS-002D production onboarding skill.
-5. Реализовать NAILS-002E materialization and scheduling happy path.
-6. Реализовать NAILS-002F automated backup and verified restore.
-7. Выполнить full synthetic end-to-end test и cleanup.
-8. Только после этого приглашать мастера в limited pilot.
+1. Complete two-account Telegram acceptance for NAILS-002C.
+2. Close issue #5.
+3. Implement NAILS-002D production onboarding skill.
+4. Implement NAILS-002E materialization and scheduling happy path.
+5. Implement NAILS-002F automated backup and verified restore.
+6. Run full synthetic end-to-end test and cleanup.
+7. Start limited pilot only after all safety gates pass.
 
-## 10. Процесс изменений
+## 13. Change process
 
-- code, migrations, tests and docs меняются через GitHub;
-- CI обязателен;
-- VPS-agent deploys only an exact `main` commit;
-- VPS-agent does not edit tracked files and does not push;
-- production errors возвращаются в разработку как диагностика.
+- code, migrations, tests and docs change through GitHub;
+- CI is mandatory;
+- VPS agent deploys exact `main` commits;
+- VPS agent does not edit tracked files and does not push;
+- production errors return to development as diagnostics.
