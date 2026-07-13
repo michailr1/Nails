@@ -1,7 +1,7 @@
 """Regression checks for structured onboarding section payloads."""
 
-from pathlib import Path
 import runpy
+from pathlib import Path
 
 
 def _schema() -> dict:
