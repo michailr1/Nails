@@ -9,7 +9,7 @@
 - [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — проверенная production-топология, пути и правильный способ управления Hermes;
 - [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — точный контракт загрузки profile-local plugins, `plugins.enabled` и Telegram toolsets для установленной версии Hermes.
 
-Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные три operational-документа. Перед подготовкой production diagnostic, deployment, restart или rollback runbook нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации или правила видимости tools по памяти предыдущего чата.
+Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные три operational-документа. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации или правила видимости tools по памяти предыдущего чата.
 
 Если `docs/context/current.md` противоречит свежему merged `main`, production preflight или более узкому deployment report, основной агент обязан остановиться, установить фактическое состояние и обновить handoff через branch → PR → CI → merge.
 
