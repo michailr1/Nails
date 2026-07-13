@@ -236,13 +236,52 @@ def test_repeated_complete_is_idempotent(
 
 
 @pytest.mark.usefixtures("clean_database")
-def test_completed_onboarding_can_repair_missing_materialized_data(
+def test_repeated_complete_preserves_post_onboarding_service_edits(
     client: TestClient,
     create_user: Callable,
     auth_headers: Callable,
 ) -> None:
     user = create_user()
-    headers = auth_headers(request_id="materialize-repair")
+    headers = auth_headers(request_id="materialize-preserve-edit")
+    _complete_onboarding(client, headers)
+
+    with get_session_factory()() as session:
+        service = session.scalar(
+            select(Service).where(Service.owner_user_id == user.id)
+        )
+        assert service is not None
+        service.price_amount = Decimal("3000.00")
+        service.buffer_after_minutes = 30
+        session.commit()
+
+    repeated = client.post("/api/v1/onboarding/complete", headers=headers)
+    assert repeated.status_code == 200, repeated.text
+
+    with get_session_factory()() as session:
+        service = session.scalar(
+            select(Service).where(Service.owner_user_id == user.id)
+        )
+        assert service is not None
+        assert service.price_amount == Decimal("3000.00")
+        assert service.buffer_after_minutes == 30
+        assert session.scalar(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(
+                AuditEvent.owner_user_id == user.id,
+                AuditEvent.action == "onboarding.materialized",
+            )
+        ) == 1
+
+
+@pytest.mark.usefixtures("clean_database")
+def test_legacy_completed_onboarding_without_marker_can_be_materialized(
+    client: TestClient,
+    create_user: Callable,
+    auth_headers: Callable,
+) -> None:
+    user = create_user()
+    headers = auth_headers(request_id="materialize-legacy")
     _complete_onboarding(client, headers)
 
     with get_session_factory()() as session:
@@ -254,6 +293,12 @@ def test_completed_onboarding_can_repair_missing_materialized_data(
         )
         session.execute(delete(Client).where(Client.owner_user_id == user.id))
         session.execute(delete(Service).where(Service.owner_user_id == user.id))
+        session.execute(
+            delete(AuditEvent).where(
+                AuditEvent.owner_user_id == user.id,
+                AuditEvent.action == "onboarding.materialized",
+            )
+        )
         session.commit()
 
     repaired = client.post("/api/v1/onboarding/complete", headers=headers)
@@ -282,7 +327,7 @@ def test_completed_onboarding_can_repair_missing_materialized_data(
                 AuditEvent.owner_user_id == user.id,
                 AuditEvent.action == "onboarding.materialized",
             )
-        ) == 2
+        ) == 1
 
 
 @pytest.mark.usefixtures("clean_database")
