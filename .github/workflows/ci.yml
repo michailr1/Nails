@@ -103,9 +103,53 @@ jobs:
           PYTHONPATH: hermes/plugins
         run: pytest -q hermes/plugins/nails_onboarding/tests
 
+  hermes-scheduling-plugin:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install plugin test dependencies
+        run: python -m pip install --upgrade pip && pip install httpx pytest pyyaml ruff
+
+      - name: Validate scheduling plugin manifest
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          manifest = yaml.safe_load(
+              Path("hermes/plugins/nails_scheduling/plugin.yaml").read_text(encoding="utf-8")
+          )
+          assert manifest["name"] == "nails-scheduling"
+          assert manifest["provides_tools"] == ["nails_scheduling"]
+          required = manifest["requires_env"]
+          assert len(required) == 1
+          assert required[0]["name"] == "NAILS_INTERNAL_API_KEY"
+          assert required[0]["secret"] is True
+          PY
+
+      - name: Ruff scheduling plugin
+        run: >-
+          ruff check
+          --config backend/pyproject.toml
+          hermes/plugins/nails_scheduling
+
+      - name: Test scheduling plugin
+        env:
+          PYTHONPATH: hermes/plugins
+        run: pytest -q hermes/plugins/nails_scheduling/tests
+
   compose-smoke:
     runs-on: ubuntu-latest
-    needs: [backend, hermes-plugin]
+    needs: [backend, hermes-plugin, hermes-scheduling-plugin]
 
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +163,7 @@ jobs:
         run: |
           flags="$(docker compose --env-file .env.example exec -T nails-db \
             psql -U nails_admin -d nails -Atc \
-            "SELECT CASE WHEN rolsuper THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreatedb THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreaterole THEN 1 ELSE 0 END || '|' || CASE WHEN rolreplication THEN 1 ELSE 0 END FROM pg_roles WHERE rolname = 'nails_app'")"
+            "SELECT CASE WHEN rolsuper THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreatedb THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreaterole THEN 1 ELSE 0 END || '|' || CASE WHEN rolreplication THEN 1 ELSE 0 END FROM pg_roles WHERE rolname = 'nails_app')"
           test "$flags" = "0|0|0|0"
 
       - name: Verify API connects as the restricted role
@@ -139,7 +183,6 @@ jobs:
           docker compose --env-file .env.example exec -T nails-db \
             psql -U nails_admin -d nails -v ON_ERROR_STOP=1 -c \
             "INSERT INTO users (id, telegram_user_id, role, is_active) VALUES ('00000000-0000-4000-8000-000000000003', 900000003, 'admin', true)"
-
           headers=(-H "X-Nails-Internal-Key: example-only-internal-api-key-not-secret" \
                    -H "X-Telegram-User-ID: 900000003" \
                    -H "X-Request-ID: compose-smoke")
