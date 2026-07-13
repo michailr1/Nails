@@ -115,8 +115,9 @@ jobs:
               "Alembic: 0006",
               "NAILS_002E4_V3_DEPLOYMENT_OK",
               "Issue #34",
+              "PR #44",
               "Что у меня 18 июля?",
-              "gateway_stop_state=failed",
+              "Старый acceptance приостановлен",
               "V1 или V2",
           )
           for item in required_context:
@@ -128,6 +129,7 @@ jobs:
               "NAILS_002E4_V3_DEPLOYMENT_OK",
               "Issue #34",
               "Telegram happy-path acceptance",
+              "candidate `0.2.0`",
           )
           for item in required_status:
               assert item in status, f"missing current status fact: {item}"
