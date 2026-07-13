@@ -21,24 +21,57 @@ def test_onboarding_skill_preserves_dialogue_order_and_presentation() -> None:
         "не спрашивай на этом шаге про уборку",
         "только после успешного подтверждения `services`",
         "Этот блок обязателен после подтверждения списка услуг",
-        "не объединяй вопрос о перерывах с вопросом о следующей услуге",
+        "Не объединяй вопрос о перерывах с вопросом о следующей услуге",
         "Нельзя говорить «цена — если хотите»",
         "цену `2 500 ₽`",
-        "если мастер назвала только число",
+        "Если мастер назвала только число",
         "Думаю… (nails_onboarding)",
+        "Думаю… (nails_scheduling)",
         "один раз перед всей группой последовательных вызовов",
         "не добавляй эмодзи, шестерёнку",
-        "не добавляй день недели",
-        "никогда не вычисляй и не угадывай день недели по памяти",
-        "успешный `complete` materializes",
-        "не говори «можете добавлять записи»",
-        "не говори «можете менять настройки»",
-        "не обещай поиск свободных окон",
-        "Создание новых записей, изменение рабочих данных и поиск свободных окон",
+        "Не добавляй день недели",
+        "Никогда не вычисляй и не угадывай день недели по памяти",
+        "Успешный `complete` materializes",
+        "nails_scheduling action=resolve_date",
+        "не предлагай перезапуск настройки для изменения графика",
+        "update_availability",
+        "повторного прохождения настройки",
     )
 
+    lower_text = text.casefold()
     for phrase in required_phrases:
-        assert phrase in text
+        assert phrase.casefold() in lower_text
+
+
+def test_onboarding_skill_routes_post_complete_calendar_changes_to_scheduling() -> None:
+    skill_path = (
+        Path(__file__).resolve().parents[3]
+        / "skills"
+        / "nails-onboarding"
+        / "SKILL.md"
+    )
+    text = skill_path.read_text(encoding="utf-8")
+
+    required = (
+        "рабочим источником истины является scheduling-календарь",
+        "для просмотра дня, поиска окон, изменения конкретных рабочих дат",
+        "«убрать ошибочную дату» означает состояние `unknown`",
+        "повторный onboarding нужен только если пользователь явно хочет",
+    )
+    # The first concept is expressed in the scheduling skill; onboarding must still contain
+    # the three direct routing rules below.
+    assert required[1] in text
+    assert required[2] in text
+    assert required[3] in text
+
+    forbidden = (
+        "для изменения графика нужно заново пройти onboarding",
+        "рабочее управление календарём — следующий модуль",
+        "изменение рабочих данных и поиск свободных окон станут доступны",
+        "не говори «можете менять настройки»",
+    )
+    for phrase in forbidden:
+        assert phrase not in text
 
 
 def test_onboarding_skill_no_longer_contains_obsolete_materialization_claims() -> None:
