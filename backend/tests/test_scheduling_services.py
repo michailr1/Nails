@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 SERVICE_PAYLOAD = {
     "public_name": "Маникюр",
-    "public_description": "Покрытие и обработка",
+    "public_description": None,
     "price_amount": "2500.00",
     "currency": "RUB",
     "duration_minutes": 120,
