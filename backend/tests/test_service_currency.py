@@ -1,3 +1,5 @@
+"""Contract tests for the default and explicitly supplied service currencies."""
+
 from collections.abc import Callable
 
 import pytest
