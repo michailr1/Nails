@@ -66,6 +66,12 @@ jobs:
           ):
               assert phrase in deploy, f"deploy.sh lost mandatory safeguard: {phrase}"
 
+          assert deploy.count("< /dev/null") == 2, (
+              "every compose exec in deploy.sh must have isolated stdin"
+          )
+          assert "compose exec -T nails-db" in deploy
+          assert "compose exec -T nails-api" in deploy
+
           assert deploy.index('compose build --build-arg GIT_SHA="$RELEASE_SHA"') < deploy.index(
               'IMAGE_RETAGGED="true"'
           )
