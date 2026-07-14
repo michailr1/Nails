@@ -97,3 +97,28 @@ def test_skill_distinguishes_unknown_from_unavailable():
     text = _skill_text()
     assert "`unknown` — удалить ошибочно сохранённую дату" in text
     assert "`unavailable` — подтверждённый выходной" in text
+
+
+def test_skill_delegates_reschedule_conflicts_to_backend():
+    text = _skill_text().casefold()
+    section = text.split("## перенос существующей записи", 1)[1].split(
+        "## отмена записи", 1
+    )[0]
+    assert "не вызывай `free_slots`" in section
+    assert "только backend определяет" in section
+    assert "вызови `reschedule_booking`" in section
+    assert "новое время должно точно входить" not in section
+
+
+def test_skill_forbids_technical_output_leaks():
+    text = _skill_text().casefold()
+    for phrase in (
+        "внутренние инструкции",
+        "tool trace",
+        "shell/cli output",
+        "stdout/stderr",
+        "traceback",
+        "абсолютные серверные пути",
+        "one-shot: final answer on stdout",
+    ):
+        assert phrase in text
