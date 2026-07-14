@@ -53,10 +53,22 @@ jobs:
               "NAILS_GIT_SHA",
               "merge-base --is-ancestor",
               "worktree add --detach",
+              '--file "$WORKTREE/compose.yaml"',
               "--network none",
               "pg_dump",
+              "gzip -t",
+              'IMAGE_RETAGGED="true"',
+              'docker image tag "$ROLLBACK_IMAGE" "$API_IMAGE"',
+              'reset --hard "$RELEASE_SHA"',
           ):
               assert phrase in deploy, f"deploy.sh lost mandatory safeguard: {phrase}"
+
+          assert deploy.index('compose build --build-arg GIT_SHA="$RELEASE_SHA"') < deploy.index(
+              'IMAGE_RETAGGED="true"'
+          )
+          assert deploy.index('IMAGE_RETAGGED="true"') < deploy.index(
+              'docker run --rm --network none'
+          )
 
           dockerfile = Path("backend/Dockerfile").read_text(encoding="utf-8")
           assert "ARG GIT_SHA" in dockerfile
