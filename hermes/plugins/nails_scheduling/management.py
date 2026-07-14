@@ -35,10 +35,15 @@ def _booking_mutation(
     )
     if not day_response.get("ok"):
         return day_response
+
     try:
         result = day_response["result"]
         timezone_name = result["timezone"]
-        requested = _local_datetime(values["day"], values["start_time"], timezone_name)
+        requested = _local_datetime(
+            values["day"],
+            values["start_time"],
+            timezone_name,
+        )
         matches = [
             booking
             for booking in result["bookings"]
@@ -47,16 +52,16 @@ def _booking_mutation(
             and _parse_backend_datetime(booking.get("starts_at")) == requested
         ]
         if len(matches) != 1:
-            return _error(
-                "booking_not_found" if not matches else "booking_ambiguous",
-                "The booking could not be resolved uniquely.",
-            )
+            code = "booking_not_found" if not matches else "booking_ambiguous"
+            return _error(code, "The booking could not be resolved uniquely.")
+
         body = {
             "client_public_name": values["client_public_name"],
             "service_name": values["service_name"],
             "starts_at": requested.isoformat(),
         }
         path = "/api/v1/scheduling/bookings/cancel"
+
         if action == "reschedule_booking":
             new_start = _local_datetime(
                 values["new_day"],
@@ -69,14 +74,23 @@ def _booking_mutation(
                 api_key=api_key,
                 method="GET",
                 path="/api/v1/scheduling/slots",
-                params={"day": values["new_day"], "service_name": values["service_name"]},
+                params={
+                    "day": values["new_day"],
+                    "service_name": values["service_name"],
+                },
                 json_body=None,
             )
             if not slots.get("ok"):
                 return slots
-            free = [_parse_backend_datetime(item) for item in slots["result"]["starts_at"]]
+            free = [
+                _parse_backend_datetime(item)
+                for item in slots["result"]["starts_at"]
+            ]
             if new_start not in free:
-                return _error("slot_unavailable", "The selected slot is no longer available.")
+                return _error(
+                    "slot_unavailable",
+                    "The selected slot is no longer available.",
+                )
             body["new_starts_at"] = new_start.isoformat()
             path = "/api/v1/scheduling/bookings/reschedule"
     except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError):
@@ -84,6 +98,7 @@ def _booking_mutation(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
+
     return _call_backend(
         action=action,
         telegram_user_id=telegram_user_id,
