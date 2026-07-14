@@ -1,5 +1,4 @@
 import pytest
-
 from nails_scheduling import operations
 from nails_scheduling.presenters import _sanitize_success
 
