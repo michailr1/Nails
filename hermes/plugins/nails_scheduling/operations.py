@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from datetime import date, datetime
 from datetime import time as wall_time
 from typing import Any
@@ -8,24 +7,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .presenters import _normalized_lookup, _parse_backend_datetime
 from .transport import _call_backend, _error
-
-
-def _idempotency_key(
-    telegram_user_id: str,
-    client_public_name: str,
-    service_name: str,
-    starts_at: str,
-) -> str:
-    canonical = "\x1f".join(
-        (
-            telegram_user_id,
-            _normalized_lookup(client_public_name),
-            _normalized_lookup(service_name),
-            starts_at,
-        )
-    )
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    return f"nails-scheduling-v1-{digest}"
 
 
 def _matching_existing_booking(
@@ -244,12 +225,6 @@ def _create_booking(
             "client_public_name": values["client_public_name"],
             "service_name": values["service_name"],
             "starts_at": starts_at,
-            "idempotency_key": _idempotency_key(
-                telegram_user_id,
-                values["client_public_name"],
-                values["service_name"],
-                starts_at,
-            ),
         },
     )
 
