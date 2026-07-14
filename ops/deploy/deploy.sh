@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 # Nails — единственный постоянный deploy-скрипт (см. docs/decisions/ADR-003).
 #
-# Использование: bash ops/deploy/deploy.sh <точный commit SHA из origin/main>
+# Использование:
+#   merged main: deploy.sh <exact-sha>
+#   open PR:     NAILS_RELEASE_REF=origin/pr/<number> deploy.sh <pr-head-sha>
+#   rollback:    NAILS_RELEASE_REF=rollback deploy.sh <previous-sha>
 #
-# Релиз всегда собирается из отдельного git worktree. SHA зашивается в образ и
-# проверяется до остановки runtime и после запуска нового контейнера.
+# PR candidate проверяется до merge и не меняет production checkout.
 
 set -Eeuo pipefail
 umask 077
 
-RELEASE_SHA="${1:?usage: deploy.sh <exact-commit-sha-from-origin/main>}"
-[[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-  echo "ERROR: release must be an exact 40-character commit SHA" >&2
+die() {
+  printf 'PRECONDITION_FAILED: %s\n' "$*" >&2
   exit 1
 }
+
+[[ -f "${BASH_SOURCE[0]}" ]] || die "deploy.sh must be executed from a regular file, not stdin or a pipe"
+
+RELEASE_SHA="${1:?usage: deploy.sh <exact-commit-sha>}"
+[[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || die "release must be an exact 40-character commit SHA"
+
+SOURCE_REF="${NAILS_RELEASE_REF:-origin/main}"
+[[ "$SOURCE_REF" == "origin/main" || "$SOURCE_REF" == "rollback" || "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]] || \
+  die "NAILS_RELEASE_REF must be origin/main, rollback or origin/pr/NUMBER"
 
 REPO="/opt/nails/repo"
 BACKEND_ENV="/opt/nails/.env"
@@ -94,20 +104,30 @@ wait_ready() {
 }
 
 log "0. Предусловия"
-[[ "$(id -u)" -eq 0 ]]
-[[ "$(hostname -f)" == "de.funti.cc" ]]
-[[ -f "$BACKEND_ENV" ]]
-[[ "$(git -C "$REPO" branch --show-current)" == "main" ]]
-[[ -z "$(git -C "$REPO" status --porcelain)" ]]
-git -C "$REPO" fetch origin main
-[[ "$(git -C "$REPO" rev-parse origin/main)" =~ ^[0-9a-f]{40}$ ]]
+[[ "$(id -u)" -eq 0 ]] || die "root is required"
+[[ "$(hostname -f)" == "de.funti.cc" ]] || die "unexpected hostname"
+[[ -f "$BACKEND_ENV" ]] || die "backend env file is missing"
+[[ "$(git -C "$REPO" branch --show-current)" == "main" ]] || die "production checkout is not on main"
+[[ -z "$(git -C "$REPO" status --porcelain)" ]] || die "production checkout is not clean"
+
+if [[ "$SOURCE_REF" == "origin/main" ]]; then
+  git -C "$REPO" fetch origin main
+fi
+
+git -C "$REPO" worktree prune --expire now
 git -C "$REPO" cat-file -e "${RELEASE_SHA}^{commit}"
-git -C "$REPO" merge-base --is-ancestor "$RELEASE_SHA" origin/main || {
-  echo "ERROR: SHA is not on origin/main" >&2
-  exit 1
-}
 PREV_SHA="$(git -C "$REPO" rev-parse HEAD)"
-printf 'prev_sha=%s release_sha=%s\n' "$PREV_SHA" "$RELEASE_SHA"
+
+if [[ "$SOURCE_REF" == "rollback" ]]; then
+  git -C "$REPO" merge-base --is-ancestor "$RELEASE_SHA" "$PREV_SHA" || \
+    die "rollback SHA is not an ancestor of the current production checkout"
+else
+  [[ "$(git -C "$REPO" rev-parse "$SOURCE_REF")" == "$RELEASE_SHA" ]] || \
+    die "source ref does not equal the approved release SHA"
+  git -C "$REPO" merge-base --is-ancestor "$PREV_SHA" "$RELEASE_SHA" || \
+    die "release SHA is not based on the current production checkout"
+fi
+printf 'prev_sha=%s release_sha=%s source_ref=%s\n' "$PREV_SHA" "$RELEASE_SHA" "$SOURCE_REF"
 
 log "1. Точное дерево релиза"
 git -C "$REPO" worktree add --detach "$WORKTREE" "$RELEASE_SHA" >/dev/null
@@ -187,19 +207,32 @@ for _ in $(seq 1 60); do
 done
 user_systemctl is-active --quiet "$GATEWAY"
 
-log "8. Фиксация checkout репозитория"
+log "8. Фиксация результата"
 git -C "$REPO" worktree remove --force "$WORKTREE"
-git -C "$REPO" checkout main >/dev/null 2>&1
-if git -C "$REPO" merge-base --is-ancestor "$PREV_SHA" "$RELEASE_SHA"; then
-  git -C "$REPO" merge --ff-only "$RELEASE_SHA" >/dev/null
+
+if [[ "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]]; then
+  [[ "$(git -C "$REPO" rev-parse HEAD)" == "$PREV_SHA" ]] || \
+    die "candidate deployment changed production checkout"
+  [[ -z "$(git -C "$REPO" status --porcelain)" ]] || \
+    die "candidate deployment dirtied production checkout"
 else
-  git -C "$REPO" reset --hard "$RELEASE_SHA" >/dev/null
+  git -C "$REPO" checkout main >/dev/null 2>&1
+  if git -C "$REPO" merge-base --is-ancestor "$PREV_SHA" "$RELEASE_SHA"; then
+    git -C "$REPO" merge --ff-only "$RELEASE_SHA" >/dev/null
+  else
+    git -C "$REPO" reset --hard "$RELEASE_SHA" >/dev/null
+  fi
+  [[ "$(git -C "$REPO" rev-parse HEAD)" == "$RELEASE_SHA" ]]
+  [[ -z "$(git -C "$REPO" status --porcelain)" ]]
 fi
-[[ "$(git -C "$REPO" rev-parse HEAD)" == "$RELEASE_SHA" ]]
-[[ -z "$(git -C "$REPO" status --porcelain)" ]]
 
 docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
 trap - ERR
 
-printf 'DEPLOY_OK=true sha=%s prev_sha=%s db_backup=%s\n' \
-  "$RELEASE_SHA" "$PREV_SHA" "$DB_BACKUP"
+if [[ "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]]; then
+  printf 'CANDIDATE_DEPLOY_OK=true candidate_sha=%s baseline_sha=%s running_sha=%s db_backup=%s\n' \
+    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_SHA" "$DB_BACKUP"
+else
+  printf 'DEPLOY_OK=true sha=%s prev_sha=%s db_backup=%s\n' \
+    "$RELEASE_SHA" "$PREV_SHA" "$DB_BACKUP"
+fi

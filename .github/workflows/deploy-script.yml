@@ -34,12 +34,10 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          # ADR-003: релиз параметризуется SHA; одноразовые релизные
-          # runbook'и запрещены. E6 — последний, удаляется после выката.
           allowed = {
               "deploy.sh",
-              "nails-002e5-date-availability.sh",  # временно: сохраняет E6-историю
-              "nails-002e6-combined-operations.sh",  # активный последний runbook
+              "nails-002e5-date-availability.sh",  # historical, not executable
+              "nails-002e6-combined-operations.sh",  # historical, not executable
           }
           entrypoints = {p.name for p in Path("ops/deploy").glob("*.sh")}
           unexpected = entrypoints - allowed
@@ -50,6 +48,13 @@ jobs:
 
           deploy = Path("ops/deploy/deploy.sh").read_text(encoding="utf-8")
           for phrase in (
+              '[[ -f "${BASH_SOURCE[0]}" ]]',
+              'SOURCE_REF="${NAILS_RELEASE_REF:-origin/main}"',
+              "origin/pr/[0-9]+",
+              '"rollback"',
+              "rollback SHA is not an ancestor",
+              "CANDIDATE_DEPLOY_OK=true",
+              "candidate deployment changed production checkout",
               "NAILS_GIT_SHA",
               "merge-base --is-ancestor",
               "worktree add --detach",
@@ -69,9 +74,9 @@ jobs:
           assert deploy.count("< /dev/null") == 2, (
               "every compose exec in deploy.sh must have isolated stdin"
           )
-          assert "compose exec -T nails-db" in deploy
-          assert "compose exec -T nails-api" in deploy
-
+          assert deploy.count('git -C "$REPO" merge --ff-only') == 1, (
+              "candidate flow must not add another checkout mutation"
+          )
           assert deploy.index('compose build --build-arg GIT_SHA="$RELEASE_SHA"') < deploy.index(
               'IMAGE_RETAGGED="true"'
           )

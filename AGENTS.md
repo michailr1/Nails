@@ -12,7 +12,7 @@
 
 Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные три operational-документа. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации или правила видимости tools по памяти предыдущего чата.
 
-Если `docs/context/current.md` противоречит свежему merged `main`, production preflight или более узкому deployment report, основной агент обязан остановиться, установить фактическое состояние и обновить handoff через branch → PR → CI → merge.
+Если `docs/context/current.md` противоречит свежему GitHub, production preflight или более узкому deployment report, основной агент обязан остановиться, установить фактическое состояние и обновить handoff через branch → PR → CI → candidate validation → merge.
 
 ## Неизменяемая граница ответственности
 
@@ -25,9 +25,9 @@
 - пишет, изменяет и удаляет код, тесты, миграции и документацию;
 - создаёт ветки, коммиты, issues и pull requests;
 - проводит review, исправляет замечания и проверяет CI;
-- выполняет merge и другие изменения в GitHub;
-- формирует точный deployment/diagnostic/rollback runbook;
-- оценивает отчёт VPS-агента и решает, что делать дальше;
+- оценивает candidate report и выполняет fast-forward merge проверенного PR-head SHA;
+- выполняет другие изменения в GitHub;
+- формирует точный candidate/finalize/rollback runbook;
 - закрывает issue только после требуемой production-приёмки.
 
 ### VPS-агент
@@ -37,10 +37,11 @@ VPS-агент — **только исполнитель заранее подг
 Ему разрешено:
 
 - выполнять точные команды из runbook без изменения их смысла;
-- делать указанные backup, deployment, restart, verification и rollback;
+- делать указанные backup, candidate deployment, restart, verification и rollback;
 - выполнять указанные диагностические проверки;
-- копировать в runtime уже проверенные release-файлы;
-- обновлять локальный checkout только через указанный `git fetch` и `git merge --ff-only` до заранее утверждённого точного SHA;
+- копировать в runtime уже проверенные candidate-файлы;
+- до merge fetch точного PR head в заранее указанную `origin/pr/<number>` ref без изменения checkout;
+- после GitHub merge обновлять локальный checkout только через указанный `git merge --ff-only` до того же проверенного SHA;
 - возвращать фактический отчёт без секретов.
 
 VPS-агенту запрещено:
@@ -61,27 +62,31 @@ VPS-агенту запрещено:
 1. остановить дальнейшие действия;
 2. выполнить только заранее описанный rollback, если он уже предусмотрен runbook;
 3. сохранить диагностику;
-4. сообщить точный этап, команду/проверку, ошибку, HEAD, состояние сервисов, путь backup и результат rollback;
+4. сообщить точный этап, команду/проверку, ошибку, checkout SHA, running SHA, состояние сервисов, путь backup и результат rollback;
 5. **не исправлять проблему самостоятельно**.
 
-Исправление всегда возвращается основному агенту ChatGPT и проходит обычный цикл: код → тесты → PR → CI → merge → новый runbook.
+Исправление всегда возвращается основному агенту ChatGPT и проходит обычный цикл: код → тесты → PR → CI → candidate validation → merge → finalize.
 
 ## Git и GitHub
 
-`git fetch`, `git merge --ff-only` и явно описанный rollback локального checkout являются операциями deployment, а не разработкой. Они допустимы VPS-агенту только внутри точного runbook и только для заранее утверждённого SHA.
+До merge VPS-агент может fetch точного PR head и выполнить candidate deployment. Candidate SHA должен совпадать с заранее указанной ref, а production checkout обязан остаться на исходном SHA.
+
+После успешного candidate report основной агент fast-forward’ом перемещает GitHub `main` **на тот же проверенный PR-head SHA**. Squash, rebase и merge commit для production release запрещены, потому что создают новый непроверенный SHA. Если `main` изменился, merge останавливается и candidate проходит rollback либо повторную validation после rebase.
+
+После GitHub fast-forward VPS-агент только проверяет `origin/main`, running `NAILS_GIT_SHA`, health/gateway и делает локальный `git merge --ff-only`.
 
 Любое создание или изменение содержимого GitHub остаётся исключительной ответственностью основного агента ChatGPT.
 
 ## Обязательный порядок работы
 
-1. Основной агент читает этот файл, `docs/context/current.md`, контракт ответственности, production infrastructure source of truth и Hermes plugin runtime contract.
-2. Основной агент проверяет актуальный `main`, active issue и production baseline.
+1. Основной агент читает этот файл и operational source of truth.
+2. Основной агент проверяет актуальный `main`, active issue и production state.
 3. Основной агент создаёт ветку и вносит изменения.
-4. Основной агент запускает review и CI.
-5. Основной агент выполняет merge.
-6. Основной агент выдаёт VPS-агенту точный runbook с ожидаемыми SHA и rollback.
-7. VPS-агент только исполняет runbook и возвращает отчёт.
-8. Основной агент анализирует отчёт и проводит пользовательскую приёмку.
+4. Основной агент создаёт PR, проводит review и проверяет CI.
+5. VPS-агент выполняет candidate deployment точного PR-head SHA, не меняя production checkout.
+6. Основной агент анализирует отчёт и только при успехе fast-forward’ом мержит тот же SHA в GitHub `main`.
+7. VPS-агент выполняет finalize локального checkout на уже смерженный SHA.
+8. Основной агент проводит пользовательскую приёмку.
 9. Основной агент обновляет `docs/context/current.md` после значимого production milestone или изменения точки продолжения.
 10. Issue закрывает основной агент после выполнения всех критериев.
 
