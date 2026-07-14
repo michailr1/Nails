@@ -5,13 +5,12 @@ import logging
 import os
 from typing import Any
 
-from .operations import _create_booking, _create_client
+from .operations import _booking_mutation, _create_booking, _create_client
 from .presenters import _sanitize_success
 from .transport import _call_backend, _error
 from .validation import ToolInputError, _request_spec, _validate_args
 
 logger = logging.getLogger(__name__)
-
 _API_KEY_ENV = "NAILS_INTERNAL_API_KEY"
 
 
@@ -52,6 +51,7 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
         action, values = _validate_args(args)
         telegram_user_id = _trusted_telegram_user_id()
         api_key = _api_key()
+
         if action == "create_client":
             response = _create_client(
                 values,
@@ -60,6 +60,13 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             )
         elif action == "create_booking":
             response = _create_booking(
+                values,
+                telegram_user_id=telegram_user_id,
+                api_key=api_key,
+            )
+        elif action in {"reschedule_booking", "cancel_booking"}:
+            response = _booking_mutation(
+                action,
                 values,
                 telegram_user_id=telegram_user_id,
                 api_key=api_key,
@@ -75,8 +82,10 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 params=params,
                 json_body=json_body,
             )
+
         if not response.get("ok"):
             return _json_response(response)
+
         try:
             safe_result = _sanitize_success(action, response.get("result"))
         except (KeyError, TypeError, ValueError):
@@ -86,7 +95,10 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                     "Scheduling service returned an invalid response.",
                 )
             )
-        return _json_response({"ok": True, "action": action, "result": safe_result})
+
+        return _json_response(
+            {"ok": True, "action": action, "result": safe_result}
+        )
     except ToolInputError:
         return _json_response(
             _error(

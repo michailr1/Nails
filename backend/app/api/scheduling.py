@@ -25,12 +25,23 @@ from app.schemas.scheduling import (
     ServiceReplaceRequest,
     ServiceReplaceResponse,
 )
+from app.schemas.scheduling_management import (
+    BookingCancelRequest,
+    BookingMutationResponse,
+    BookingRescheduleRequest,
+    ClientCandidateListResponse,
+)
 from app.services.scheduling_availability import replace_availability
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_clients import create_or_reuse_client
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_dates import resolve_date
 from app.services.scheduling_lookup import find_client_exact
+from app.services.scheduling_management import (
+    cancel_booking,
+    find_client_candidates,
+    reschedule_booking,
+)
 from app.services.scheduling_queries import find_free_slots, get_day_view
 from app.services.scheduling_services import (
     create_service,
@@ -119,6 +130,15 @@ def client_exact(
     return find_client_exact(session, identity, public_name)
 
 
+@router.get("/clients/candidates", response_model=ClientCandidateListResponse)
+def client_candidates(
+    session: SessionDependency,
+    identity: IdentityDependency,
+    public_name: Annotated[str, Query(min_length=1, max_length=160)],
+) -> ClientCandidateListResponse:
+    return find_client_candidates(session, identity, public_name)
+
+
 @router.post("/clients", response_model=ClientCreateResponse)
 def create_client(
     body: ClientCreateRequest,
@@ -173,5 +193,29 @@ def booking_create(
 ) -> BookingCreateResponse:
     try:
         return create_booking(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
+@router.put("/bookings/reschedule", response_model=BookingMutationResponse)
+def booking_reschedule(
+    body: BookingRescheduleRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> BookingMutationResponse:
+    try:
+        return reschedule_booking(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
+@router.put("/bookings/cancel", response_model=BookingMutationResponse)
+def booking_cancel(
+    body: BookingCancelRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> BookingMutationResponse:
+    try:
+        return cancel_booking(session, identity, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
