@@ -1,5 +1,10 @@
 FROM python:3.12-slim AS runtime
 
+# Точный commit релиза; зашивается deploy-скриптом, чтобы работающий код
+# можно было проверить на тождество релизу (ADR-003).
+ARG GIT_SHA=unknown
+ENV NAILS_GIT_SHA=${GIT_SHA}
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1

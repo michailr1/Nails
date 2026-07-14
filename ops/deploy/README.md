@@ -1,6 +1,20 @@
-# Production deployment runbooks
+# Production deployment
 
-These scripts are authored, reviewed and merged by the main ChatGPT agent. The VPS agent never writes or edits them and never substitutes its own commands.
+## Постоянный deploy-скрипт (ADR-003)
+
+Начиная с завершения NAILS-002E6 все деплои выполняются одним постоянным скриптом:
+
+```text
+ops/deploy/deploy.sh <точный release SHA из origin/main>
+```
+
+Скрипт: проверяет, что SHA принадлежит `origin/main`; собирает образ из точного дерева релиза (`git worktree`); зашивает SHA в образ и проверяет собранный образ до остановки runtime; делает бэкап базы и runtime; перезапускает только `nails-api`; устанавливает оба плагина и оба skill из релизного дерева; при любой ошибке автоматически откатывает образ, плагины, skills и gateway. Rollback на предыдущий релиз — это повторный запуск `deploy.sh` с предыдущим SHA.
+
+Одноразовые релизные runbook'и запрещены (см. [ADR-003](../../docs/decisions/ADR-003-single-permanent-deploy.md) и [engineering-principles](../../docs/operations/engineering-principles.md)); CI-контракт `deploy-script.yml` не пропускает новые entrypoint'ы в `ops/deploy/`.
+
+## Runbook'и (исторический механизм)
+
+These scripts are authored, reviewed and merged by the main ChatGPT agent. The VPS agent never writes or edits them and never substitutes its own commands. NAILS-002E6 — последний одноразовый runbook: он завершает уже начатый релиз, после чего удаляется вместе со своими библиотеками.
 
 Before any production runbook, read:
 
@@ -133,55 +147,22 @@ calendar_data_changed_by_deployment=false
 manual_sql_executed=false
 ```
 
-## NAILS-002E4 V3 — successful historical deployment
+## NAILS-002E4 — историческая серия (файлы удалены)
 
-Successful runbook:
+Runbook'и E4 (V1, V2, V3) удалены из рабочего дерева по ADR-003; их полный текст доступен в git history до коммита удаления. Производственные факты сохраняются:
 
-```text
-ops/deploy/nails-002e4-v3.sh
-```
+- V3 успешно развёрнут, достигнут маркер `NAILS_002E4_V3_DEPLOYMENT_OK`; он установил оба плагина, сохранил backend/Docker и закрепил правильные границы root user-level systemd и проверки плагинов (`discover_plugins()` без `force=True`, сравнение toolsets по составу, а не порядку).
+- `nails-002e4.sh` и `nails-002e4-v2.sh` must **not** be executed again: V1 предполагал system-level systemd и вымышленный формат allowlist; V2 имел дефектную финальную read-only проверку (сравнение toolsets по порядку, `discover_plugins(force=True)`), его маркер `NAILS_002E4_DEPLOYMENT_OK` не был достигнут, rollback вернул gateway в active.
 
-Success marker reached in production:
-
-```text
-NAILS_002E4_V3_DEPLOYMENT_OK
-```
-
-V3 installed both Nails plugins, preserved backend/Docker and established the correct root user-level systemd and plugin verification boundaries. Its verification used `discover_plugins()` and never with `force=True`; Telegram toolsets were compared by exact membership, not iteration order.
-
-## NAILS-002E4 V2 — permanently unavailable
-
-`ops/deploy/nails-002e4-v2.sh` must **not** be executed again.
-
-V2 atomically updates structured YAML and historically appended `nails-scheduling` to `plugins.enabled` and `nails_scheduling` to `platform_toolsets.telegram`, but its final read-only assertion was defective. The unused marker was:
-
-```text
-NAILS_002E4_DEPLOYMENT_OK
-```
-
-It compared unordered toolsets by list order and called `discover_plugins(force=True)`. Rollback restored repository/runtime/config and returned the gateway to active:
-
-```text
-ROLLBACK_GATEWAY_STATE=active
-```
-
-This runbook is not authorized merely because it exists on a branch.
-
-## NAILS-002E4 V1 — permanently unavailable
-
-`ops/deploy/nails-002e4.sh` must **not** be executed again.
-
-It assumed system-level systemd and a fabricated comma-separated allowlist. The authoritative config is:
+Авторитетный конфиг и правильная граница gateway:
 
 ```text
 /root/.hermes/profiles/nails/config.yaml
 ```
-
-Correct gateway boundary:
 
 ```bash
 XDG_RUNTIME_DIR=/run/user/0 systemctl --user \
   <status|show|stop|start|restart> hermes-gateway-nails.service
 ```
 
-Old runbooks remain in Git only for auditability. Their presence never authorizes execution.
+Старые runbook'и живут только в git history. Наличие скрипта в ветке никогда не разрешает его выполнение.

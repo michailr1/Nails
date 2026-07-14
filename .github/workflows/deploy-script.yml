@@ -1,0 +1,69 @@
+name: Permanent deploy script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/deploy/**"
+      - "backend/Dockerfile"
+      - ".github/workflows/deploy-script.yml"
+  pull_request:
+    paths:
+      - "ops/deploy/**"
+      - "backend/Dockerfile"
+      - ".github/workflows/deploy-script.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Bash syntax
+        run: bash -n ops/deploy/deploy.sh
+
+      - name: ShellCheck
+        run: shellcheck --severity=warning ops/deploy/deploy.sh
+
+      - name: Enforce ADR-003 single permanent entrypoint
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # ADR-003: релиз параметризуется SHA; одноразовые релизные
+          # runbook'и запрещены. E6 — последний, удаляется после выката.
+          allowed = {
+              "deploy.sh",
+              "nails-002e5-date-availability.sh",  # временно: сохраняет E6-историю
+              "nails-002e6-combined-operations.sh",  # активный последний runbook
+          }
+          entrypoints = {p.name for p in Path("ops/deploy").glob("*.sh")}
+          unexpected = entrypoints - allowed
+          assert not unexpected, (
+              "new per-release runbooks are forbidden by ADR-003; "
+              f"unexpected: {sorted(unexpected)}"
+          )
+
+          deploy = Path("ops/deploy/deploy.sh").read_text(encoding="utf-8")
+          for phrase in (
+              "NAILS_GIT_SHA",
+              "merge-base --is-ancestor",
+              "worktree add --detach",
+              "--network none",
+              "pg_dump",
+          ):
+              assert phrase in deploy, f"deploy.sh lost mandatory safeguard: {phrase}"
+
+          dockerfile = Path("backend/Dockerfile").read_text(encoding="utf-8")
+          assert "ARG GIT_SHA" in dockerfile
+          assert "NAILS_GIT_SHA" in dockerfile
+
+          principles = Path("docs/operations/engineering-principles.md")
+          assert principles.is_file(), "engineering principles are mandatory"
+
+          print("DEPLOY_SCRIPT_CONTRACT_OK=true")
+          PY
