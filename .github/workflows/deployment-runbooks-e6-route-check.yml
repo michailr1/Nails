@@ -1,0 +1,77 @@
+name: Deployment runbooks E6 route check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/deploy/nails-002e6-combined-operations.sh"
+      - "ops/deploy/lib/nails-002e6-route-check.sh"
+      - ".github/workflows/deployment-runbooks-e6-route-check.yml"
+  pull_request:
+    paths:
+      - "ops/deploy/nails-002e6-combined-operations.sh"
+      - "ops/deploy/lib/nails-002e6-route-check.sh"
+      - ".github/workflows/deployment-runbooks-e6-route-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Bash syntax
+        run: |
+          bash -n ops/deploy/nails-002e6-combined-operations.sh
+          bash -n ops/deploy/lib/nails-002e6-route-check.sh
+
+      - name: Validate route-check contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          entry = Path("ops/deploy/nails-002e6-combined-operations.sh").read_text(encoding="utf-8")
+          check = Path("ops/deploy/lib/nails-002e6-route-check.sh").read_text(encoding="utf-8")
+
+          required_entry = (
+              'git cat-file -e "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-route-check.sh"',
+              'source <(git show "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-route-check.sh")',
+              'declare -F verify_openapi',
+          )
+          for item in required_entry:
+              assert item in entry, item
+
+          required_check = (
+              "verify_openapi()",
+              "compose exec -T nails-api python -",
+              "from app.main import app",
+              "app.routes",
+              "assert app.openapi_url is None",
+              'assert "/openapi.json" not in routes',
+              '"/api/v1/scheduling/date/resolve"',
+              '"/api/v1/scheduling/services"',
+              '"/api/v1/onboarding/preferences"',
+              'print("OPENAPI_ROUTES_OK=true")',
+          )
+          for item in required_check:
+              assert item in check, item
+
+          forbidden = (
+              '${API_BASE}/openapi.json',
+              'curl ',
+              'docs_url=',
+              'openapi_url="/openapi.json"',
+          )
+          for item in forbidden:
+              assert item not in check, item
+
+          lines = check.splitlines()
+          start = next(i for i, line in enumerate(lines) if "<<'PY'" in line) + 1
+          end = lines.index("PY", start)
+          snippet = "\n".join(lines[start:end]) + "\n"
+          compile(snippet, "e6-route-check", "exec")
+
+          print("E6_PRIVATE_ROUTE_CHECK_OK")
+          PY
