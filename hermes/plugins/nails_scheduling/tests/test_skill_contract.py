@@ -122,3 +122,56 @@ def test_skill_forbids_technical_output_leaks():
         "one-shot: final answer on stdout",
     ):
         assert phrase in text
+
+
+def test_skill_makes_fresh_backend_reads_authoritative():
+    text = _skill_text().casefold()
+    required = (
+        "## единственный источник текущего состояния",
+        "свежий результат backend tool",
+        "история диалога — только как контекст намерения",
+        "вывод модели — никогда не является источником фактического состояния",
+        "никогда не отвечай о текущем состоянии только по истории диалога",
+        "если свежий tool-результат противоречит истории диалога, доверяй tool",
+        "никогда не отклоняй просьбу только потому, что предыдущая реплика",
+        "после каждого write обязательно выполни свежий read",
+        "при ошибке read не подменяй данные памятью",
+    )
+    for phrase in required:
+        assert phrase in text
+
+
+def test_create_booking_requires_fresh_reads_before_and_after_write():
+    text = _skill_text().casefold()
+    section = text.split("## создание записи", 1)[1].split(
+        "## перенос существующей записи", 1
+    )[0]
+    for phrase in (
+        "заново найди клиентку",
+        "заново найди услугу",
+        "свежий `free_slots`",
+        "вызови `create_booking`",
+        "после write снова вызови `day_view`",
+        "только если свежий `day_view` показывает активную запись",
+    ):
+        assert phrase in section
+
+
+def test_mutations_require_fresh_readback():
+    text = _skill_text().casefold()
+    reschedule = text.split("## перенос существующей записи", 1)[1].split(
+        "## отмена записи", 1
+    )[0]
+    cancel = text.split("## отмена записи", 1)[1].split(
+        "## настройки мастера", 1
+    )[0]
+
+    assert "после write заново вызови `day_view`" in reschedule
+    assert "свежий read показывает её в новом времени" in reschedule
+    assert "после write снова вызови `day_view`" in cancel
+    assert "свежий `day_view` больше не показывает эту активную запись" in cancel
+    assert "старое упоминание записи в диалоге" in cancel
+
+
+def test_skill_file_has_final_newline():
+    assert _skill_text().endswith("\n")
