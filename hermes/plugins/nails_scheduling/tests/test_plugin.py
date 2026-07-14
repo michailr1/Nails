@@ -28,6 +28,7 @@ def test_schema_exposes_only_public_business_arguments():
         "action",
         "date_kind",
         "day",
+        "new_day",
         "month",
         "day_of_month",
         "offset_days",
@@ -47,6 +48,7 @@ def test_schema_exposes_only_public_business_arguments():
         "client_public_name",
         "phone",
         "start_time",
+        "new_start_time",
         "confirmed",
     }
     assert parameters["properties"]["action"]["enum"] == [
@@ -58,9 +60,12 @@ def test_schema_exposes_only_public_business_arguments():
         "day_view",
         "free_slots",
         "find_client",
+        "find_client_candidates",
         "create_client",
         "update_availability",
         "create_booking",
+        "reschedule_booking",
+        "cancel_booking",
     ]
     serialized = json.dumps(schemas.NAILS_SCHEDULING).lower()
     for forbidden in (
@@ -200,6 +205,7 @@ def test_missing_key_fails_before_http(monkeypatch):
         {"action": "day_view", "day": "18.07.2026"},
         {"action": "free_slots", "day": "2026-07-18"},
         {"action": "find_client", "client_public_name": ""},
+        {"action": "find_client_candidates", "client_public_name": ""},
         {"action": "create_client", "client_public_name": "Анна", "confirmed": False},
         {
             "action": "update_availability",
@@ -221,6 +227,24 @@ def test_missing_key_fails_before_http(monkeypatch):
         },
         {
             "action": "create_booking",
+            "client_public_name": "Анна",
+            "service_name": "Маникюр",
+            "day": "2026-07-18",
+            "start_time": "13:00",
+            "confirmed": False,
+        },
+        {
+            "action": "reschedule_booking",
+            "client_public_name": "Анна",
+            "service_name": "Маникюр",
+            "day": "2026-07-18",
+            "start_time": "13:00",
+            "new_day": "2026-07-18",
+            "new_start_time": "15:00",
+            "confirmed": False,
+        },
+        {
+            "action": "cancel_booking",
             "client_public_name": "Анна",
             "service_name": "Маникюр",
             "day": "2026-07-18",
