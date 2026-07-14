@@ -21,6 +21,19 @@ nails_002e6_capture_running_api_image() {
 
   NAILS_E6_ROLLBACK_CAPTURE_LOG="${RUNTIME_BACKUP}/api-rollback-capture.log"
 
+  [[ "$(command docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$API_CONTAINER_BEFORE")" == "true" ]] || {
+    fail "running API container is not read-only; refusing filesystem capture"
+    return 1
+  }
+  [[ "$(command docker inspect -f '{{.Config.User}}' "$API_CONTAINER_BEFORE")" == "nails" ]] || {
+    fail "running API container does not use the expected unprivileged user"
+    return 1
+  }
+  [[ "$(command docker inspect -f '{{.Config.WorkingDir}}' "$API_CONTAINER_BEFORE")" == "/app" ]] || {
+    fail "running API container has an unexpected working directory"
+    return 1
+  }
+
   if ! {
     command docker export "$API_CONTAINER_BEFORE" |
       command docker import \
