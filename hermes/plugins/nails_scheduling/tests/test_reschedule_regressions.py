@@ -55,13 +55,23 @@ def _run(monkeypatch, mutation_response):
 
 
 def test_reschedule_reaches_backend_without_free_slots_precheck(monkeypatch):
-    response = {"ok": True, "action": "reschedule_booking", "result": {"changed": True}}
+    response = {
+        "ok": True,
+        "action": "reschedule_booking",
+        "result": {"changed": True},
+    }
     result, calls = _run(monkeypatch, response)
 
     assert result == response
-    assert [call["action"] for call in calls] == ["day_view", "reschedule_booking"]
+    assert [call["action"] for call in calls] == [
+        "day_view",
+        "reschedule_booking",
+    ]
     assert calls[-1]["json_body"]["starts_at"] == "2026-07-17T11:00:00+02:00"
-    assert calls[-1]["json_body"]["new_starts_at"] == "2026-07-17T12:00:00+02:00"
+    assert (
+        calls[-1]["json_body"]["new_starts_at"]
+        == "2026-07-17T12:00:00+02:00"
+    )
 
 
 def test_reschedule_preserves_backend_booking_conflict(monkeypatch):
@@ -85,7 +95,11 @@ def test_reschedule_preserves_backend_buffer_conflict(monkeypatch):
 
 
 def test_repeated_reschedule_preserves_changed_false(monkeypatch):
-    response = {"ok": True, "action": "reschedule_booking", "result": {"changed": False}}
+    response = {
+        "ok": True,
+        "action": "reschedule_booking",
+        "result": {"changed": False},
+    }
     result, _ = _run(monkeypatch, response)
     assert result == response
 
