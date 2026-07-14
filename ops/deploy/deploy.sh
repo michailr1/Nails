@@ -116,7 +116,7 @@ git -C "$REPO" worktree add --detach "$WORKTREE" "$RELEASE_SHA" >/dev/null
 log "2. Бэкапы базы и runtime"
 install -d -m 700 "$BACKUP_ROOT" "$RUNTIME_BACKUP"
 compose exec -T nails-db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
-  | gzip -9 >"$DB_BACKUP"
+  < /dev/null | gzip -9 >"$DB_BACKUP"
 chmod 600 "$DB_BACKUP"
 [[ -s "$DB_BACKUP" ]]
 gzip -t "$DB_BACKUP"
@@ -153,7 +153,11 @@ RUNTIME_MUTATED="true"
 user_systemctl stop "$GATEWAY"
 compose up -d --no-deps --force-recreate --no-build nails-api >/dev/null
 wait_ready
-RUNNING_SHA="$(compose exec -T nails-api python -c 'import os; print(os.environ.get("NAILS_GIT_SHA", "unknown"))')"
+RUNNING_SHA="$(
+  compose exec -T nails-api \
+    python -c 'import os; print(os.environ.get("NAILS_GIT_SHA", "unknown"))' \
+    < /dev/null
+)"
 [[ "$RUNNING_SHA" == "$RELEASE_SHA" ]] || {
   echo "ERROR: running container SHA mismatch: ${RUNNING_SHA}" >&2
   exit 1
