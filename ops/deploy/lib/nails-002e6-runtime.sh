@@ -9,6 +9,8 @@ EXPECTED_CODE_ANCESTOR="06d68faf69eb6828360c1ccc9b0d8c83e14a0eb9"
 DB_BACKUP="${BACKUP_ROOT}/nails-before-002e6-${STAMP}.sql.gz"
 RUNTIME_BACKUP="${PROFILE}/backups/nails-002e6-${STAMP}"
 PRE_PLUGIN_VERSION=""
+API_ROLLBACK_IMAGE_REF="nails-api-rollback:${STAMP}"
+API_BUILD_LOG="${RUNTIME_BACKUP}/api-build.log"
 
 verify_registry_and_visibility() {
   HERMES_HOME="$PROFILE" "$HERMES_PYTHON" - <<'PY'
@@ -230,6 +232,7 @@ nails_002e6_main() {
   printf '%s\n' "$PRE_PLUGIN_VERSION" >"${RUNTIME_BACKUP}/plugin-version.before"
   printf '%s\n' "$API_IMAGE_ID_BEFORE" >"${RUNTIME_BACKUP}/api-image-id.before"
   printf '%s\n' "$API_IMAGE_REF_BEFORE" >"${RUNTIME_BACKUP}/api-image-ref.before"
+  printf '%s\n' "$API_ROLLBACK_IMAGE_REF" >"${RUNTIME_BACKUP}/api-rollback-image-ref.before"
 
   compose exec -T nails-db sh -ec \
     'exec pg_dump --no-owner --no-acl --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' \
@@ -242,7 +245,7 @@ nails_002e6_main() {
   printf '== %s: 3. Exact repository update and release validation ==\n' "$RUNBOOK_ID"
 
   MUTATION_STARTED="true"
-  git merge --ff-only "$RELEASE_SHA"
+  git merge --ff-only --quiet "$RELEASE_SHA"
   [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]]
   [[ -z "$(git status --porcelain)" ]]
 
@@ -278,12 +281,26 @@ print("STATIC_RELEASE_VALIDATION=true")
 print("MASTER_PREFERENCES_SKILL_OK=true")
 PY
 
-  printf '== %s: 4. Build new API image while old API stays online ==\n' "$RUNBOOK_ID"
+  printf '== %s: 4. Preserve old API image and build quietly ==\n' "$RUNBOOK_ID"
 
-  compose build nails-api
+  docker image tag "$API_IMAGE_ID_BEFORE" "$API_ROLLBACK_IMAGE_REF"
+  [[ "$(docker image inspect -f '{{.Id}}' "$API_ROLLBACK_IMAGE_REF")" == "$API_IMAGE_ID_BEFORE" ]] \
+    || fail "rollback API image was not preserved"
   IMAGE_BUILT="true"
-  API_IMAGE_ID_AFTER_BUILD="$(compose images -q nails-api | head -n1)"
+  if ! compose build nails-api >"$API_BUILD_LOG" 2>&1; then
+    chmod 600 "$API_BUILD_LOG" 2>/dev/null || true
+    printf 'API_BUILD_FAILED=true\n'
+    printf 'api_build_log=%s\n' "$API_BUILD_LOG"
+    tail -n 60 "$API_BUILD_LOG" || true
+    fail "new API image build failed"
+  fi
+  chmod 600 "$API_BUILD_LOG"
+  API_IMAGE_ID_AFTER_BUILD="$(docker image inspect -f '{{.Id}}' "$API_IMAGE_REF_BEFORE")"
   [[ -n "$API_IMAGE_ID_AFTER_BUILD" ]] || fail "new API image was not produced"
+  [[ "$API_IMAGE_ID_AFTER_BUILD" != "$API_IMAGE_ID_BEFORE" ]] \
+    || fail "API image did not change after build"
+  [[ "$(docker image inspect -f '{{.Id}}' "$API_ROLLBACK_IMAGE_REF")" == "$API_IMAGE_ID_BEFORE" ]] \
+    || fail "rollback API image changed during build"
 
   printf '== %s: 5. Stop only the root user-level Nails gateway ==\n' "$RUNBOOK_ID"
 
@@ -297,13 +314,16 @@ PY
 
   printf '== %s: 6. Recreate only nails-api ==\n' "$RUNBOOK_ID"
 
-  compose up -d --no-deps --force-recreate --no-build nails-api
+  compose up -d --no-deps --force-recreate --no-build nails-api >/dev/null
   API_RECREATED="true"
   API_CONTAINER_AFTER="$(wait_api)"
   API_ID_AFTER="$(docker inspect -f '{{.Id}}' "$API_CONTAINER_AFTER")"
   API_STARTED_AFTER="$(docker inspect -f '{{.State.StartedAt}}' "$API_CONTAINER_AFTER")"
+  API_IMAGE_ID_AFTER="$(docker inspect -f '{{.Image}}' "$API_CONTAINER_AFTER")"
   [[ "$API_ID_AFTER" != "$API_ID_BEFORE" ]] || fail "API container did not change"
   [[ "$API_STARTED_AFTER" != "$API_STARTED_BEFORE" ]] || fail "API StartedAt did not change"
+  [[ "$API_IMAGE_ID_AFTER" == "$API_IMAGE_ID_AFTER_BUILD" ]] \
+    || fail "API container does not use the newly built image"
   [[ "$(compose ps -q nails-db)" == "$DB_CONTAINER_BEFORE" ]] || fail "DB container changed"
   [[ "$(docker inspect -f '{{.Id}}' "$DB_CONTAINER_BEFORE")" == "$DB_ID_BEFORE" ]]
   [[ "$(docker inspect -f '{{.State.StartedAt}}' "$DB_CONTAINER_BEFORE")" == "$DB_STARTED_BEFORE" ]]
@@ -382,6 +402,7 @@ PY
   [[ -z "$(git status --porcelain)" ]]
   gzip -t "$DB_BACKUP"
 
+  docker image rm "$API_ROLLBACK_IMAGE_REF" >/dev/null 2>&1 || true
   trap - ERR
 
   printf '\nNAILS_002E6_DEPLOYMENT_OK\n'
@@ -394,12 +415,15 @@ PY
   printf 'git_tree_clean=true\n'
   printf 'database_backup=%s\n' "$DB_BACKUP"
   printf 'runtime_backup=%s\n' "$RUNTIME_BACKUP"
+  printf 'api_build_log=%s\n' "$API_BUILD_LOG"
   printf 'alembic_before=0006\n'
   printf 'alembic_after=0006\n'
   printf 'schema_revision_changed=false\n'
   printf 'api_container_before=%s\n' "$API_CONTAINER_BEFORE"
   printf 'api_container_after=%s\n' "$API_CONTAINER_AFTER"
   printf 'api_container_changed=true\n'
+  printf 'api_image_changed=true\n'
+  printf 'rollback_image_preserved_during_build=true\n'
   printf 'db_container_unchanged=true\n'
   printf 'docker_daemon_unchanged=true\n'
   printf 'backend_health=ok\n'
