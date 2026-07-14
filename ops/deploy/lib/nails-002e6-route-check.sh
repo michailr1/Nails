@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 
-# Production intentionally disables the public OpenAPI endpoint. Verify the
-# actual FastAPI route table inside the running API container instead.
-verify_openapi() {
-  compose exec -T nails-api python - <<'PY'
+verify_api_routes() {
+  "$@" python - <<'PY'
 from app.main import app
 
-routes: dict[str, set[str]] = {}
+routes = {}
 for route in app.routes:
     path = getattr(route, "path", None)
     methods = getattr(route, "methods", None) or set()
@@ -34,4 +32,19 @@ for path, methods in expected.items():
 
 print("OPENAPI_ROUTES_OK=true")
 PY
+}
+
+verify_built_api_image() {
+  local image="$1"
+  verify_api_routes \
+    docker run --rm \
+    --network none \
+    --read-only \
+    --tmpfs /tmp:size=16m,mode=1777 \
+    "$image"
+}
+
+# Kept under the old function name because the E6 runtime already calls it.
+verify_openapi() {
+  verify_api_routes compose exec -T nails-api
 }
