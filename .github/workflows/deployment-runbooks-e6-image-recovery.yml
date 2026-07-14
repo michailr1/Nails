@@ -1,0 +1,225 @@
+name: Deployment runbooks E6 image recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/deploy/nails-002e6-combined-operations.sh"
+      - "ops/deploy/lib/nails-002e6-image-recovery.sh"
+      - ".github/workflows/deployment-runbooks-e6-image-recovery.yml"
+  pull_request:
+    paths:
+      - "ops/deploy/nails-002e6-combined-operations.sh"
+      - "ops/deploy/lib/nails-002e6-image-recovery.sh"
+      - ".github/workflows/deployment-runbooks-e6-image-recovery.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Bash syntax
+        run: |
+          bash -n ops/deploy/nails-002e6-combined-operations.sh
+          bash -n ops/deploy/lib/nails-002e6-image-recovery.sh
+
+      - name: Validate recovery contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          entry = Path("ops/deploy/nails-002e6-combined-operations.sh").read_text(encoding="utf-8")
+          recovery = Path("ops/deploy/lib/nails-002e6-image-recovery.sh").read_text(encoding="utf-8")
+
+          required_entry = (
+              'ops/deploy/lib/nails-002e6-runtime.sh',
+              'ops/deploy/lib/nails-002e6-image-recovery.sh',
+              'nails_002e6_main',
+          )
+          for item in required_entry:
+              assert item in entry, item
+
+          required_recovery = (
+              'command docker export "$API_CONTAINER_BEFORE"',
+              'command docker import',
+              "--change 'USER nails'",
+              "--change 'WORKDIR /app'",
+              "--change 'ENV PATH=",
+              'NAILS_E6_PRE_API_IMAGE_OBJECT_EXISTS="false"',
+              'NAILS_E6_ROLLBACK_IMAGE_SOURCE="exported-running-container"',
+              'API_IMAGE_ID_BEFORE="$recovered_id"',
+              'IMAGE_BUILT="true"',
+              'rollback_image_config=%s',
+              'rollback_image_smoke=%s',
+              'runtime secrets in image metadata',
+              '--network none',
+              '--read-only',
+          )
+          for item in required_recovery:
+              assert item in recovery, item
+
+          forbidden = (
+              "docker commit",
+              "git checkout",
+              "git reset",
+              "git push",
+              "git commit",
+              "docker compose down",
+              "compose down",
+              "docker restart",
+              "compose restart",
+              "psql ",
+              "DELETE FROM",
+              "UPDATE ",
+              "INSERT INTO",
+          )
+          for item in forbidden:
+              assert item not in recovery, item
+
+          change_lines = [line for line in recovery.splitlines() if "--change" in line]
+          change_text = "\n".join(change_lines)
+          for secret_name in (
+              "DATABASE_URL",
+              "INTERNAL_API_KEY",
+              "NAILS_INTERNAL_API_KEY",
+              "POSTGRES_PASSWORD",
+              "APP_DB_PASSWORD",
+          ):
+              assert secret_name not in change_text, secret_name
+
+          assert recovery.count("docker() {") == 1
+          print("E6_IMAGE_RECOVERY_CONTRACT_OK")
+          PY
+
+      - name: Simulate existing and missing image objects
+        run: |
+          set -Eeuo pipefail
+
+          TEST_ROOT="$(mktemp -d)"
+          trap 'rm -rf "$TEST_ROOT"' EXIT
+          mkdir -p "$TEST_ROOT/bin"
+
+          cat >"$TEST_ROOT/bin/docker" <<'SH'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+
+          state="${FAKE_DOCKER_STATE:?}"
+          mode="${FAKE_DOCKER_MODE:?}"
+
+          if [[ "$1" == "image" && "$2" == "inspect" ]]; then
+            if [[ "${3:-}" == "-f" ]]; then
+              format="$4"
+              target="$5"
+            else
+              format=""
+              target="$3"
+            fi
+
+            if [[ "$target" == "sha256:missing" ]]; then
+              exit 1
+            fi
+            if [[ "$target" == "sha256:old" && "$mode" != "existing" ]]; then
+              exit 1
+            fi
+
+            image_id=""
+            if [[ "$target" == "sha256:old" ]]; then
+              image_id="sha256:old"
+            elif [[ "$target" == "sha256:recovered" ]]; then
+              image_id="sha256:recovered"
+            elif [[ -f "$state" ]]; then
+              image_id="$(cat "$state")"
+            else
+              exit 1
+            fi
+
+            case "$format" in
+              "") ;;
+              "{{.Id}}") printf '%s\n' "$image_id" ;;
+              "{{.Config.User}}") printf 'nails\n' ;;
+              "{{.Config.WorkingDir}}") printf '/app\n' ;;
+              "{{range .Config.Env}}{{println .}}{{end}}")
+                printf 'PATH=/usr/local/bin:/usr/bin:/bin\nLANG=C.UTF-8\n'
+                ;;
+              *) exit 2 ;;
+            esac
+            exit 0
+          fi
+
+          if [[ "$1" == "image" && "$2" == "tag" ]]; then
+            printf '%s\n' "$3" >"$state"
+            exit 0
+          fi
+
+          if [[ "$1" == "image" && "$2" == "rm" ]]; then
+            rm -f "$state"
+            exit 0
+          fi
+
+          if [[ "$1" == "export" ]]; then
+            printf 'fake-container-filesystem'
+            exit 0
+          fi
+
+          if [[ "$1" == "import" ]]; then
+            cat >/dev/null
+            printf 'sha256:recovered\n' >"$state"
+            printf 'sha256:recovered\n'
+            exit 0
+          fi
+
+          if [[ "$1" == "run" ]]; then
+            exit 0
+          fi
+
+          exit 3
+          SH
+          chmod +x "$TEST_ROOT/bin/docker"
+
+          run_case() {
+            local mode="$1"
+            local initial_id="$2"
+            local expected_source="$3"
+            local expected_exists="$4"
+            local case_root="$TEST_ROOT/$mode"
+
+            mkdir -p "$case_root/runtime"
+            export PATH="$TEST_ROOT/bin:$PATH"
+            export FAKE_DOCKER_STATE="$case_root/state"
+            export FAKE_DOCKER_MODE="$mode"
+
+            bash -Eeuo pipefail -c '
+              fail() { printf "ERROR: %s\n" "$*" >&2; return 1; }
+              RUNTIME_BACKUP="$1"
+              API_CONTAINER_BEFORE="container-before"
+              API_IMAGE_ID_BEFORE="$2"
+              API_ROLLBACK_IMAGE_REF="nails-api-rollback:test"
+              IMAGE_BUILT="false"
+              source ops/deploy/lib/nails-002e6-image-recovery.sh
+              docker image tag "$API_IMAGE_ID_BEFORE" "$API_ROLLBACK_IMAGE_REF" >"$RUNTIME_BACKUP/result"
+              printf "source=%s\n" "$NAILS_E6_ROLLBACK_IMAGE_SOURCE" >>"$RUNTIME_BACKUP/result"
+              printf "exists=%s\n" "$NAILS_E6_PRE_API_IMAGE_OBJECT_EXISTS" >>"$RUNTIME_BACKUP/result"
+              printf "effective_id=%s\n" "$API_IMAGE_ID_BEFORE" >>"$RUNTIME_BACKUP/result"
+              printf "image_built=%s\n" "$IMAGE_BUILT" >>"$RUNTIME_BACKUP/result"
+            ' _ "$case_root/runtime" "$initial_id"
+
+            grep -Fx "source=$expected_source" "$case_root/runtime/result"
+            grep -Fx "exists=$expected_exists" "$case_root/runtime/result"
+
+            if [[ "$mode" == "missing" ]]; then
+              grep -Fx 'effective_id=sha256:recovered' "$case_root/runtime/result"
+              grep -Fx 'image_built=true' "$case_root/runtime/result"
+              [[ "$(stat -c %a "$case_root/runtime/api-rollback-capture.log")" == "600" ]]
+            else
+              grep -Fx 'effective_id=sha256:old' "$case_root/runtime/result"
+            fi
+          }
+
+          run_case existing sha256:old existing-image true
+          run_case missing sha256:missing exported-running-container false
+
+          printf 'E6_IMAGE_RECOVERY_SIMULATION_OK\n'
