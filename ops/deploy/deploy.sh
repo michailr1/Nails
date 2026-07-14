@@ -83,8 +83,7 @@ on_error() {
 trap on_error ERR
 
 wait_ready() {
-  local attempt
-  for attempt in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     if curl -fsS "${API_BASE}/ready" 2>/dev/null | grep -q '"ready"'; then
       return 0
     fi
