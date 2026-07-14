@@ -149,10 +149,11 @@ manual_sql_executed=false
 
 ## NAILS-002E4 — историческая серия (файлы удалены)
 
-Runbook'и E4 (V1, V2, V3) удалены из рабочего дерева по ADR-003; их полный текст доступен в git history до коммита удаления. Производственные факты сохраняются:
+Runbook'и E4 удалены из рабочего дерева по ADR-003: `ops/deploy/nails-002e4.sh`, `ops/deploy/nails-002e4-v2.sh`, `ops/deploy/nails-002e4-v3.sh`. Их полный текст доступен в git history до коммита удаления. Производственные факты сохраняются:
 
 - V3 успешно развёрнут, достигнут маркер `NAILS_002E4_V3_DEPLOYMENT_OK`; он установил оба плагина, сохранил backend/Docker и закрепил правильные границы root user-level systemd и проверки плагинов (`discover_plugins()` без `force=True`, сравнение toolsets по составу, а не порядку).
-- `nails-002e4.sh` и `nails-002e4-v2.sh` must **not** be executed again: V1 предполагал system-level systemd и вымышленный формат allowlist; V2 имел дефектную финальную read-only проверку (сравнение toolsets по порядку, `discover_plugins(force=True)`), его маркер `NAILS_002E4_DEPLOYMENT_OK` не был достигнут, rollback вернул gateway в active.
+- `nails-002e4.sh` must **not** be executed again: V1 предполагал system-level systemd и вымышленный формат allowlist.
+- `nails-002e4-v2.sh` must **not** be executed again: дефектная финальная read-only проверка (сравнение toolsets по порядку, `discover_plugins(force=True)`), маркер `NAILS_002E4_DEPLOYMENT_OK` не был достигнут, rollback вернул gateway в active.
 
 Авторитетный конфиг и правильная граница gateway:
 
