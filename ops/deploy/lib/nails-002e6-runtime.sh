@@ -5,7 +5,7 @@ source <(git -C "$REPO" show "${RELEASE_SHA}:ops/deploy/lib/nails-002e5-common.s
 RUNBOOK_ID="NAILS-002E6"
 BASELINE_E4="385a92962e3736553335d717adcdf4b83ac8a8b3"
 BASELINE_E5="a0ef8c5c26301a9f6950544afd0e070b7e691582"
-EXPECTED_CODE_ANCESTOR="e4443a736c5a0d5a34239a5257b7764592834e5b"
+EXPECTED_CODE_ANCESTOR="06d68faf69eb6828360c1ccc9b0d8c83e14a0eb9"
 DB_BACKUP="${BACKUP_ROOT}/nails-before-002e6-${STAMP}.sql.gz"
 RUNTIME_BACKUP="${PROFILE}/backups/nails-002e6-${STAMP}"
 PRE_PLUGIN_VERSION=""
@@ -60,10 +60,11 @@ definitions = get_tool_definitions(
     skip_tool_search_assembly=True,
 )
 by_name = {item["function"]["name"]: item for item in definitions}
-actions = set(
+
+scheduling_actions = set(
     by_name["nails_scheduling"]["function"]["parameters"]["properties"]["action"]["enum"]
 )
-required = {
+required_scheduling = {
     "resolve_date",
     "list_services",
     "find_service",
@@ -76,10 +77,23 @@ required = {
     "update_availability",
     "create_booking",
 }
-assert actions == required, sorted(actions)
+assert scheduling_actions == required_scheduling, sorted(scheduling_actions)
+
+onboarding_actions = set(
+    by_name["nails_onboarding"]["function"]["parameters"]["properties"]["action"]["enum"]
+)
+required_preferences = {
+    "get_master_preferences",
+    "save_master_name",
+    "save_master_style",
+    "save_default_work_hours",
+}
+assert required_preferences.issubset(onboarding_actions), sorted(onboarding_actions)
+
 print("PLUGIN_REGISTRY_OK=true")
 print("TELEGRAM_VISIBILITY_OK=true")
 print("SCHEDULING_ACTIONS_OK=true")
+print("MASTER_PREFERENCES_ACTIONS_OK=true")
 PY
 }
 
@@ -101,6 +115,10 @@ expected = {
     "/api/v1/scheduling/services/exact": "get",
     "/api/v1/scheduling/day": "get",
     "/api/v1/scheduling/slots": "get",
+    "/api/v1/onboarding/preferences": "get",
+    "/api/v1/onboarding/preferences/name": "put",
+    "/api/v1/onboarding/preferences/style": "put",
+    "/api/v1/onboarding/preferences/default-work-hours": "put",
 }
 for path, methods in expected.items():
     assert path in paths, path
@@ -147,7 +165,7 @@ nails_002e6_main() {
   git merge-base --is-ancestor "$HEAD_BEFORE" "$RELEASE_SHA" \
     || fail "release is not a descendant of production"
   git merge-base --is-ancestor "$EXPECTED_CODE_ANCESTOR" "$RELEASE_SHA" \
-    || fail "release does not contain reviewed combined operations code"
+    || fail "release does not contain reviewed combined operations and preferences code"
   git cat-file -e "${RELEASE_SHA}:ops/deploy/nails-002e6-combined-operations.sh"
   git cat-file -e "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-runtime.sh"
   git diff --quiet "$HEAD_BEFORE" "$RELEASE_SHA" -- backend/alembic \
@@ -250,9 +268,14 @@ for action in (
 scheduling_skill = (root / "hermes/skills/nails-scheduling/SKILL.md").read_text(encoding="utf-8")
 assert "никогда не вычисляет дату, год или день недели самостоятельно" in scheduling_skill
 assert "никогда не нужно проходить заново ради изменения услуг" in scheduling_skill
+assert "## Настройки мастера" in scheduling_skill
+assert "не вызывай save-действие до подтверждения" in scheduling_skill
+assert "для «ты/вы» не меняй базовый `assistant_style`" in scheduling_skill
+assert "не придумывай время окончания" in scheduling_skill
 onboarding_skill = (root / "hermes/skills/nails-onboarding/SKILL.md").read_text(encoding="utf-8")
 assert "не предлагай перезапуск настройки для изменения графика или услуг" in onboarding_skill
 print("STATIC_RELEASE_VALIDATION=true")
+print("MASTER_PREFERENCES_SKILL_OK=true")
 PY
 
   printf '== %s: 4. Build new API image while old API stays online ==\n' "$RUNBOOK_ID"
@@ -384,20 +407,24 @@ PY
   printf 'openapi_date_resolver=ok\n'
   printf 'openapi_availability_update=ok\n'
   printf 'openapi_service_management=ok\n'
+  printf 'openapi_master_preferences=ok\n'
   printf 'plugins_enabled=nails-onboarding,nails-scheduling\n'
   printf 'plugin_source_target_match=true\n'
   printf 'onboarding_skill_source_target_match=true\n'
   printf 'scheduling_skill_source_target_match=true\n'
+  printf 'master_preferences_skill=ok\n'
   printf 'config_changed=false\n'
   printf 'plugin_registry=ok\n'
   printf 'telegram_visibility=ok\n'
   printf 'scheduling_actions=resolve_date,update_availability,find_service,create_service,update_service\n'
+  printf 'master_preferences_actions=get_master_preferences,save_master_name,save_master_style,save_default_work_hours\n'
   printf 'gateway_pid_before=%s\n' "$GATEWAY_PID_BEFORE"
   printf 'gateway_pid_after=%s\n' "$GATEWAY_PID_AFTER"
   printf 'gateway_state=active\n'
   printf 'gateway_error_scan=clean\n'
   printf 'calendar_data_changed_by_deployment=false\n'
   printf 'service_data_changed_by_deployment=false\n'
+  printf 'master_preferences_data_changed_by_deployment=false\n'
   printf 'manual_sql_executed=false\n'
   printf 'rollback_performed=%s\n' "$ROLLBACK_PERFORMED"
 }
