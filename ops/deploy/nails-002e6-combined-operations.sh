@@ -11,6 +11,11 @@ if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 
 cd "$REPO"
+git cat-file -e "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-runtime.sh"
+git cat-file -e "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-image-recovery.sh"
 source <(git show "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-runtime.sh")
 source <(git show "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-image-recovery.sh")
+declare -F nails_002e6_main >/dev/null
+declare -F nails_002e6_capture_running_api_image >/dev/null
+declare -F docker >/dev/null
 nails_002e6_main
