@@ -67,6 +67,32 @@ def test_skill_supports_full_service_management_after_onboarding():
         assert phrase not in text
 
 
+def test_skill_allows_master_preference_changes_after_onboarding():
+    text = _skill_text().casefold()
+    required = (
+        "никогда не нужно проходить заново ради их изменения",
+        "думаю… (nails_onboarding)",
+        "action=get_master_preferences",
+        "action=save_master_name",
+        "action=save_master_style",
+        "action=save_default_work_hours",
+        "не влияет на сообщения клиенткам",
+        "не меняет уже подтверждённую доступность",
+        "не вызывай write",
+        "не вызывай save-действие до подтверждения",
+        "возвращённое значение совпадает с подтверждённым будущим состоянием",
+        "для «ты/вы» не меняй базовый `assistant_style`",
+        "сохрани остальные пользовательские детали",
+        "если `assistant_style` отсутствует",
+        "не очищай `assistant_style_details`",
+        "меняй только явно названные границы интервалов",
+        "сохрани его текущее время окончания",
+        "задай один уточняющий вопрос и не придумывай время окончания",
+    )
+    for phrase in required:
+        assert phrase in text
+
+
 def test_skill_distinguishes_unknown_from_unavailable():
     text = _skill_text()
     assert "`unknown` — удалить ошибочно сохранённую дату" in text
