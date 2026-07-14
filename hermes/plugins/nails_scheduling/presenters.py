@@ -1,7 +1,37 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
+
+_TECHNICAL_MARKERS = (
+    "one-shot",
+    "final answer on stdout",
+    "stdout",
+    "stderr",
+    "tool call",
+    "traceback",
+    "api key",
+    "environment variable",
+)
+_ABSOLUTE_SERVER_PATH = re.compile(r"(?:^|\s)/(?:opt|root|etc|var|home|usr)/\S+")
+
+
+def _reject_technical_text(value: Any) -> None:
+    if isinstance(value, str):
+        normalized = value.casefold()
+        if any(marker in normalized for marker in _TECHNICAL_MARKERS):
+            raise ValueError("technical text is not public")
+        if _ABSOLUTE_SERVER_PATH.search(value):
+            raise ValueError("server path is not public")
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _reject_technical_text(item)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _reject_technical_text(item)
 
 
 def _service_summary(value: Any) -> dict[str, Any]:
@@ -77,6 +107,7 @@ def _booking_summary(value: Any) -> dict[str, Any]:
 
 
 def _sanitize_success(action: str, result: Any) -> dict[str, Any]:
+    _reject_technical_text(result)
     if not isinstance(result, dict):
         raise ValueError("invalid result")
 
