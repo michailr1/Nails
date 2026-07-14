@@ -25,6 +25,7 @@ def _json_response(payload: dict[str, Any]) -> str:
 
 def _get_session_env(name: str, default: str = "") -> str:
     from gateway.session_context import get_session_env
+
     return get_session_env(name, default)
 
 
@@ -51,10 +52,19 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
         action, values = _validate_args(args)
         telegram_user_id = _trusted_telegram_user_id()
         api_key = _api_key()
+
         if action == "create_client":
-            response = _create_client(values, telegram_user_id=telegram_user_id, api_key=api_key)
+            response = _create_client(
+                values,
+                telegram_user_id=telegram_user_id,
+                api_key=api_key,
+            )
         elif action == "create_booking":
-            response = _create_booking(values, telegram_user_id=telegram_user_id, api_key=api_key)
+            response = _create_booking(
+                values,
+                telegram_user_id=telegram_user_id,
+                api_key=api_key,
+            )
         elif action in {"reschedule_booking", "cancel_booking"}:
             response = _booking_mutation(
                 action,
@@ -73,20 +83,50 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 params=params,
                 json_body=json_body,
             )
+
         if not response.get("ok"):
             return _json_response(response)
+
         try:
             safe_result = _sanitize_success(action, response.get("result"))
         except (KeyError, TypeError, ValueError):
-            return _json_response(_error("invalid_backend_response", "Scheduling service returned an invalid response."))
-        return _json_response({"ok": True, "action": action, "result": safe_result})
+            return _json_response(
+                _error(
+                    "invalid_backend_response",
+                    "Scheduling service returned an invalid response.",
+                )
+            )
+
+        return _json_response(
+            {"ok": True, "action": action, "result": safe_result}
+        )
     except ToolInputError:
-        return _json_response(_error("invalid_arguments", "The scheduling tool received invalid arguments."))
+        return _json_response(
+            _error(
+                "invalid_arguments",
+                "The scheduling tool received invalid arguments.",
+            )
+        )
     except TrustedContextError:
-        return _json_response(_error("trusted_context_required", "Scheduling is available only from a trusted Telegram session."))
+        return _json_response(
+            _error(
+                "trusted_context_required",
+                "Scheduling is available only from a trusted Telegram session.",
+            )
+        )
     except RuntimeError:
         logger.error("Nails scheduling plugin configuration is unavailable")
-        return _json_response(_error("plugin_not_configured", "Scheduling integration is not configured."))
+        return _json_response(
+            _error(
+                "plugin_not_configured",
+                "Scheduling integration is not configured.",
+            )
+        )
     except Exception:
         logger.exception("Unexpected Nails scheduling plugin failure")
-        return _json_response(_error("internal_tool_error", "Scheduling integration failed safely."))
+        return _json_response(
+            _error(
+                "internal_tool_error",
+                "Scheduling integration failed safely.",
+            )
+        )
