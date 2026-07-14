@@ -2,52 +2,52 @@
 
 Status: **mandatory for new Nails deployment and diagnostic prompts**.
 
-The full command output remains on the production server in a root-only log when a runbook provides a log path. It is not pasted into the working chat by default.
+Полный вывод команд остаётся на production-сервере в root-only логе по пути, который печатает runbook/скрипт. В чат возвращается только компактная сводка в каноническом формате ниже. При необходимости основной агент запрашивает конкретный небольшой фрагмент лога.
 
-## Successful run
-
-The VPS agent returns only:
-
-- the runbook success marker;
-- HEAD before and after;
-- backup and diagnostic log paths;
-- schema/Alembic before and after;
-- changed/unchanged container markers;
-- backend health/readiness;
-- plugin and gateway markers;
-- business-data non-change markers;
-- rollback status.
-
-Do not return routine output from:
-
-- `git merge` file statistics;
-- Docker build layers;
-- package downloads and installation;
-- successful repeated checks;
-- complete service journals.
-
-## Failed run
-
-The VPS agent returns only:
-
-- `DEPLOYMENT_FAILED=true`;
-- runbook and failed stage/line;
-- the concise safe error;
-- HEAD and affected service state;
-- backup and full-log paths;
-- the complete concise `ROLLBACK_*` block;
-- up to 60 relevant lines from a failed build or service log when the runbook itself emits them.
-
-The VPS agent never summarizes away a failed rollback marker, but also never pastes unrelated successful build output.
-
-## Main-agent prompts
-
-Every new VPS prompt must say:
+## Канонический формат: успех
 
 ```text
-Верни только итоговые markers runbook. Не вставляй git diff/stat, Docker build layers,
-pip output или полный journal. При ошибке верни DEPLOYMENT_FAILED, безопасную ошибку,
-пути логов и полный ROLLBACK_* блок.
+RESULT=success
+runbook=<id или deploy.sh>
+head=<sha-before> -> <sha-after>
+backups=db:ok,runtime:ok
+checks=api:ok,gateway:ok,plugins:ok,isolation:ok
+mutations=schema:false,data:false,config:false
+rollback=not-required
+details_log=<путь к полному логу на сервере>
 ```
 
-This reporting rule reduces chat/context growth without reducing auditability: full logs stay on the server at the paths emitted by the runbook.
+## Канонический формат: ошибка
+
+```text
+RESULT=failed
+runbook=<id или deploy.sh>
+phase=<этап>
+failed_check=<конкретная проверка или команда>
+error=<одна безопасная строка ошибки>
+head_current=<sha>
+backups=db:ok,runtime:ok
+rollback=performed|not-required|failed
+rollback_result=api:ok,gateway:active,head:<sha>
+details_log=<путь к полному логу на сервере>
+```
+
+Маркер неудавшегося rollback никогда не сокращается и не опускается. При ошибке сборки или падении сервиса допускается приложить до 60 релевантных строк лога, если сам runbook их печатает.
+
+## Что не возвращается в чат
+
+- статистика файлов `git merge`/`git diff`;
+- слои Docker build и вывод установки пакетов;
+- повторяющиеся успешные проверки;
+- полные журналы сервисов;
+- любые секреты и персональные данные.
+
+## Шаблон для промптов основного агента
+
+```text
+Верни отчёт строго в каноническом формате RESULT=… из docs/operations/vps-reporting.md.
+Полный вывод сохрани в root-only лог и укажи details_log. Не вставляй git stat,
+Docker build layers, pip output или полный journal. При ошибке rollback-блок обязателен.
+```
+
+Правило сокращает рост контекста чата без потери аудируемости: полные логи остаются на сервере.
