@@ -12,4 +12,5 @@ fi
 
 cd "$REPO"
 source <(git show "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-runtime.sh")
+source <(git show "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-image-recovery.sh")
 nails_002e6_main
