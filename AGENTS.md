@@ -7,7 +7,8 @@
 - [`docs/context/current.md`](docs/context/current.md) — компактный актуальный handoff: production SHA, текущая задача, обнаруженные проблемы, принятые решения и точка продолжения;
 - [`docs/operations/agent-responsibilities.md`](docs/operations/agent-responsibilities.md) — разделение ответственности основного и VPS-агента;
 - [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — проверенная production-топология, пути и правильный способ управления Hermes;
-- [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — точный контракт загрузки profile-local plugins, `plugins.enabled` и Telegram toolsets для установленной версии Hermes.
+- [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — точный контракт загрузки profile-local plugins, `plugins.enabled` и Telegram toolsets для установленной версии Hermes;
+- [`docs/operations/engineering-principles.md`](docs/operations/engineering-principles.md) — обязательные инженерные принципы: соразмерность масштабу проекта, устранение класса ошибки вместо нового защитного слоя, правило вычитания, один постоянный deploy-скрипт (ADR-003), rollback как deploy предыдущего SHA.
 
 Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные три operational-документа. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации или правила видимости tools по памяти предыдущего чата.
 
