@@ -313,29 +313,6 @@ def _booking_mutation(
                 values["new_start_time"],
                 timezone_name,
             )
-            slots = _call_backend(
-                action="free_slots",
-                telegram_user_id=telegram_user_id,
-                api_key=api_key,
-                method="GET",
-                path="/api/v1/scheduling/slots",
-                params={
-                    "day": values["new_day"],
-                    "service_name": values["service_name"],
-                },
-                json_body=None,
-            )
-            if not slots.get("ok"):
-                return slots
-            free = [
-                _parse_backend_datetime(item)
-                for item in slots["result"]["starts_at"]
-            ]
-            if new_start not in free:
-                return _error(
-                    "slot_unavailable",
-                    "The selected slot is no longer available.",
-                )
             body["new_starts_at"] = new_start.isoformat()
             path = "/api/v1/scheduling/bookings/reschedule"
     except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError):
