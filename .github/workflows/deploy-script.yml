@@ -60,6 +60,9 @@ jobs:
               'IMAGE_RETAGGED="true"',
               'docker image tag "$ROLLBACK_IMAGE" "$API_IMAGE"',
               'reset --hard "$RELEASE_SHA"',
+              '-e APP_TIMEZONE=UTC',
+              '-e DATABASE_URL=postgresql+psycopg://smoke:smoke@127.0.0.1:5432/smoke',
+              '-e INTERNAL_API_KEY=deploy-smoke-key-0000000000000000',
           ):
               assert phrase in deploy, f"deploy.sh lost mandatory safeguard: {phrase}"
 
