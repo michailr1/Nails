@@ -6,11 +6,13 @@ on:
     paths:
       - "ops/deploy/nails-002e6-combined-operations.sh"
       - "ops/deploy/lib/nails-002e6-route-check.sh"
+      - "ops/deploy/lib/nails-002e6-fresh-build.sh"
       - ".github/workflows/deployment-runbooks-e6-route-check.yml"
   pull_request:
     paths:
       - "ops/deploy/nails-002e6-combined-operations.sh"
       - "ops/deploy/lib/nails-002e6-route-check.sh"
+      - "ops/deploy/lib/nails-002e6-fresh-build.sh"
       - ".github/workflows/deployment-runbooks-e6-route-check.yml"
 
 permissions:
@@ -26,26 +28,36 @@ jobs:
         run: |
           bash -n ops/deploy/nails-002e6-combined-operations.sh
           bash -n ops/deploy/lib/nails-002e6-route-check.sh
+          bash -n ops/deploy/lib/nails-002e6-fresh-build.sh
 
-      - name: Validate route-check contract
+      - name: Validate build and route-check contract
         run: |
           python - <<'PY'
           from pathlib import Path
 
           entry = Path("ops/deploy/nails-002e6-combined-operations.sh").read_text(encoding="utf-8")
           check = Path("ops/deploy/lib/nails-002e6-route-check.sh").read_text(encoding="utf-8")
+          build = Path("ops/deploy/lib/nails-002e6-fresh-build.sh").read_text(encoding="utf-8")
 
-          required_entry = (
+          for item in (
               'git cat-file -e "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-route-check.sh"',
+              'git cat-file -e "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-fresh-build.sh"',
               'source <(git show "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-route-check.sh")',
+              'source <(git show "${RELEASE_SHA}:ops/deploy/lib/nails-002e6-fresh-build.sh")',
+              'declare -F verify_built_api_image',
               'declare -F verify_openapi',
-          )
-          for item in required_entry:
+              'declare -F build_fresh_api_image',
+          ):
               assert item in entry, item
 
-          required_check = (
+          for item in (
+              "verify_api_routes()",
+              "verify_built_api_image()",
               "verify_openapi()",
-              "compose exec -T nails-api python -",
+              'docker run --rm',
+              '--network none',
+              '--read-only',
+              'verify_api_routes compose exec -T nails-api',
               "from app.main import app",
               "app.routes",
               "assert app.openapi_url is None",
@@ -54,24 +66,70 @@ jobs:
               '"/api/v1/scheduling/services"',
               '"/api/v1/onboarding/preferences"',
               'print("OPENAPI_ROUTES_OK=true")',
-          )
-          for item in required_check:
+          ):
               assert item in check, item
 
-          forbidden = (
+          for item in (
+              "build_fresh_api_image()",
+              "command docker build",
+              "--no-cache",
+              '--file "$REPO/backend/Dockerfile"',
+              '--tag "$API_IMAGE_REF_BEFORE"',
+              '"$REPO/backend"',
+              'verify_built_api_image "$API_IMAGE_REF_BEFORE"',
+              'if [[ "$#" -eq 2 && "$1" == "build" && "$2" == "nails-api" ]]',
+              'command docker compose --env-file "$BACKEND_ENV" "$@"',
+          ):
+              assert item in build, item
+
+          for forbidden in (
               '${API_BASE}/openapi.json',
               'curl ',
               'docs_url=',
               'openapi_url="/openapi.json"',
-          )
-          for item in forbidden:
-              assert item not in check, item
+              'docker commit',
+              'git checkout',
+              'git reset',
+              'docker compose down',
+          ):
+              assert forbidden not in check + build, forbidden
 
           lines = check.splitlines()
           start = next(i for i, line in enumerate(lines) if "<<'PY'" in line) + 1
           end = lines.index("PY", start)
-          snippet = "\n".join(lines[start:end]) + "\n"
-          compile(snippet, "e6-route-check", "exec")
+          compile("\n".join(lines[start:end]) + "\n", "e6-route-check", "exec")
 
-          print("E6_PRIVATE_ROUTE_CHECK_OK")
+          print("E6_FRESH_BUILD_ROUTE_CONTRACT_OK")
           PY
+
+      - name: Simulate exact build and compose delegation
+        run: |
+          set -Eeuo pipefail
+
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          mkdir -p "$root/bin"
+
+          cat >"$root/bin/docker" <<'SH'
+          #!/usr/bin/env bash
+          printf '%s\n' "$*" >>"${FAKE_DOCKER_LOG:?}"
+          SH
+          chmod +x "$root/bin/docker"
+
+          export PATH="$root/bin:$PATH"
+          export FAKE_DOCKER_LOG="$root/docker.log"
+
+          bash -Eeuo pipefail -c '
+            REPO="/opt/nails/repo"
+            BACKEND_ENV="/opt/nails/.env"
+            API_IMAGE_REF_BEFORE="nails-nails-api"
+            verify_built_api_image() { printf "verified=%s\n" "$1" >>"$FAKE_DOCKER_LOG"; }
+            source ops/deploy/lib/nails-002e6-fresh-build.sh
+            compose build nails-api
+            compose ps -q nails-api
+          '
+
+          grep -Fx 'build --no-cache --file /opt/nails/repo/backend/Dockerfile --tag nails-nails-api /opt/nails/repo/backend' "$FAKE_DOCKER_LOG"
+          grep -Fx 'verified=nails-nails-api' "$FAKE_DOCKER_LOG"
+          grep -Fx 'compose --env-file /opt/nails/.env ps -q nails-api' "$FAKE_DOCKER_LOG"
+          printf 'E6_FRESH_BUILD_SIMULATION_OK\n'
