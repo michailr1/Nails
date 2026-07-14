@@ -74,7 +74,13 @@ def _call_backend(
     json_body: dict[str, Any] | None,
     request: Callable[..., httpx.Response] = _http_request,
 ) -> dict[str, Any]:
-    request_id = f"nails-scheduling-{uuid.uuid4()}"
+    operation_token = uuid.uuid4().hex
+    request_id = f"nails-scheduling-{operation_token}"
+    if action == "create_booking" and json_body is not None:
+        json_body = {
+            **json_body,
+            "idempotency_key": f"nails-scheduling-v2-{operation_token}",
+        }
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
