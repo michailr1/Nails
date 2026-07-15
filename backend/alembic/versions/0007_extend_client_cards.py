@@ -5,6 +5,8 @@ Revises: 0006
 Create Date: 2026-07-15
 """
 
+# ruff: noqa: I001
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
