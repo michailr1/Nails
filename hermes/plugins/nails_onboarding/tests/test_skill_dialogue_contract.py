@@ -28,8 +28,6 @@ def test_onboarding_skill_preserves_dialogue_order_and_presentation() -> None:
         "нельзя говорить «цена — если хотите»",
         "цену `2 500 ₽`",
         "если мастер назвала только число",
-        "секунду, сохраняю настройки…",
-        "секунду, проверяю расписание…",
         "nails_scheduling action=resolve_date",
         "никогда не вычисляет дату, год или день недели самостоятельно",
         "успешный `complete` materializes",
@@ -37,8 +35,13 @@ def test_onboarding_skill_preserves_dialogue_order_and_presentation() -> None:
     for phrase in required_phrases:
         assert phrase in text
 
-    assert "думаю… (nails_onboarding)" not in text
-    assert "думаю… (nails_scheduling)" not in text
+    for breadcrumb in (
+        "секунду, сохраняю настройки…",
+        "секунду, проверяю расписание…",
+        "думаю… (nails_onboarding)",
+        "думаю… (nails_scheduling)",
+    ):
+        assert breadcrumb not in text
 
 
 def test_first_acquaintance_uses_nelly_and_persistent_preferences() -> None:
