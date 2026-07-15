@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from nails_scheduling import operations, tools
+from nails_scheduling import operations, tools, verified_operations
 
 
 def _set_context(monkeypatch, *, platform="telegram", user_id="700000001"):
@@ -56,6 +56,17 @@ def _booking_payload(
     }
 
 
+def _day_payload(*, bookings=None):
+    return {
+        "day": "2026-07-18",
+        "timezone": "Europe/Berlin",
+        "weekday_iso": 6,
+        "availability_known": True,
+        "availability": [],
+        "bookings": bookings if bookings is not None else [],
+    }
+
+
 def _slots_payload(*, starts=None, known=True, working=True):
     return {
         "day": "2026-07-18",
@@ -73,7 +84,7 @@ def _slots_payload(*, starts=None, known=True, working=True):
     }
 
 
-def test_create_booking_checks_slot_and_defers_idempotency_to_transport(monkeypatch):
+def test_create_booking_checks_slot_and_returns_verified_readback(monkeypatch):
     _set_context(monkeypatch, user_id="700000001")
     _set_key(monkeypatch)
     calls = []
@@ -91,6 +102,12 @@ def test_create_booking_checks_slot_and_defers_idempotency_to_transport(monkeypa
             }
         if kwargs["path"].endswith("/slots"):
             return {"ok": True, "action": "free_slots", "result": _slots_payload()}
+        if kwargs["path"].endswith("/day"):
+            return {
+                "ok": True,
+                "action": "day_view",
+                "result": _day_payload(bookings=[_booking_payload()]),
+            }
         return {
             "ok": True,
             "action": "create_booking",
@@ -98,6 +115,7 @@ def test_create_booking_checks_slot_and_defers_idempotency_to_transport(monkeypa
         }
 
     monkeypatch.setattr(operations, "_call_backend", fake_call_backend)
+    monkeypatch.setattr(verified_operations, "_call_backend", fake_call_backend)
     args = {
         "action": "create_booking",
         "client_public_name": "Анна",
@@ -109,10 +127,12 @@ def test_create_booking_checks_slot_and_defers_idempotency_to_transport(monkeypa
     first = json.loads(tools.nails_scheduling(args))
     assert first["ok"] is True
     assert first["result"]["created"] is True
+    assert first["result"]["verified"] is True
     assert [call["path"] for call in calls] == [
         "/api/v1/scheduling/clients/exact",
         "/api/v1/scheduling/slots",
         "/api/v1/scheduling/bookings",
+        "/api/v1/scheduling/day",
     ]
     body = calls[2]["json_body"]
     assert set(body) == {
@@ -129,6 +149,7 @@ def test_create_booking_checks_slot_and_defers_idempotency_to_transport(monkeypa
     second = json.loads(tools.nails_scheduling(args))
     assert "idempotency_key" not in calls[2]["json_body"]
     assert second["ok"] is True
+    assert second["result"]["verified"] is True
 
 
 def test_duplicate_booking_is_detected_from_day_view_without_post(monkeypatch):
@@ -153,18 +174,12 @@ def test_duplicate_booking_is_detected_from_day_view_without_post(monkeypatch):
             return {
                 "ok": True,
                 "action": "day_view",
-                "result": {
-                    "day": "2026-07-18",
-                    "timezone": "Europe/Berlin",
-                    "weekday_iso": 6,
-                    "availability_known": True,
-                    "availability": [],
-                    "bookings": [_booking_payload()],
-                },
+                "result": _day_payload(bookings=[_booking_payload()]),
             }
         pytest.fail("booking POST must not be called")
 
     monkeypatch.setattr(operations, "_call_backend", fake_call_backend)
+    monkeypatch.setattr(verified_operations, "_call_backend", fake_call_backend)
     result = json.loads(
         tools.nails_scheduling(
             {
@@ -179,9 +194,11 @@ def test_duplicate_booking_is_detected_from_day_view_without_post(monkeypatch):
     )
     assert result["ok"] is True
     assert result["result"]["created"] is False
+    assert result["result"]["verified"] is True
     assert [call["path"] for call in calls] == [
         "/api/v1/scheduling/clients/exact",
         "/api/v1/scheduling/slots",
+        "/api/v1/scheduling/day",
         "/api/v1/scheduling/day",
     ]
     assert "id" not in result["result"]["booking"]
@@ -221,6 +238,7 @@ def test_booking_guard_rejects_invalid_or_stale_slots(monkeypatch, slots, start_
         pytest.fail("booking POST must not be called")
 
     monkeypatch.setattr(operations, "_call_backend", fake_call_backend)
+    monkeypatch.setattr(verified_operations, "_call_backend", fake_call_backend)
     result = json.loads(
         tools.nails_scheduling(
             {
@@ -253,6 +271,7 @@ def test_create_booking_requires_existing_exact_client(monkeypatch):
         pytest.fail("slots and booking must not be called")
 
     monkeypatch.setattr(operations, "_call_backend", fake_call_backend)
+    monkeypatch.setattr(verified_operations, "_call_backend", fake_call_backend)
     result = json.loads(
         tools.nails_scheduling(
             {
