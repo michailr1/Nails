@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -8,6 +9,7 @@ from app.schemas.scheduling import DayBookingSummary
 
 
 class ClientCardSummary(BaseModel):
+    id: uuid.UUID
     public_name: str
     phone: str | None
     private_alias: str | None
