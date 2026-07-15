@@ -127,11 +127,6 @@ class Client(TimestampMixin, Base):
             unique=True,
             postgresql_where=text("profile_status = 'active'"),
         ),
-        Index(
-            "ix_clients_owner_normalized_private_alias",
-            "owner_user_id",
-            "normalized_private_alias",
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -142,7 +137,6 @@ class Client(TimestampMixin, Base):
     normalized_public_name: Mapped[str] = mapped_column(String(160), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(32))
     private_alias: Mapped[str | None] = mapped_column(String(160))
-    normalized_private_alias: Mapped[str | None] = mapped_column(String(160))
     contact_channel: Mapped[str | None] = mapped_column(String(64))
     birthday: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
@@ -316,29 +310,34 @@ class OnboardingDraft(TimestampMixin, Base):
         ),
         CheckConstraint(
             "(is_confirmed = false) OR "
-            "(confirmed_revision = revision AND confirmed_payload IS NOT NULL)",
-            name="current_confirmation_consistent",
+            "(confirmed_revision IS NOT NULL AND confirmed_revision = revision)",
+            name="confirmed_revision_consistent",
         ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     onboarding_state_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("onboarding_states.id", ondelete="CASCADE"),
-        nullable=False,
+        UUID(as_uuid=True), ForeignKey("onboarding_states.id", ondelete="CASCADE"), nullable=False
     )
     section: Mapped[OnboardingSection] = mapped_column(
         Enum(OnboardingSection, name="onboarding_section"), nullable=False
     )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     payload: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
-    confirmed_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    revision: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1, server_default=text("1")
-    )
-    confirmed_revision: Mapped[int | None] = mapped_column(Integer)
     is_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed_revision: Mapped[int | None] = mapped_column(Integer)
 
     onboarding_state: Mapped[OnboardingState] = relationship(back_populates="drafts")
+
+
+class MasterPreferences(TimestampMixin, Base):
+    __tablename__ = "master_preferences"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    preferred_language: Mapped[str] = mapped_column(String(16), nullable=False, default="ru")
+    default_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="RUB")
+    default_booking_buffer_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
