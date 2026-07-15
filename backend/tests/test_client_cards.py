@@ -1,11 +1,11 @@
 from collections.abc import Callable
 
 import pytest
-from app.models import AuditEvent, Client
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models import AuditEvent, Client
 
 CLIENT_CARD = {
     "public_name": "Анна Тестовая",
