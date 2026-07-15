@@ -1,14 +1,105 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.scheduling import ClientSummary, DayBookingSummary
+from app.schemas.scheduling import DayBookingSummary
+
+
+class ClientCardSummary(BaseModel):
+    public_name: str
+    phone: str | None
+    private_alias: str | None
+    contact_channel: str | None
+    birthday: date | None
+    notes: str | None
+    nail_skin_notes: str | None
+    sensitivity_notes: str | None
+    style_preferences: str | None
+    communication_preferences: str | None
+
+
+class ClientLookupResponse(BaseModel):
+    found: bool
+    client: ClientCardSummary | None = None
 
 
 class ClientCandidateListResponse(BaseModel):
-    candidates: list[ClientSummary]
+    candidates: list[ClientCardSummary]
+
+
+class ClientCardDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    public_name: str = Field(min_length=1, max_length=160)
+    phone: str | None = Field(default=None, max_length=32)
+    private_alias: str | None = Field(default=None, max_length=160)
+    contact_channel: str | None = Field(default=None, max_length=80)
+    birthday: date | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+    nail_skin_notes: str | None = Field(default=None, max_length=4000)
+    sensitivity_notes: str | None = Field(default=None, max_length=4000)
+    style_preferences: str | None = Field(default=None, max_length=4000)
+    communication_preferences: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("public_name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("public_name must not be empty")
+        return candidate
+
+    @field_validator("phone", "private_alias", "contact_channel")
+    @classmethod
+    def normalize_short_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = " ".join(value.split())
+        return candidate or None
+
+    @field_validator(
+        "notes",
+        "nail_skin_notes",
+        "sensitivity_notes",
+        "style_preferences",
+        "communication_preferences",
+    )
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = value.strip()
+        return candidate or None
+
+
+class ClientCreateRequest(ClientCardDefinition):
+    pass
+
+
+class ClientCreateResponse(BaseModel):
+    client: ClientCardSummary
+    created: bool
+    contact_added: bool = False
+
+
+class ClientReplaceRequest(ClientCardDefinition):
+    current_public_name: str = Field(min_length=1, max_length=160)
+
+    @field_validator("current_public_name")
+    @classmethod
+    def normalize_current_name(cls, value: str) -> str:
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("current_public_name must not be empty")
+        return candidate
+
+
+class ClientReplaceResponse(BaseModel):
+    client: ClientCardSummary
+    changed: bool
+    changed_fields: list[str]
 
 
 class BookingSelector(BaseModel):
