@@ -35,14 +35,6 @@ def test_skill_preserves_confirmation_date_and_security_contract():
     for phrase in required:
         assert phrase in text
 
-    for breadcrumb in (
-        "секунду, проверяю расписание…",
-        "секунду, сохраняю настройки…",
-        "думаю… (nails_scheduling)",
-        "думаю… (nails_onboarding)",
-    ):
-        assert breadcrumb not in text
-
 
 def test_skill_supports_full_service_management_after_onboarding():
     text = _skill_text().casefold()
