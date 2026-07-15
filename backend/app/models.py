@@ -127,6 +127,11 @@ class Client(TimestampMixin, Base):
             unique=True,
             postgresql_where=text("profile_status = 'active'"),
         ),
+        Index(
+            "ix_clients_owner_normalized_private_alias",
+            "owner_user_id",
+            "normalized_private_alias",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -136,6 +141,15 @@ class Client(TimestampMixin, Base):
     public_name: Mapped[str] = mapped_column(String(160), nullable=False)
     normalized_public_name: Mapped[str] = mapped_column(String(160), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(32))
+    private_alias: Mapped[str | None] = mapped_column(String(160))
+    normalized_private_alias: Mapped[str | None] = mapped_column(String(160))
+    contact_channel: Mapped[str | None] = mapped_column(String(64))
+    birthday: Mapped[date | None] = mapped_column(Date)
+    notes: Mapped[str | None] = mapped_column(Text)
+    nail_skin_notes: Mapped[str | None] = mapped_column(Text)
+    sensitivity_notes: Mapped[str | None] = mapped_column(Text)
+    style_preferences: Mapped[str | None] = mapped_column(Text)
+    communication_preferences: Mapped[str | None] = mapped_column(Text)
     profile_status: Mapped[ClientProfileStatus] = mapped_column(
         Enum(ClientProfileStatus, name="client_profile_status"),
         nullable=False,
