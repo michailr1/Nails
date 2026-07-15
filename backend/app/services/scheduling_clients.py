@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,7 +29,9 @@ _CLIENT_FIELDS = (
 )
 
 
-def _client_values(body: ClientCreateRequest | ClientReplaceRequest) -> dict[str, Any]:
+def _client_values(
+    body: ClientCreateRequest | ClientReplaceRequest,
+) -> dict[str, object]:
     return {field: getattr(body, field) for field in _CLIENT_FIELDS}
 
 
