@@ -16,6 +16,7 @@ from .verified_operations import (
 
 logger = logging.getLogger(__name__)
 _API_KEY_ENV = "NAILS_INTERNAL_API_KEY"
+_VERIFIED_ACTIONS = {"create_booking", "reschedule_booking", "cancel_booking"}
 
 
 class TrustedContextError(RuntimeError):
@@ -91,7 +92,12 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             return _json_response(response)
 
         try:
-            safe_result = _sanitize_success(action, response.get("result"))
+            raw_result = response.get("result")
+            safe_result = _sanitize_success(action, raw_result)
+            if action in _VERIFIED_ACTIONS:
+                if not isinstance(raw_result, dict) or raw_result.get("verified") is not True:
+                    raise ValueError("verified mutation result is required")
+                safe_result["verified"] = True
         except (KeyError, TypeError, ValueError):
             return _json_response(
                 _error(
