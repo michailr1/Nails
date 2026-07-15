@@ -103,8 +103,10 @@ def _find_booking(
         .join(Service, Service.id == Booking.service_id)
         .where(
             Booking.owner_user_id == identity.user_id,
-            Client.normalized_public_name == normalize_public_name(selector.client_public_name),
-            Service.normalized_public_name == normalize_public_name(selector.service_name),
+            Client.normalized_public_name
+            == normalize_public_name(selector.client_public_name),
+            Service.normalized_public_name
+            == normalize_public_name(selector.service_name),
             Booking.starts_at == selector.starts_at.astimezone(UTC),
         )
         .order_by(
