@@ -31,6 +31,7 @@ def test_skill_preserves_confirmation_date_and_security_contract():
         "idempotency key",
         "не повторяй write бесконечно",
         "перенос, отмена и изменение существующей записи",
+        "guarded mutation также `verified=true`",
     )
     for phrase in required:
         assert phrase in text
@@ -132,14 +133,14 @@ def test_skill_makes_fresh_backend_reads_authoritative():
         "никогда не отвечай о текущем состоянии только по истории диалога",
         "если свежий tool-результат противоречит истории диалога, доверяй tool",
         "никогда не отклоняй просьбу только потому, что предыдущая реплика",
-        "после каждого write обязательно выполни свежий read",
-        "при ошибке read не подменяй данные памятью",
+        "после каждого write обязательно используй свежий readback",
+        "при ошибке read или verification не подменяй данные памятью",
     )
     for phrase in required:
         assert phrase in text
 
 
-def test_create_booking_requires_fresh_reads_before_and_after_write():
+def test_create_booking_uses_guarded_read_write_readback():
     text = _skill_text().casefold()
     section = text.split("## создание записи", 1)[1].split(
         "## перенос существующей записи", 1
@@ -149,14 +150,19 @@ def test_create_booking_requires_fresh_reads_before_and_after_write():
         "заново найди услугу",
         "свежий `free_slots`",
         "вызови `create_booking`",
-        "после write снова вызови `day_view`",
-        "только если свежий `day_view` показывает активную запись",
+        "guarded action внутри одного вызова",
+        "`ok=true`, `verified=true`",
+        "не вызывай отдельный повторный write",
     ):
         assert phrase in section
+    assert "после write снова вызови `day_view`" not in section
 
 
-def test_mutations_require_fresh_readback():
+def test_guarded_mutations_do_not_require_second_model_tool_roundtrip():
     text = _skill_text().casefold()
+    source = text.split("## единственный источник текущего состояния", 1)[1].split(
+        "## безопасность", 1
+    )[0]
     reschedule = text.split("## перенос существующей записи", 1)[1].split(
         "## отмена записи", 1
     )[0]
@@ -164,10 +170,14 @@ def test_mutations_require_fresh_readback():
         "## настройки мастера", 1
     )[0]
 
-    assert "после write заново вызови `day_view`" in reschedule
-    assert "свежий read показывает её в новом времени" in reschedule
-    assert "после write снова вызови `day_view`" in cancel
-    assert "свежий `day_view` больше не показывает эту активную запись" in cancel
+    assert "внутри одного tool-вызова" in source
+    assert "отдельный последующий `day_view` не вызывай" in source
+    assert "только если результат содержит `ok=true` и `verified=true`" in source
+    assert "для всех остальных write" in source
+    assert "guarded action внутри одного вызова" in reschedule
+    assert "ожидаемом новом времени" in reschedule
+    assert "guarded action внутри одного вызова" in cancel
+    assert "только при `ok=true` и `verified=true`" in cancel
     assert "старое упоминание записи в диалоге" in cancel
 
 
