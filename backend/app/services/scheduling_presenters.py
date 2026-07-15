@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from app.models import Booking, Client, Service
 from app.schemas.scheduling import ClientSummary, DayBookingSummary, ServiceSummary
+from app.schemas.scheduling_management import ClientCardSummary
 
 
 def service_summary(service: Service) -> ServiceSummary:
@@ -25,6 +26,21 @@ def client_summary(client: Client) -> ClientSummary:
         id=client.id,
         public_name=client.public_name,
         phone=client.phone,
+    )
+
+
+def client_card_summary(client: Client) -> ClientCardSummary:
+    return ClientCardSummary(
+        public_name=client.public_name,
+        phone=client.phone,
+        private_alias=client.private_alias,
+        contact_channel=client.contact_channel,
+        birthday=client.birthday,
+        notes=client.notes,
+        nail_skin_notes=client.nail_skin_notes,
+        sensitivity_notes=client.sensitivity_notes,
+        style_preferences=client.style_preferences,
+        communication_preferences=client.communication_preferences,
     )
 
 
