@@ -22,7 +22,7 @@ from app.services.scheduling_common import (
     ensure_reservation_available,
     lock_owner_schedule,
 )
-from app.services.scheduling_presenters import booking_summary, client_summary
+from app.services.scheduling_presenters import booking_summary, client_card_summary
 
 _NAME_ALIASES = {
     "аня": "анна",
@@ -66,12 +66,17 @@ def find_client_candidates(
     ).all()
     candidates = []
     for client in clients:
-        if client.normalized_public_name == normalized:
+        normalized_private_alias = (
+            normalize_public_name(client.private_alias) if client.private_alias else None
+        )
+        if client.normalized_public_name == normalized or normalized_private_alias == normalized:
             candidates.append(client)
             continue
         if _canonical_first_name(client.public_name) == canonical_first:
             candidates.append(client)
-    return ClientCandidateListResponse(candidates=[client_summary(client) for client in candidates])
+    return ClientCandidateListResponse(
+        candidates=[client_card_summary(client) for client in candidates]
+    )
 
 
 def _find_booking(
