@@ -149,7 +149,7 @@ compose build --build-arg GIT_SHA="$RELEASE_SHA" nails-api >/dev/null
 IMAGE_RETAGGED="true"
 
 log "4. Проверка собранного образа ДО остановки runtime"
-docker run --rm --network none --read-only --tmpfs /tmp:size=16m \
+docker run --rm -i --network none --read-only --tmpfs /tmp:size=16m \
   -e EXPECTED_SHA="$RELEASE_SHA" \
   -e APP_TIMEZONE=UTC \
   -e DATABASE_URL=postgresql+psycopg://smoke:smoke@127.0.0.1:5432/smoke \
