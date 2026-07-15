@@ -3,8 +3,8 @@ from collections.abc import Callable
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
+from app.db import get_session_factory
 from app.models import AuditEvent, Client
 
 CLIENT_CARD = {
@@ -142,7 +142,6 @@ def test_private_alias_participates_in_candidates_but_never_replaces_public_name
 @pytest.mark.usefixtures("clean_database")
 def test_client_audit_records_changed_field_names_without_private_values(
     client: TestClient,
-    db_session: Session,
     create_user: Callable,
     auth_headers: Callable,
 ) -> None:
@@ -165,15 +164,16 @@ def test_client_audit_records_changed_field_names_without_private_values(
     )
     assert updated.status_code == 200, updated.text
 
-    stored = db_session.scalar(
-        select(Client).where(Client.public_name == "Анна Тестовая")
-    )
-    assert stored is not None
-    events = db_session.scalars(
-        select(AuditEvent)
-        .where(AuditEvent.object_id == stored.id)
-        .order_by(AuditEvent.created_at)
-    ).all()
+    with get_session_factory()() as session:
+        stored = session.scalar(
+            select(Client).where(Client.public_name == "Анна Тестовая")
+        )
+        assert stored is not None
+        events = session.scalars(
+            select(AuditEvent)
+            .where(AuditEvent.object_id == stored.id)
+            .order_by(AuditEvent.created_at)
+        ).all()
     serialized = " ".join(str(event.safe_changes) for event in events)
     assert "Секретная чувствительность" not in serialized
     assert "Тонкая ногтевая пластина" not in serialized
