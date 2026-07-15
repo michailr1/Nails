@@ -40,7 +40,7 @@ Price, duration and buffer changes affect future bookings. Existing bookings ret
 
 The plugin uses only fixed loopback scheduling API endpoints. Telegram identity comes from trusted Hermes session context. The model cannot supply identity, endpoint, headers, secrets, technical object identifiers, or booking idempotency data.
 
-Client creation requires `confirmed=true` and performs an exact lookup before POST. Service writes, availability changes and booking creation also require `confirmed=true`. Booking creation rechecks the exact client, resolves timezone and the slot grid from backend data, and creates only an exact free-slot start. Runtime generates a deterministic owner-scoped idempotency key. Results remove backend object IDs before they are returned to the model.
+Client creation requires `confirmed=true` and performs an exact lookup before POST. Service writes, availability changes and booking creation also require `confirmed=true`. Booking creation rechecks the exact client, resolves timezone and the slot grid from backend data, and creates only an exact free-slot start. The transport generates a fresh opaque idempotency key for each confirmed create operation and reuses it only for retries inside that operation. A later confirmed booking lifecycle receives a different key, even for the same client, service and time. Results remove backend object IDs before they are returned to the model.
 
 Required environment variable:
 
