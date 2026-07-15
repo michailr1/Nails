@@ -5,10 +5,14 @@ import logging
 import os
 from typing import Any
 
-from .operations import _booking_mutation, _create_booking, _create_client
+from .operations import _create_client
 from .presenters import _sanitize_success
 from .transport import _call_backend, _error
 from .validation import ToolInputError, _request_spec, _validate_args
+from .verified_operations import (
+    _verified_booking_mutation,
+    _verified_create_booking,
+)
 
 logger = logging.getLogger(__name__)
 _API_KEY_ENV = "NAILS_INTERNAL_API_KEY"
@@ -59,13 +63,13 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 api_key=api_key,
             )
         elif action == "create_booking":
-            response = _create_booking(
+            response = _verified_create_booking(
                 values,
                 telegram_user_id=telegram_user_id,
                 api_key=api_key,
             )
         elif action in {"reschedule_booking", "cancel_booking"}:
-            response = _booking_mutation(
+            response = _verified_booking_mutation(
                 action,
                 values,
                 telegram_user_id=telegram_user_id,
