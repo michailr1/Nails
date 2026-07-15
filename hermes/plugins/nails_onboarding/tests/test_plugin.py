@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from nails_onboarding import register, schemas, tools
+from nails_onboarding import register, reliable_tools, schemas, tools
 
 
 def _set_context(monkeypatch, *, platform="telegram", user_id="100000001"):
@@ -337,3 +337,29 @@ def test_safe_backend_validation_details_are_preserved():
     assert result["ok"] is False
     assert result["error"]["code"] == "invalid_onboarding_payload"
     assert result["error"]["details"][0]["location"] == ["days"]
+
+
+def test_missing_state_is_started_before_write(monkeypatch):
+    calls = []
+
+    def fake_tool(args):
+        calls.append(args.copy())
+        if len(calls) == 1:
+            return json.dumps({"ok": False, "error": {"code": "onboarding_not_started"}})
+        return json.dumps({"ok": True, "result": {"status": "in_progress"}})
+
+    monkeypatch.setattr(reliable_tools, "_raw_nails_onboarding", fake_tool)
+    args = {
+        "action": "save_section",
+        "section": "services",
+        "payload": {"services": []},
+    }
+
+    result = json.loads(reliable_tools.nails_onboarding(args))
+
+    assert result["ok"] is True
+    assert [item["action"] for item in calls] == [
+        "save_section",
+        "start",
+        "save_section",
+    ]
