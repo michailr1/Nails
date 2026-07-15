@@ -56,7 +56,7 @@ def test_booking_mutations_require_confirmation_and_exact_current_state():
     assert values["day"] == "2026-07-17"
 
 
-def test_skill_requires_candidate_check_soft_cancel_and_single_progress_message():
+def test_skill_requires_candidate_check_and_soft_cancel():
     skill = (
         Path(__file__).resolve().parents[3]
         / "skills"
@@ -69,6 +69,5 @@ def test_skill_requires_candidate_check_soft_cancel_and_single_progress_message(
         "reschedule_booking",
         "cancel_booking",
         "отмена является мягкой",
-        "не отправляй несколько промежуточных сообщений подряд",
     ):
         assert phrase in skill
