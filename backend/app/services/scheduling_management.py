@@ -80,6 +80,7 @@ def _find_booking(
     selector: BookingSelector,
     *,
     lock: bool,
+    allow_cancelled_repeat: bool = False,
 ) -> tuple[Booking, Client, Service]:
     statement = (
         select(Booking, Client, Service)
@@ -91,15 +92,32 @@ def _find_booking(
             Service.normalized_public_name == normalize_public_name(selector.service_name),
             Booking.starts_at == selector.starts_at.astimezone(UTC),
         )
+        .order_by(
+            Booking.updated_at.desc(),
+            Booking.created_at.desc(),
+            Booking.id.desc(),
+        )
     )
     if lock:
         statement = statement.with_for_update()
     rows = session.execute(statement).all()
     if not rows:
         raise SchedulingDomainError("booking_not_found", status_code=404)
-    if len(rows) != 1:
+
+    scheduled_rows = [row for row in rows if row[0].status == BookingStatus.scheduled]
+    if len(scheduled_rows) == 1:
+        return scheduled_rows[0]
+    if len(scheduled_rows) > 1:
         raise SchedulingDomainError("booking_ambiguous")
-    return rows[0]
+
+    if allow_cancelled_repeat:
+        for row in rows:
+            if row[0].status == BookingStatus.cancelled:
+                return row
+
+    if len(rows) == 1:
+        return rows[0]
+    raise SchedulingDomainError("booking_ambiguous")
 
 
 def _reservation_from_snapshot(booking: Booking, starts_at: datetime) -> ReservationTimes:
@@ -173,7 +191,13 @@ def cancel_booking(
     body: BookingCancelRequest,
 ) -> BookingMutationResponse:
     lock_owner_schedule(session, identity.user_id)
-    booking, client, service = _find_booking(session, identity, body, lock=True)
+    booking, client, service = _find_booking(
+        session,
+        identity,
+        body,
+        lock=True,
+        allow_cancelled_repeat=True,
+    )
     timezone = app_timezone()
     if booking.status == BookingStatus.cancelled:
         return BookingMutationResponse(
