@@ -6,7 +6,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.models import AuditEvent, Booking, BookingStatus, Client, ClientProfileStatus, Service
+from app.models import (
+    AuditEvent,
+    Booking,
+    BookingStatus,
+    Client,
+    ClientProfileStatus,
+    Service,
+)
 from app.schemas.scheduling_management import (
     BookingCancelRequest,
     BookingMutationResponse,
@@ -69,7 +76,10 @@ def find_client_candidates(
         normalized_private_alias = (
             normalize_public_name(client.private_alias) if client.private_alias else None
         )
-        if client.normalized_public_name == normalized or normalized_private_alias == normalized:
+        if (
+            client.normalized_public_name == normalized
+            or normalized_private_alias == normalized
+        ):
             candidates.append(client)
             continue
         if _canonical_first_name(client.public_name) == canonical_first:
