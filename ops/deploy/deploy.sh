@@ -161,10 +161,17 @@ expected = os.environ["EXPECTED_SHA"]
 actual = os.environ.get("NAILS_GIT_SHA", "unknown")
 assert actual == expected, f"image built from wrong tree: {actual!r} != {expected!r}"
 
+from app.api.onboarding import router as onboarding_router
+from app.api.scheduling import router as scheduling_router
 from app.main import app
 
-paths = {getattr(route, "path", "") for route in app.routes}
-assert any(path.startswith("/api/v1/") for path in paths), sorted(paths)
+onboarding_paths = {getattr(route, "path", "") for route in onboarding_router.routes}
+scheduling_paths = {getattr(route, "path", "") for route in scheduling_router.routes}
+app_paths = {getattr(route, "path", "") for route in app.routes}
+
+assert any(path.startswith("/api/v1/onboarding") for path in onboarding_paths), sorted(onboarding_paths)
+assert any(path.startswith("/api/v1/scheduling") for path in scheduling_paths), sorted(scheduling_paths)
+assert "/health" in app_paths and "/ready" in app_paths, sorted(app_paths)
 print("BUILT_IMAGE_OK=true")
 PY
 
