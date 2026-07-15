@@ -38,4 +38,4 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
-"alembic/versions/*.py" = ["E501", "I001"]
+"alembic/versions/*.py" = ["E501"]
