@@ -59,7 +59,7 @@ jobs:
               "merge-base --is-ancestor",
               "worktree add --detach",
               '--file "$WORKTREE/compose.yaml"',
-              "--network none",
+              "docker run --rm -i --network none",
               "pg_dump",
               "gzip -t",
               'IMAGE_RETAGGED="true"',
@@ -81,7 +81,7 @@ jobs:
               'IMAGE_RETAGGED="true"'
           )
           assert deploy.index('IMAGE_RETAGGED="true"') < deploy.index(
-              'docker run --rm --network none'
+              'docker run --rm -i --network none'
           )
 
           dockerfile = Path("backend/Dockerfile").read_text(encoding="utf-8")
