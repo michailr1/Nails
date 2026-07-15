@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import date, datetime
 import uuid
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -37,7 +37,7 @@ class ClientCardDefinition(BaseModel):
     public_name: str = Field(min_length=1, max_length=160)
     phone: str | None = Field(default=None, max_length=32)
     private_alias: str | None = Field(default=None, max_length=160)
-    contact_channel: str | None = Field(default=None, max_length=80)
+    contact_channel: str | None = Field(default=None, max_length=64)
     birthday: date | None = None
     notes: str | None = Field(default=None, max_length=4000)
     nail_skin_notes: str | None = Field(default=None, max_length=4000)
