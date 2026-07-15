@@ -31,6 +31,7 @@ def client_summary(client: Client) -> ClientSummary:
 
 def client_card_summary(client: Client) -> ClientCardSummary:
     return ClientCardSummary(
+        id=client.id,
         public_name=client.public_name,
         phone=client.phone,
         private_alias=client.private_alias,
