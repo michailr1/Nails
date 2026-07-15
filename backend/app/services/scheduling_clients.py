@@ -68,7 +68,11 @@ def create_or_reuse_client(
             for field in _CLIENT_FIELDS
             if field not in {"public_name", "phone"} and getattr(body, field) is not None
         }
-        if any(getattr(client, field) != getattr(body, field) for field in supplied_private_fields):
+        has_private_conflict = any(
+            getattr(client, field) != getattr(body, field)
+            for field in supplied_private_fields
+        )
+        if has_private_conflict:
             raise SchedulingDomainError("client_profile_conflict")
 
         contact_added = False
