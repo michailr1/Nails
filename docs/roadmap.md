@@ -264,7 +264,7 @@ NAILS-002 завершён, когда:
 
 ## После MVP
 
-- separate public client bot;
+- separate public client bot — детерминированный бот без LLM (ADR-004), не публичный профиль Hermes;
 - self-booking with master confirmation;
 - separate abuse protection;
 - administrative duplicate merge;
