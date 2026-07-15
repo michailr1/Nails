@@ -14,7 +14,6 @@ def _skill_text() -> str:
 def test_skill_preserves_confirmation_date_and_security_contract():
     text = _skill_text().casefold()
     required = (
-        "секунду, проверяю расписание…",
         "telegram identity берётся только из trusted gateway context",
         "не передавай технические id",
         "не передавай цену, длительность или buffers",
@@ -36,7 +35,13 @@ def test_skill_preserves_confirmation_date_and_security_contract():
     for phrase in required:
         assert phrase in text
 
-    assert "думаю… (nails_scheduling)" not in text
+    for breadcrumb in (
+        "секунду, проверяю расписание…",
+        "секунду, сохраняю настройки…",
+        "думаю… (nails_scheduling)",
+        "думаю… (nails_onboarding)",
+    ):
+        assert breadcrumb not in text
 
 
 def test_skill_supports_full_service_management_after_onboarding():
@@ -73,7 +78,6 @@ def test_skill_allows_master_preference_changes_after_onboarding():
     text = _skill_text().casefold()
     required = (
         "никогда не нужно проходить заново ради их изменения",
-        "секунду, сохраняю настройки…",
         "action=get_master_preferences",
         "action=save_master_name",
         "action=save_master_style",
@@ -93,8 +97,6 @@ def test_skill_allows_master_preference_changes_after_onboarding():
     )
     for phrase in required:
         assert phrase in text
-
-    assert "думаю… (nails_onboarding)" not in text
 
 
 def test_skill_distinguishes_unknown_from_unavailable():
