@@ -63,7 +63,10 @@ def test_client_card_can_be_created_read_and_replaced_owner_scoped(
 
     created = client.post(
         "/api/v1/scheduling/clients",
-        headers=auth_headers(telegram_user_id=100000001, request_id="client-card-create"),
+        headers=auth_headers(
+            telegram_user_id=100000001,
+            request_id="client-card-create",
+        ),
         json=CLIENT_CARD,
     )
     assert created.status_code == 200, created.text
@@ -97,7 +100,10 @@ def test_client_card_can_be_created_read_and_replaced_owner_scoped(
     }
     updated = client.put(
         "/api/v1/scheduling/clients",
-        headers=auth_headers(telegram_user_id=100000001, request_id="client-card-update"),
+        headers=auth_headers(
+            telegram_user_id=100000001,
+            request_id="client-card-update",
+        ),
         json=replacement,
     )
     assert updated.status_code == 200, updated.text
@@ -160,7 +166,9 @@ def test_client_audit_records_changed_field_names_without_private_values(
     )
     assert updated.status_code == 200, updated.text
 
-    stored = db_session.scalar(select(Client).where(Client.public_name == "Анна Тестовая"))
+    stored = db_session.scalar(
+        select(Client).where(Client.public_name == "Анна Тестовая")
+    )
     assert stored is not None
     events = db_session.scalars(
         select(AuditEvent)
