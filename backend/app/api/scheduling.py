@@ -11,9 +11,6 @@ from app.schemas.scheduling import (
     AvailabilityReplaceResponse,
     BookingCreateRequest,
     BookingCreateResponse,
-    ClientCreateRequest,
-    ClientCreateResponse,
-    ClientLookupResponse,
     DateResolveRequest,
     DateResolveResponse,
     DayViewResponse,
@@ -30,10 +27,15 @@ from app.schemas.scheduling_management import (
     BookingMutationResponse,
     BookingRescheduleRequest,
     ClientCandidateListResponse,
+    ClientCreateRequest,
+    ClientCreateResponse,
+    ClientLookupResponse,
+    ClientReplaceRequest,
+    ClientReplaceResponse,
 )
 from app.services.scheduling_availability import replace_availability
 from app.services.scheduling_bookings import create_booking
-from app.services.scheduling_clients import create_or_reuse_client
+from app.services.scheduling_clients import create_or_reuse_client, replace_client
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_dates import resolve_date
 from app.services.scheduling_lookup import find_client_exact
@@ -147,6 +149,18 @@ def create_client(
 ) -> ClientCreateResponse:
     try:
         return create_or_reuse_client(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
+@router.put("/clients", response_model=ClientReplaceResponse)
+def client_replace(
+    body: ClientReplaceRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> ClientReplaceResponse:
+    try:
+        return replace_client(session, identity, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
 
