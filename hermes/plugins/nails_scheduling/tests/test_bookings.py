@@ -73,7 +73,7 @@ def _slots_payload(*, starts=None, known=True, working=True):
     }
 
 
-def test_create_booking_checks_slot_and_generates_runtime_idempotency(monkeypatch):
+def test_create_booking_checks_slot_and_defers_idempotency_to_transport(monkeypatch):
     _set_context(monkeypatch, user_id="700000001")
     _set_key(monkeypatch)
     calls = []
@@ -119,16 +119,15 @@ def test_create_booking_checks_slot_and_generates_runtime_idempotency(monkeypatc
         "client_public_name",
         "service_name",
         "starts_at",
-        "idempotency_key",
     }
     assert body["starts_at"] == "2026-07-18T13:00:00+02:00"
-    assert body["idempotency_key"].startswith("nails-scheduling-v1-")
+    assert "idempotency_key" not in body
     assert "idempotency_key" not in json.dumps(first)
     assert "id" not in first["result"]["booking"]
 
     calls.clear()
     second = json.loads(tools.nails_scheduling(args))
-    assert calls[2]["json_body"]["idempotency_key"] == body["idempotency_key"]
+    assert "idempotency_key" not in calls[2]["json_body"]
     assert second["ok"] is True
 
 
