@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.models import Client, ClientProfileStatus, Service
-from app.schemas.scheduling import ClientLookupResponse, ServiceListResponse
+from app.schemas.scheduling import ServiceListResponse
+from app.schemas.scheduling_management import ClientLookupResponse
 from app.services.normalization import normalize_public_name
 from app.services.scheduling_common import SchedulingDomainError
-from app.services.scheduling_presenters import client_summary, service_summary
+from app.services.scheduling_presenters import client_card_summary, service_summary
 
 
 def get_active_service(
@@ -76,4 +77,4 @@ def find_client_exact(
     )
     if client is None:
         return ClientLookupResponse(found=False)
-    return ClientLookupResponse(found=True, client=client_summary(client))
+    return ClientLookupResponse(found=True, client=client_card_summary(client))
