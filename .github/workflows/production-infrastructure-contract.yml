@@ -101,19 +101,16 @@ jobs:
           for item in required_plugin:
               assert item in text["plugin"], f"missing plugin runtime fact: {item}"
 
+          # Structural handoff invariants only — not volatile SHAs/PRs/dates
+          # (see engineering-principles грабля §6.4: окаменевшие якоря блокируют
+          # обновление handoff и сами становятся источником кругов CI).
           required_context = (
-              "production HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3",
-              "Alembic: 0006",
-              "NAILS_002E4_V3_DEPLOYMENT_OK",
-              "Issue #34",
-              "PR #44",
-              "c9e400c80398bd4367aad0ed0416ee0fc6a79b2d",
-              "Что у меня 18 июля?",
-              "ops/nails-002e5-date-availability",
-              "NAILS_002E5_DEPLOYMENT_OK",
-              "calendar_data_changed_by_deployment=false",
-              "manual_sql_executed=false",
-              "V1 или V2",
+              "production branch: main",
+              "ops/deploy/deploy.sh",
+              "Production state не предполагать",
+              "engineering-principles",
+              "master`, `admin`, `client`",
+              "один живой Telegram-тест за раз",
           )
           for item in required_context:
               assert item in text["context"], f"missing current context fact: {item}"

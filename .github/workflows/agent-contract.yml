@@ -60,19 +60,16 @@ jobs:
           for phrase in required_root_phrases:
               assert phrase in root_text, f"missing root contract phrase: {phrase}"
 
+          # Structural handoff invariants only. Do NOT anchor on volatile facts
+          # (commit SHAs, PR numbers, issue numbers, dates, retired runbook names):
+          # окаменелость таких якорей блокирует обновление handoff — см. грабля §6.4.
           required_context_phrases = (
-              "385a92962e3736553335d717adcdf4b83ac8a8b3",
-              "Alembic: 0006",
-              "NAILS_002E4_V3_DEPLOYMENT_OK",
+              "ops/deploy/deploy.sh",
+              "engineering-principles",
               "nails-onboarding",
               "nails-scheduling",
-              "discover_plugins(force=True)",
-              "set-like unordered collection",
-              "ROLLBACK_PERFORMED=true",
-              "Issue #34",
-              "Что у меня 18 июля?",
-              "один живой Telegram-тест выполняется за раз",
-              "V1 или V2",
+              "один живой Telegram-тест за раз",
+              "Production state не предполагать",
           )
           for phrase in required_context_phrases:
               assert phrase in context_text, f"missing current context fact: {phrase}"
