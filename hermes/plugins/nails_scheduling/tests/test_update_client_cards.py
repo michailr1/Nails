@@ -1,9 +1,7 @@
 import json
 
 import pytest
-
 from nails_scheduling import client_cards, tools
-
 
 CURRENT_CARD = {
     "id": "hidden-id",
