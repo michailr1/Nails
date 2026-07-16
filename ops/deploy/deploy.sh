@@ -34,6 +34,9 @@ HERMES_BIN="/usr/local/lib/hermes-agent/venv/bin/hermes"
 GATEWAY="hermes-gateway-nails.service"
 USER_RUNTIME_DIR="/run/user/0"
 BACKUP_ROOT="/opt/nails/backups"
+BACKUP_RUNTIME="/opt/nails/backup"
+BACKUP_SERVICE="/etc/systemd/system/nails-backup.service"
+BACKUP_TIMER="/etc/systemd/system/nails-backup.timer"
 
 PLUGINS=(nails_onboarding nails_scheduling)
 SKILLS=(nails-onboarding nails-scheduling)
@@ -57,6 +60,35 @@ compose() {
 IMAGE_RETAGGED="false"
 RUNTIME_MUTATED="false"
 
+restore_backup_runtime() {
+  systemctl stop nails-backup.timer >/dev/null 2>&1 || true
+  if [[ -d "${RUNTIME_BACKUP}/backup-runtime.before" ]]; then
+    rm -rf "$BACKUP_RUNTIME"
+    cp -a "${RUNTIME_BACKUP}/backup-runtime.before" "$BACKUP_RUNTIME"
+  else
+    rm -rf "$BACKUP_RUNTIME"
+  fi
+  if [[ -f "${RUNTIME_BACKUP}/nails-backup.service.before" ]]; then
+    cp -a "${RUNTIME_BACKUP}/nails-backup.service.before" "$BACKUP_SERVICE"
+  else
+    rm -f "$BACKUP_SERVICE"
+  fi
+  if [[ -f "${RUNTIME_BACKUP}/nails-backup.timer.before" ]]; then
+    cp -a "${RUNTIME_BACKUP}/nails-backup.timer.before" "$BACKUP_TIMER"
+  else
+    rm -f "$BACKUP_TIMER"
+  fi
+  systemctl daemon-reload
+  if [[ "$(cat "${RUNTIME_BACKUP}/backup-timer-enabled.before" 2>/dev/null)" == enabled ]]; then
+    systemctl enable nails-backup.timer >/dev/null 2>&1
+  else
+    systemctl disable nails-backup.timer >/dev/null 2>&1 || true
+  fi
+  if [[ "$(cat "${RUNTIME_BACKUP}/backup-timer-active.before" 2>/dev/null)" == active ]]; then
+    systemctl start nails-backup.timer >/dev/null 2>&1
+  fi
+}
+
 on_error() {
   local exit_code=$?
   trap - ERR
@@ -70,7 +102,7 @@ on_error() {
   fi
 
   if [[ "$RUNTIME_MUTATED" == "true" ]]; then
-    log "rollback: restoring previous image, plugins, skills and gateway"
+    log "rollback: restoring previous image, plugins, skills, backup timer and gateway"
     compose up -d --no-deps --force-recreate --no-build nails-api >/dev/null 2>&1
     [[ -d "${RUNTIME_BACKUP}/plugins.before" ]] && {
       rm -rf "${PROFILE}/plugins"
@@ -80,12 +112,14 @@ on_error() {
       rm -rf "${PROFILE}/skills"
       cp -a "${RUNTIME_BACKUP}/skills.before" "${PROFILE}/skills"
     }
+    restore_backup_runtime
     user_systemctl start "$GATEWAY" >/dev/null 2>&1
     printf 'DEPLOY_ROLLED_BACK=true prev_sha=%s\n' "$PREV_SHA"
   else
     printf 'DEPLOY_ROLLED_BACK=false\n'
   fi
 
+  [[ -d "$RUNTIME_BACKUP" ]] && mv "$RUNTIME_BACKUP" "${PROFILE}/backups/deploy-failed-${STAMP}"
   docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1
   git -C "$REPO" worktree remove --force "$WORKTREE" >/dev/null 2>&1
   exit "$exit_code"
@@ -142,6 +176,11 @@ chmod 600 "$DB_BACKUP"
 gzip -t "$DB_BACKUP"
 cp -a "${PROFILE}/plugins" "${RUNTIME_BACKUP}/plugins.before"
 cp -a "${PROFILE}/skills" "${RUNTIME_BACKUP}/skills.before"
+[[ -d "$BACKUP_RUNTIME" ]] && cp -a "$BACKUP_RUNTIME" "${RUNTIME_BACKUP}/backup-runtime.before"
+[[ -f "$BACKUP_SERVICE" ]] && cp -a "$BACKUP_SERVICE" "${RUNTIME_BACKUP}/nails-backup.service.before"
+[[ -f "$BACKUP_TIMER" ]] && cp -a "$BACKUP_TIMER" "${RUNTIME_BACKUP}/nails-backup.timer.before"
+systemctl is-enabled nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-enabled.before" 2>/dev/null || true
+systemctl is-active nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-active.before" 2>/dev/null || true
 
 log "3. Сборка образа из точного дерева"
 docker image tag "$API_IMAGE" "$ROLLBACK_IMAGE"
@@ -190,7 +229,7 @@ RUNNING_SHA="$(
   exit 1
 }
 
-log "6. Установка plugins и skills из релизного дерева"
+log "6. Установка plugins, skills и backup runtime из релизного дерева"
 for name in "${PLUGINS[@]}"; do
   src="${WORKTREE}/hermes/plugins/${name}"
   dst="${PROFILE}/plugins/${name}"
@@ -205,6 +244,17 @@ for name in "${SKILLS[@]}"; do
     "${PROFILE}/skills/${name}/SKILL.md"
 done
 HERMES_HOME="$PROFILE" "$HERMES_BIN" --profile nails config check >/dev/null
+
+rm -rf "$BACKUP_RUNTIME"
+install -d -o root -g root -m 700 "$BACKUP_RUNTIME"
+install -o root -g root -m 700 "${WORKTREE}/ops/backup/backup.sh" "$BACKUP_RUNTIME/backup.sh"
+install -o root -g root -m 700 "${WORKTREE}/ops/backup/retention.py" "$BACKUP_RUNTIME/retention.py"
+install -o root -g root -m 644 "${WORKTREE}/ops/backup/nails-backup.service" "$BACKUP_SERVICE"
+install -o root -g root -m 644 "${WORKTREE}/ops/backup/nails-backup.timer" "$BACKUP_TIMER"
+systemctl daemon-reload
+systemctl enable --now nails-backup.timer >/dev/null
+systemctl is-enabled --quiet nails-backup.timer
+systemctl is-active --quiet nails-backup.timer
 
 log "7. Старт gateway"
 user_systemctl start "$GATEWAY"
@@ -233,6 +283,7 @@ else
   [[ -z "$(git -C "$REPO" status --porcelain)" ]]
 fi
 
+mv "$RUNTIME_BACKUP" "${PROFILE}/backups/deploy-success-${STAMP}"
 docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
 trap - ERR
 
