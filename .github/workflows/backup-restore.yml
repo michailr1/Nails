@@ -1,0 +1,86 @@
+name: Backup and restore contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/backup/**"
+      - ".github/workflows/backup-restore.yml"
+  pull_request:
+    paths:
+      - "ops/backup/**"
+      - ".github/workflows/backup-restore.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Bash syntax
+        run: bash -n ops/backup/nails-backup.sh
+
+      - name: ShellCheck
+        run: shellcheck --severity=warning ops/backup/nails-backup.sh
+
+      - name: Verify retention boundaries
+        run: |
+          set -Eeuo pipefail
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+
+          touch "$root/nails-daily-current.sql.gz"
+          touch -d '5 days ago' "$root/nails-daily-expired.sql.gz"
+          touch "$root/nails-weekly-current.sql.gz"
+          touch -d '21 days ago' "$root/nails-weekly-expired.sql.gz"
+          touch "$root/nails-monthly-current.sql.gz"
+          touch -d '366 days ago' "$root/nails-monthly-expired.sql.gz"
+          touch "$root/current.log"
+          touch -d '14 days ago' "$root/expired.log"
+          mkdir "$root/hermes-local-patches"
+          touch "$root/hermes-local-patches/keep.bak"
+
+          NAILS_BACKUP_TEST_MODE=true \
+          NAILS_BACKUP_ROOT="$root" \
+            bash ops/backup/nails-backup.sh rotate
+
+          test -f "$root/nails-daily-current.sql.gz"
+          test ! -e "$root/nails-daily-expired.sql.gz"
+          test -f "$root/nails-weekly-current.sql.gz"
+          test ! -e "$root/nails-weekly-expired.sql.gz"
+          test -f "$root/nails-monthly-current.sql.gz"
+          test ! -e "$root/nails-monthly-expired.sql.gz"
+          test -f "$root/current.log"
+          test ! -e "$root/expired.log"
+          test -f "$root/hermes-local-patches/keep.bak"
+          echo 'BACKUP_RETENTION_CONTRACT_OK=true'
+
+      - name: Enforce safety markers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          script = Path("ops/backup/nails-backup.sh").read_text(encoding="utf-8")
+          required = (
+              "set -Eeuo pipefail",
+              "umask 077",
+              "pg_dump",
+              "gzip -t",
+              "createdb",
+              "psql -v ON_ERROR_STOP=1",
+              "dropdb --if-exists --force",
+              "RESTORE_TEST_OK=true",
+              "TELEGRAM_BACKUP_SENT=true",
+              "15728640",
+              "NAILS_BACKUP_TELEGRAM_CHAT_ID",
+          )
+          for marker in required:
+              assert marker in script, f"backup contract lost marker: {marker}"
+          assert "hermes-local-patches" not in script, (
+              "generic backup rotation must never target hermes-local-patches"
+          )
+          print("BACKUP_SCRIPT_CONTRACT_OK=true")
+          PY
