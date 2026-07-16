@@ -22,6 +22,10 @@ class ClientCardSummary(BaseModel):
     communication_preferences: str | None
 
 
+class ClientListResponse(BaseModel):
+    clients: list[ClientCardSummary]
+
+
 class ClientLookupResponse(BaseModel):
     found: bool
     client: ClientCardSummary | None = None
