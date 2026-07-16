@@ -129,7 +129,7 @@ jobs:
               Path("hermes/plugins/nails_scheduling/plugin.yaml").read_text(encoding="utf-8")
           )
           assert manifest["name"] == "nails-scheduling"
-          assert manifest["provides_tools"] == ["nails_scheduling"]
+          assert manifest["provides_tools"] == ["nails_scheduling", "save_feedback"]
           required = manifest["requires_env"]
           assert len(required) == 1
           assert required[0]["name"] == "NAILS_INTERNAL_API_KEY"
@@ -192,7 +192,7 @@ jobs:
         run: |
           flags="$(docker compose --env-file .env.example exec -T nails-db \
             psql -U nails_admin -d nails -Atc \
-            "SELECT CASE WHEN rolsuper THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreatedb THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreaterole THEN 1 ELSE 0 END || '|' || CASE WHEN rolreplication THEN 1 ELSE 0 END FROM pg_roles WHERE rolname = 'nails_app'")"
+            "SELECT CASE WHEN rolsuper THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreatedb THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreaterole THEN 1 ELSE 0 END || '|' || CASE WHEN rolreplication THEN 1 ELSE 0 END FROM pg_roles WHERE rolname = 'nails_app')"
           test "$flags" = "0|0|0|0"
 
       - name: Verify API connects as the restricted role
