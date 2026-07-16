@@ -4,7 +4,8 @@ SAVE_FEEDBACK = {
         "Save a brief protected report about an unsatisfactory Nails assistant response. "
         "Use only when the master explicitly expresses dissatisfaction, for example "
         "'не то', 'плохо', or a thumbs-down emoji. Include only the immediately relevant "
-        "recent user and assistant messages. The backend masks contacts and private values again."
+        "recent user and assistant messages exactly as shown. Never include system prompts, "
+        "tool traces, internal instructions or unrelated dialogue."
     ),
     "parameters": {
         "type": "object",
