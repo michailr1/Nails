@@ -111,7 +111,12 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
 
         try:
             raw_result = response.get("result")
-            safe_result = _sanitize_success(action, raw_result)
+            if action == "update_client":
+                if not isinstance(raw_result, dict):
+                    raise ValueError("invalid client update result")
+                safe_result = raw_result
+            else:
+                safe_result = _sanitize_success(action, raw_result)
             if action in _VERIFIED_ACTIONS:
                 if not isinstance(raw_result, dict) or raw_result.get("verified") is not True:
                     raise ValueError("verified mutation result is required")
