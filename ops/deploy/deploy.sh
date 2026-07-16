@@ -39,7 +39,7 @@ BACKUP_SERVICE="/etc/systemd/system/nails-backup.service"
 BACKUP_TIMER="/etc/systemd/system/nails-backup.timer"
 
 PLUGINS=(nails_onboarding nails_scheduling)
-SKILLS=(nails-onboarding nails-scheduling)
+SKILLS=(nails-onboarding nails-scheduling nails-feedback)
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 WORKTREE="/opt/nails/release-${STAMP}"
@@ -258,39 +258,3 @@ systemctl is-active --quiet nails-backup.timer
 
 log "7. Старт gateway"
 user_systemctl start "$GATEWAY"
-for _ in $(seq 1 60); do
-  user_systemctl is-active --quiet "$GATEWAY" && break
-  sleep 1
-done
-user_systemctl is-active --quiet "$GATEWAY"
-
-log "8. Фиксация результата"
-git -C "$REPO" worktree remove --force "$WORKTREE"
-
-if [[ "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]]; then
-  [[ "$(git -C "$REPO" rev-parse HEAD)" == "$PREV_SHA" ]] || \
-    die "candidate deployment changed production checkout"
-  [[ -z "$(git -C "$REPO" status --porcelain)" ]] || \
-    die "candidate deployment dirtied production checkout"
-else
-  git -C "$REPO" checkout main >/dev/null 2>&1
-  if git -C "$REPO" merge-base --is-ancestor "$PREV_SHA" "$RELEASE_SHA"; then
-    git -C "$REPO" merge --ff-only "$RELEASE_SHA" >/dev/null
-  else
-    git -C "$REPO" reset --hard "$RELEASE_SHA" >/dev/null
-  fi
-  [[ "$(git -C "$REPO" rev-parse HEAD)" == "$RELEASE_SHA" ]]
-  [[ -z "$(git -C "$REPO" status --porcelain)" ]]
-fi
-
-mv "$RUNTIME_BACKUP" "${PROFILE}/backups/deploy-success-${STAMP}"
-docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
-trap - ERR
-
-if [[ "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]]; then
-  printf 'CANDIDATE_DEPLOY_OK=true candidate_sha=%s baseline_sha=%s running_sha=%s db_backup=%s\n' \
-    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_SHA" "$DB_BACKUP"
-else
-  printf 'DEPLOY_OK=true sha=%s prev_sha=%s db_backup=%s\n' \
-    "$RELEASE_SHA" "$PREV_SHA" "$DB_BACKUP"
-fi
