@@ -69,9 +69,11 @@ SOURCE_ALEMBIC="$(compose exec -T nails-db sh -c '
 
 compose exec -T nails-db sh -c 'createdb -U "$POSTGRES_USER" "$1"' sh "$RESTORE_DB" </dev/null
 TEMP_CREATED=true
+# Keep compose exec connected to the decompressed dump. Redirecting stdin here
+# would override the pipeline and make psql restore an empty database successfully.
 gzip -dc "$DUMP" | compose exec -T nails-db sh -c \
   'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1"' sh "$RESTORE_DB" \
-  </dev/null >/dev/null
+  >/dev/null
 
 RESTORE_COUNTS="$(compose exec -T nails-db sh -c '
   psql -XAt -U "$POSTGRES_USER" -d "$1" -c \
