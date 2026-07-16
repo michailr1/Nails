@@ -47,8 +47,8 @@ NAILS_SCHEDULING = {
         "candidates exist, ask the master which existing card is intended and never "
         "create a duplicate without explicit confirmation that this is another person. "
         "When creating a confirmed new client, optional private card fields may be stored "
-        "and later read back; private_alias is never a client-facing name. Update an "
-        "existing client card only after showing the exact fields to change and receiving "
+        "and later read back; private_alias is never a client-facing name. Update or rename "
+        "an existing client card only after showing the exact fields to change and receiving "
         "explicit confirmation; omitted fields remain unchanged and null clears a field. "
         "Create, reschedule, or cancel a booking only after showing a complete "
         "human-readable current-to-future summary and receiving explicit confirmation. "
@@ -140,8 +140,12 @@ NAILS_SCHEDULING = {
             "client_public_name": {
                 "type": "string",
                 "description": (
-                    "Public client name; check exact and candidate matches before creation."
+                    "Current public client name; check exact and candidate matches before creation."
                 ),
+            },
+            "new_public_name": {
+                "type": "string",
+                "description": "New public client name for update_client rename.",
             },
             "phone": {"type": ["string", "null"]},
             "private_alias": {
