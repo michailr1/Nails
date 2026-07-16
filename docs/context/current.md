@@ -1,6 +1,6 @@
 # Nails — текущий контекст для продолжения работы
 
-Дата фиксации: **16 июля 2026 года**.
+Дата фиксации: **17 июля 2026 года**.
 
 Сначала прочитать [`../../AGENTS.md`](../../AGENTS.md), затем этот файл, [`../operations/engineering-principles.md`](../operations/engineering-principles.md), [`../operations/production-infrastructure.md`](../operations/production-infrastructure.md), [`../operations/hermes-plugin-runtime.md`](../operations/hermes-plugin-runtime.md) и [`../operations/backups.md`](../operations/backups.md).
 
@@ -30,13 +30,29 @@ Hermes plugins: nails-onboarding, nails-scheduling
 
 ## 3. Актуальный production milestone
 
+Последний подтверждённый repository checkout перед runtime-настройкой:
+
 ```text
-production SHA: 429130e5b8d4908e3a9d39bd61eb9448ac3dd386
-PR #96: verified automated PostgreSQL backups
-checkout = origin/main = running SHA
-health = 200
-readiness = 200
-gateway = active
+checkout SHA: bfcdc0fb9f1ef28b211b450bfc4f59995bb4728e
+working tree: clean
+```
+
+Подтверждённый runtime-статус профиля Nails после отключения Hermes shutdown/restart уведомлений:
+
+```text
+profile=nails
+telegram_gateway_restart_notification=false
+gateway_active=true
+api_health=true
+api_readiness=true
+SHUTDOWN_NOTIFICATION_DISABLED=true
+```
+
+Политика действует только для профиля `nails`: мастерам не отправляется сообщение `Gateway shutting down — Your current task will be interrupted` при остановке или перезапуске gateway. Другие Hermes-профили не затронуты. Issue #101 закрыт как выполненный; PR #102 закрыт без merge, потому что production-настройка была выполнена отдельно от этого PR.
+
+Также подтверждено:
+
+```text
 backup timer = enabled, active
 ```
 
@@ -83,12 +99,14 @@ Issue #91 и PR #96 завершены.
 5. Candidate checkout остаётся на baseline; merge только exact validated head.
 6. `app.routes` показывает mount entries как пустые paths; полные scheduling paths проверять через router или HTTP.
 7. Не считать открытый issue доказательством незавершённого дефекта: сначала проверять фактический `main`, merged PR и regression tests.
+8. Не возвращать shutdown/restart Telegram-уведомления профилю Nails при обновлении Hermes, unit-файла или profile runtime. После таких изменений повторно проверять `telegram_gateway_restart_notification=false` и реальный restart без сообщений мастерам.
 
 ## 6. Точка продолжения
 
 ```text
 1. не планировать повторно исправление self-reschedule: оно уже в production
 2. issue #61 рассматривать только по оставшимся UX-пунктам, а не по исходному дефекту переноса
-3. перед выбором следующей задачи сверить открытые issues с фактическим кодом и merged PR
-4. поддерживать current.md после каждого завершённого production milestone
+3. shutdown/restart уведомления для профиля nails считать отключёнными; после изменения Hermes/runtime проверять, что политика сохранилась
+4. перед выбором следующей задачи сверить открытые issues с фактическим кодом и merged PR
+5. поддерживать current.md после каждого завершённого production milestone
 ```
