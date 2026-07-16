@@ -87,16 +87,25 @@ def validate_client_card_update_args(args: dict[str, Any]) -> dict[str, Any]:
     allowed = {
         "action",
         "client_public_name",
+        "new_public_name",
         "birthday",
         "confirmed",
         *_CLIENT_OPTIONAL_FIELDS,
     }
     client_public_name = _require_confirmed_args(args, allowed=allowed)
-    supplied_fields = set(args) & ({"birthday"} | set(_CLIENT_OPTIONAL_FIELDS))
+    supplied_fields = set(args) & (
+        {"new_public_name", "birthday"} | set(_CLIENT_OPTIONAL_FIELDS)
+    )
     if not supplied_fields:
         raise ToolInputError("at least one client card field is required")
 
     updates: dict[str, Any] = {}
+    if "new_public_name" in args:
+        updates["public_name"] = _normalized_text(
+            args["new_public_name"],
+            "new_public_name",
+            160,
+        )
     for field, maximum in _CLIENT_OPTIONAL_FIELDS.items():
         if field in args:
             updates[field] = _optional_text(args[field], field, maximum)
