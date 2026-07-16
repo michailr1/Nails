@@ -200,6 +200,12 @@ def _sanitize_success(action: str, result: Any) -> dict[str, Any]:
             "starts_at": starts_at,
         }
 
+    if action == "list_clients":
+        clients = result.get("clients")
+        if not isinstance(clients, list):
+            raise ValueError("invalid clients")
+        return {"clients": [_client_summary(item) for item in clients]}
+
     if action == "find_client":
         client = result.get("client")
         return {
