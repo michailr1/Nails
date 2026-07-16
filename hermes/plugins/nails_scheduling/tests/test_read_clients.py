@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from nails_scheduling import client_cards, tools
+from nails_scheduling import tools, transport
 
 
 def _set_context(monkeypatch, *, platform="telegram", user_id="700000001"):
@@ -196,7 +196,7 @@ def test_create_client_performs_exact_lookup_before_post(monkeypatch):
             },
         }
 
-    monkeypatch.setattr(client_cards, "_call_backend", fake_call_backend)
+    monkeypatch.setattr(transport, "_call_backend", fake_call_backend)
     result = json.loads(
         tools.nails_scheduling(
             {"action": "create_client", "client_public_name": " Анна ", "confirmed": True}
@@ -239,7 +239,7 @@ def test_create_client_returns_existing_without_post(monkeypatch):
             },
         }
 
-    monkeypatch.setattr(client_cards, "_call_backend", fake_call_backend)
+    monkeypatch.setattr(transport, "_call_backend", fake_call_backend)
     result = json.loads(
         tools.nails_scheduling(
             {"action": "create_client", "client_public_name": "Анна", "confirmed": True}
