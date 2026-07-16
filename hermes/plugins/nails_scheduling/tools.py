@@ -63,6 +63,10 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             values = validate_client_card_args(args)
         elif action == "update_client":
             values = validate_client_card_update_args(args)
+        elif action == "list_clients":
+            if set(args) != {"action"}:
+                raise ToolInputError("invalid tool arguments")
+            values = {}
         else:
             action, values = _validate_args(args)
 
@@ -80,6 +84,16 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 values,
                 telegram_user_id=telegram_user_id,
                 api_key=api_key,
+            )
+        elif action == "list_clients":
+            response = _call_backend(
+                action=action,
+                telegram_user_id=telegram_user_id,
+                api_key=api_key,
+                method="GET",
+                path="/api/v1/scheduling/clients",
+                params=None,
+                json_body=None,
             )
         elif action == "create_booking":
             response = _verified_create_booking(
