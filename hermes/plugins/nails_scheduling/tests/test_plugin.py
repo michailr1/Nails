@@ -68,6 +68,7 @@ def test_schema_exposes_only_public_business_arguments():
         "update_service",
         "day_view",
         "free_slots",
+        "list_clients",
         "find_client",
         "find_client_candidates",
         "create_client",
@@ -176,6 +177,7 @@ def test_missing_key_fails_before_http(monkeypatch):
             "occurrence": "nearest_future",
         },
         {"action": "list_services", "include_inactive": "yes"},
+        {"action": "list_clients", "client_public_name": "Анна"},
         {"action": "find_service", "service_name": ""},
         {
             "action": "create_service",
