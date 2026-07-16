@@ -16,6 +16,7 @@ backend env: /opt/nails/.env
 backend API: http://127.0.0.1:8210
 Hermes profile: /root/.hermes/profiles/nails
 production branch: main
+Hermes plugins: nails-onboarding, nails-scheduling
 ```
 
 - основной агент пишет код, меняет GitHub, проводит review/CI, мержит и готовит точные runbooks;
