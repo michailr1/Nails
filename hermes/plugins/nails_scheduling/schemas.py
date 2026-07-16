@@ -43,18 +43,18 @@ NAILS_SCHEDULING = {
     "name": "nails_scheduling",
     "description": (
         "Use only fixed owner-scoped Nails operations. Resolve dates through the backend. "
-        "Before creating a client, call find_client and find_client_candidates; when "
-        "candidates exist, ask the master which existing card is intended and never "
-        "create a duplicate without explicit confirmation that this is another person. "
-        "When creating a confirmed new client, optional private card fields may be stored "
-        "and later read back; private_alias is never a client-facing name. Update or rename "
-        "an existing client card only after showing the exact fields to change and receiving "
-        "explicit confirmation; omitted fields remain unchanged and null clears a field. "
-        "Create, reschedule, or cancel a booking only after showing a complete "
-        "human-readable current-to-future summary and receiving explicit confirmation. "
-        "Rescheduling must use an exact backend free slot. Cancellation is soft and "
-        "preserves history. Do not promise an operation before a successful tool result. "
-        "Send at most one brief progress message before the final result."
+        "Use list_clients when the master asks to see all active client cards. Before "
+        "creating a client, call find_client and find_client_candidates; when candidates "
+        "exist, ask the master which existing card is intended and never create a duplicate "
+        "without explicit confirmation that this is another person. When creating a confirmed "
+        "new client, optional private card fields may be stored and later read back; "
+        "private_alias is never a client-facing name. Update or rename an existing client card "
+        "only after showing the exact fields to change and receiving explicit confirmation; "
+        "omitted fields remain unchanged and null clears a field. Create, reschedule, or cancel "
+        "a booking only after showing a complete human-readable current-to-future summary and "
+        "receiving explicit confirmation. Rescheduling must use an exact backend free slot. "
+        "Cancellation is soft and preserves history. Do not promise an operation before a "
+        "successful tool result. Send at most one brief progress message before the final result."
     ),
     "parameters": {
         "type": "object",
@@ -70,6 +70,7 @@ NAILS_SCHEDULING = {
                     "update_service",
                     "day_view",
                     "free_slots",
+                    "list_clients",
                     "find_client",
                     "find_client_candidates",
                     "create_client",
