@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from nails_scheduling import client_cards, tools
+from nails_scheduling import client_cards, tools, transport
 
 CURRENT_CARD = {
     "id": "hidden-id",
@@ -44,7 +44,7 @@ def test_update_existing_client_merges_only_supplied_fields(monkeypatch):
             },
         }
 
-    monkeypatch.setattr(client_cards, "_call_backend", fake_backend)
+    monkeypatch.setattr(transport, "_call_backend", fake_backend)
     values = client_cards.validate_client_card_update_args(
         {
             "action": "update_client",
@@ -71,11 +71,23 @@ def test_update_existing_client_merges_only_supplied_fields(monkeypatch):
     assert body["phone"] == CURRENT_CARD["phone"]
     assert body["contact_channel"] == CURRENT_CARD["contact_channel"]
     assert body["nail_skin_notes"] == CURRENT_CARD["nail_skin_notes"]
+    assert body["birthday"] == CURRENT_CARD["birthday"]
+    assert body["sensitivity_notes"] == CURRENT_CARD["sensitivity_notes"]
     assert body["notes"] == "курит"
     assert body["style_preferences"] == "любит зелёный цвет и яркий дизайн"
     assert body["communication_preferences"] == "на вы"
     assert "id" not in body
-    assert "id" not in result["result"]["client"]
+
+    saved = result["result"]["client"]
+    assert saved["phone"] == CURRENT_CARD["phone"]
+    assert saved["contact_channel"] == CURRENT_CARD["contact_channel"]
+    assert saved["nail_skin_notes"] == CURRENT_CARD["nail_skin_notes"]
+    assert saved["birthday"] == CURRENT_CARD["birthday"]
+    assert saved["sensitivity_notes"] == CURRENT_CARD["sensitivity_notes"]
+    assert saved["notes"] == "Курит"
+    assert saved["style_preferences"] == "Любит зелёный цвет и яркий дизайн"
+    assert saved["communication_preferences"] == "На вы"
+    assert "id" not in saved
 
 
 def test_update_client_allows_explicit_field_clear():
