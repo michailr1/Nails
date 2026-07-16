@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
@@ -20,13 +19,6 @@ router = APIRouter(prefix="/api/v1/feedback", tags=["feedback"])
 
 SessionDependency = Annotated[Session, Depends(get_db_session)]
 IdentityDependency = Annotated[RequestIdentity, Depends(require_request_identity)]
-
-_EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
-_PHONE_RE = re.compile(r"(?<!\w)(?:\+?\d[\d\s().-]{7,}\d)(?!\w)")
-_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
-_SECRET_RE = re.compile(
-    r"(?i)\b(token|api[_ -]?key|secret|password|authorization)\b\s*[:=]\s*\S+"
-)
 
 
 class FeedbackMessage(BaseModel):
@@ -74,17 +66,9 @@ def _require_admin(identity: RequestIdentity) -> None:
         )
 
 
-def _mask_text(value: str) -> str:
-    masked = _SECRET_RE.sub(r"\1=<redacted>", value)
-    masked = _EMAIL_RE.sub("<email>", masked)
-    masked = _PHONE_RE.sub("<phone>", masked)
-    masked = _URL_RE.sub("<url>", masked)
-    return masked.strip()
-
-
 def _safe_context(messages: list[FeedbackMessage]) -> list[dict[str, str]]:
     return [
-        {"role": message.role, "text": _mask_text(message.text)[:1000]}
+        {"role": message.role, "text": message.text.strip()}
         for message in messages[-4:]
     ]
 
