@@ -40,6 +40,7 @@ def client():
 @pytest.fixture
 def clean_database():
     tables = (
+        "feedback_events",
         "audit_events",
         "onboarding_drafts",
         "onboarding_states",
