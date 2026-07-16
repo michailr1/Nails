@@ -92,7 +92,7 @@ def validate_client_card_update_args(args: dict[str, Any]) -> dict[str, Any]:
         *_CLIENT_OPTIONAL_FIELDS,
     }
     client_public_name = _require_confirmed_args(args, allowed=allowed)
-    supplied_fields = (set(args) & ({"birthday"} | set(_CLIENT_OPTIONAL_FIELDS)))
+    supplied_fields = set(args) & ({"birthday"} | set(_CLIENT_OPTIONAL_FIELDS))
     if not supplied_fields:
         raise ToolInputError("at least one client card field is required")
 
@@ -267,9 +267,11 @@ def update_client_card(
             "Scheduling service returned an invalid response.",
         )
     changed_fields = result.get("changed_fields")
-    if not isinstance(result.get("changed"), bool) or not isinstance(
-        changed_fields, list
-    ) or not all(isinstance(field, str) for field in changed_fields):
+    if (
+        not isinstance(result.get("changed"), bool)
+        or not isinstance(changed_fields, list)
+        or not all(isinstance(field, str) for field in changed_fields)
+    ):
         return _error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
