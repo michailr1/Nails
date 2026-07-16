@@ -140,6 +140,27 @@ def test_skill_makes_fresh_backend_reads_authoritative():
         assert phrase in text
 
 
+def test_compound_commands_preserve_the_dialogue_plan_and_report_each_step():
+    text = _skill_text().casefold()
+    section = text.split("## составные команды", 1)[1].split("## безопасность", 1)[0]
+
+    for phrase in (
+        "внутренний упорядоченный план всех намерений",
+        "не теряй оставшиеся шаги после уточнения",
+        "он не отменяет остальные намерения исходной команды",
+        "отдельная понятная сводка и явное подтверждение",
+        "после успешного шага автоматически продолжай следующий незавершённый шаг",
+        "ошибка одного шага не стирает остальные",
+        "не повторяй неуспешный write автоматически",
+        "перечисли каждую исходную часть",
+        "не скрывай частичный результат",
+        "не обещай атомарность",
+    ):
+        assert phrase in section
+
+    assert "одним «да» несколько мутаций" in section
+
+
 def test_create_booking_uses_guarded_read_write_readback():
     text = _skill_text().casefold()
     section = text.split("## создание записи", 1)[1].split(
@@ -161,7 +182,7 @@ def test_create_booking_uses_guarded_read_write_readback():
 def test_guarded_mutations_do_not_require_second_model_tool_roundtrip():
     text = _skill_text().casefold()
     source = text.split("## единственный источник текущего состояния", 1)[1].split(
-        "## безопасность", 1
+        "## составные команды", 1
     )[0]
     reschedule = text.split("## перенос существующей записи", 1)[1].split(
         "## отмена записи", 1
