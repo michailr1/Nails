@@ -5,6 +5,7 @@ umask 077
 REPO=/opt/nails/repo
 BACKEND_ENV=/opt/nails/.env
 PROFILE_ENV=/root/.hermes/profiles/nails/.env
+BACKUP_RUNTIME=/opt/nails/backup
 ROOT=/opt/nails/backups
 DAILY="$ROOT/daily"
 WEEKLY="$ROOT/weekly"
@@ -12,7 +13,6 @@ MONTHLY="$ROOT/monthly"
 STATUS="$ROOT/status"
 LOG="$ROOT/logs/backup.log"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-DAY="${STAMP:0:8}"
 WEEK="$(date -u +%G-W%V)"
 MONTH="${STAMP:0:6}"
 DUMP="$DAILY/nails-${STAMP}.sql.gz"
@@ -49,7 +49,7 @@ trap on_error ERR
 
 [[ "$(id -u)" -eq 0 ]]
 [[ "$(hostname -f)" == de.funti.cc ]]
-[[ -f "$BACKEND_ENV" && -f "$PROFILE_ENV" ]]
+[[ -f "$BACKEND_ENV" && -f "$PROFILE_ENV" && -x "$BACKUP_RUNTIME/retention.py" ]]
 
 log "backup start"
 compose exec -T nails-db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
@@ -89,7 +89,7 @@ cp -f "$DUMP" "$WEEKLY/nails-${WEEK}.sql.gz"
 cp -f "$DUMP" "$MONTHLY/nails-${MONTH}.sql.gz"
 chmod 600 "$WEEKLY/nails-${WEEK}.sql.gz" "$MONTHLY/nails-${MONTH}.sql.gz"
 
-python3 "$REPO/ops/backup/retention.py" --apply --root "$ROOT" \
+python3 "$BACKUP_RUNTIME/retention.py" --apply --root "$ROOT" \
   --runtime-root /root/.hermes/profiles/nails/backups
 
 readarray -t TG < <(python3 - "$PROFILE_ENV" <<'PY'
