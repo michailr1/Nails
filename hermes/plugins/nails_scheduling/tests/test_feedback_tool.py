@@ -15,11 +15,19 @@ def _configured_telegram(monkeypatch):
     monkeypatch.setenv("NAILS_BACKUP_TELEGRAM_CHAT_ID", "800000001")
 
 
-def test_save_feedback_notifies_admin_with_backend_masked_context(monkeypatch):
+def test_save_feedback_notifies_admin_with_exact_backend_context(monkeypatch):
     _trusted_context(monkeypatch)
     _configured_telegram(monkeypatch)
     captured = {}
     sent = {}
+
+    context = [
+        {
+            "role": "assistant",
+            "text": "Нет, завтра — 2026-07-17. 2026-07-18 будет послезавтра.",
+        },
+        {"role": "user", "text": "👎"},
+    ]
 
     def fake_call_backend(**kwargs):
         captured.update(kwargs)
@@ -28,10 +36,7 @@ def test_save_feedback_notifies_admin_with_backend_masked_context(monkeypatch):
             "result": {
                 "saved": True,
                 "feedback_id": "private",
-                "safe_context": [
-                    {"role": "assistant", "text": "Ответ для <email>"},
-                    {"role": "user", "text": "не то token=<redacted>"},
-                ],
+                "safe_context": context,
             },
         }
 
@@ -53,10 +58,7 @@ def test_save_feedback_notifies_admin_with_backend_masked_context(monkeypatch):
         feedback_tool.save_feedback(
             {
                 "kind": "thumbs_down",
-                "context": [
-                    {"role": "assistant", "text": "Ответ для raw@example.com"},
-                    {"role": "user", "text": "не то token=raw-secret"},
-                ],
+                "context": context,
             }
         )
     )
@@ -70,10 +72,9 @@ def test_save_feedback_notifies_admin_with_backend_masked_context(monkeypatch):
     assert captured["path"] == "/api/v1/feedback"
     assert captured["json_body"]["kind"] == "thumbs_down"
     notification = sent["json"]["text"]
-    assert "Ответ для <email>" in notification
-    assert "token=<redacted>" in notification
-    assert "raw@example.com" not in notification
-    assert "raw-secret" not in notification
+    assert "2026-07-17" in notification
+    assert "2026-07-18" in notification
+    assert "<phone>" not in notification
     assert sent["json"]["chat_id"] == "800000001"
     assert "feedback_id" not in result["result"]
     assert "safe_context" not in result["result"]
