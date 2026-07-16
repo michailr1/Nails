@@ -13,17 +13,17 @@ def _payload() -> dict[str, object]:
         "context": [
             {
                 "role": "assistant",
-                "text": "Напишите test@example.com или +49 151 12345678 https://example.com",
+                "text": "Нет, завтра — 2026-07-17. 2026-07-18 будет послезавтра.",
             },
             {
                 "role": "user",
-                "text": "не то token=super-secret-value",
+                "text": "👎",
             },
         ],
     }
 
 
-def test_feedback_is_masked_and_audit_omits_context(
+def test_feedback_preserves_exact_context_and_audit_omits_context(
     client,
     create_user,
     auth_headers,
@@ -39,7 +39,7 @@ def test_feedback_is_masked_and_audit_omits_context(
     assert response.status_code == 200
     response_body = response.json()
     assert response_body["saved"] is True
-    response_context = " ".join(item["text"] for item in response_body["safe_context"])
+    response_context = response_body["safe_context"]
 
     with get_session_factory()() as session:
         event = session.scalar(select(FeedbackEvent))
@@ -51,20 +51,11 @@ def test_feedback_is_masked_and_audit_omits_context(
     assert event.owner_user_id == user.id
     assert event.actor_user_id == user.id
     assert event.kind == FeedbackKind.thumbs_down
-    context_text = " ".join(item["text"] for item in event.safe_context)
-    assert response_context == context_text
-    for unsafe in (
-        "test@example.com",
-        "+49 151 12345678",
-        "https://example.com",
-        "super-secret-value",
-    ):
-        assert unsafe not in context_text
-        assert unsafe not in response_context
-    assert "<email>" in context_text
-    assert "<phone>" in context_text
-    assert "<url>" in context_text
-    assert "<redacted>" in context_text
+    assert response_context == event.safe_context
+    assert response_context == _payload()["context"]
+    assert "2026-07-17" in response_context[0]["text"]
+    assert "2026-07-18" in response_context[0]["text"]
+    assert "<phone>" not in response_context[0]["text"]
 
     assert audit is not None
     assert audit.safe_changes == {"kind": "thumbs_down"}
