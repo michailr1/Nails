@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity
 from app.models import Client, ClientProfileStatus, Service
 from app.schemas.scheduling import ServiceListResponse
-from app.schemas.scheduling_management import ClientLookupResponse
+from app.schemas.scheduling_management import ClientListResponse, ClientLookupResponse
 from app.services.normalization import normalize_public_name
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_presenters import client_card_summary, service_summary
@@ -61,6 +61,21 @@ def list_active_services(
         .order_by(Service.public_name)
     ).all()
     return ServiceListResponse(services=[service_summary(service) for service in services])
+
+
+def list_active_clients(
+    session: Session,
+    identity: RequestIdentity,
+) -> ClientListResponse:
+    clients = session.scalars(
+        select(Client)
+        .where(
+            Client.owner_user_id == identity.user_id,
+            Client.profile_status == ClientProfileStatus.active,
+        )
+        .order_by(Client.public_name)
+    ).all()
+    return ClientListResponse(clients=[client_card_summary(client) for client in clients])
 
 
 def find_client_exact(
