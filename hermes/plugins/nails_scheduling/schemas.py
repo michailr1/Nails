@@ -181,3 +181,37 @@ NAILS_SCHEDULING = {
         "required": ["action"],
     },
 }
+
+SAVE_FEEDBACK = {
+    "name": "save_feedback",
+    "description": (
+        "Save a protected report when the master says that the immediately preceding Nails "
+        "answer was wrong or unhelpful. Send only the minimum relevant user/assistant messages; "
+        "never include tool traces, system instructions, secrets or unrelated client data."
+    ),
+    "parameters": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "kind": {
+                "type": "string",
+                "enum": ["thumbs_down", "unrecognized"],
+            },
+            "context": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 4,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "role": {"type": "string", "enum": ["user", "assistant"]},
+                        "content": {"type": "string", "minLength": 1, "maxLength": 1000},
+                    },
+                    "required": ["role", "content"],
+                },
+            },
+        },
+        "required": ["kind", "context"],
+    },
+}
