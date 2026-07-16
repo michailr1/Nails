@@ -70,6 +70,7 @@ def test_schema_exposes_only_public_business_arguments():
         "find_client",
         "find_client_candidates",
         "create_client",
+        "update_client",
         "update_availability",
         "create_booking",
         "reschedule_booking",
@@ -219,6 +220,17 @@ def test_missing_key_fails_before_http(monkeypatch):
             "action": "create_client",
             "client_public_name": "Анна",
             "birthday": "31.12.1990",
+            "confirmed": True,
+        },
+        {
+            "action": "update_client",
+            "client_public_name": "Анна",
+            "notes": "заметка",
+            "confirmed": False,
+        },
+        {
+            "action": "update_client",
+            "client_public_name": "Анна",
             "confirmed": True,
         },
         {

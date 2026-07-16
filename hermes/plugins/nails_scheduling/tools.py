@@ -5,7 +5,12 @@ import logging
 import os
 from typing import Any
 
-from .client_cards import create_client_card, validate_client_card_args
+from .client_cards import (
+    create_client_card,
+    update_client_card,
+    validate_client_card_args,
+    validate_client_card_update_args,
+)
 from .presenters import _sanitize_success
 from .transport import _call_backend, _error
 from .validation import ToolInputError, _request_spec, _validate_args
@@ -56,6 +61,8 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
         action = args.get("action") if isinstance(args, dict) else None
         if action == "create_client":
             values = validate_client_card_args(args)
+        elif action == "update_client":
+            values = validate_client_card_update_args(args)
         else:
             action, values = _validate_args(args)
 
@@ -64,6 +71,12 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
 
         if action == "create_client":
             response = create_client_card(
+                values,
+                telegram_user_id=telegram_user_id,
+                api_key=api_key,
+            )
+        elif action == "update_client":
+            response = update_client_card(
                 values,
                 telegram_user_id=telegram_user_id,
                 api_key=api_key,
@@ -98,7 +111,13 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
 
         try:
             raw_result = response.get("result")
-            safe_result = _sanitize_success(action, raw_result)
+            if action == "update_client" and not isinstance(raw_result, dict):
+                raise ValueError("invalid client update result")
+            safe_result = (
+                raw_result
+                if action == "update_client"
+                else _sanitize_success(action, raw_result)
+            )
             if action in _VERIFIED_ACTIONS:
                 if not isinstance(raw_result, dict) or raw_result.get("verified") is not True:
                     raise ValueError("verified mutation result is required")
