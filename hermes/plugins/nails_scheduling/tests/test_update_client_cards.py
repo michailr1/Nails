@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from nails_scheduling import client_cards, tools
 
 
@@ -92,7 +94,7 @@ def test_update_client_allows_explicit_field_clear():
 
 
 def test_update_client_requires_at_least_one_changed_field():
-    try:
+    with pytest.raises(client_cards.ToolInputError):
         client_cards.validate_client_card_update_args(
             {
                 "action": "update_client",
@@ -100,10 +102,6 @@ def test_update_client_requires_at_least_one_changed_field():
                 "confirmed": True,
             }
         )
-    except client_cards.ToolInputError:
-        pass
-    else:
-        raise AssertionError("empty client update must be rejected")
 
 
 def test_tool_routes_update_client_and_returns_safe_result(monkeypatch):
