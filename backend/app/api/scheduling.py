@@ -29,6 +29,7 @@ from app.schemas.scheduling_management import (
     ClientCandidateListResponse,
     ClientCreateRequest,
     ClientCreateResponse,
+    ClientListResponse,
     ClientLookupResponse,
     ClientReplaceRequest,
     ClientReplaceResponse,
@@ -38,7 +39,10 @@ from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_clients import create_or_reuse_client, replace_client
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_dates import resolve_date
-from app.services.scheduling_lookup import find_client_exact
+from app.services.scheduling_lookup import (
+    find_client_exact,
+    list_active_clients,
+)
 from app.services.scheduling_management import (
     cancel_booking,
     find_client_candidates,
@@ -121,6 +125,14 @@ def service_replace(
         return replace_service(session, identity, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
+
+
+@router.get("/clients", response_model=ClientListResponse)
+def clients(
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> ClientListResponse:
+    return list_active_clients(session, identity)
 
 
 @router.get("/clients/exact", response_model=ClientLookupResponse)
