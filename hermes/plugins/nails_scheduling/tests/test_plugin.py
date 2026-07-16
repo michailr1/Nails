@@ -46,6 +46,7 @@ def test_schema_exposes_only_public_business_arguments():
         "buffer_after_minutes",
         "is_active",
         "client_public_name",
+        "new_public_name",
         "phone",
         "private_alias",
         "contact_channel",
