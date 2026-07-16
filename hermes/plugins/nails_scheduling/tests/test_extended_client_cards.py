@@ -1,6 +1,6 @@
 import json
 
-from nails_scheduling import client_cards, presenters, tools
+from nails_scheduling import client_cards, presenters, tools, transport
 
 CARD = {
     "action": "create_client",
@@ -50,7 +50,7 @@ def test_extended_client_card_is_sent_to_backend(monkeypatch):
             },
         }
 
-    monkeypatch.setattr(client_cards, "_call_backend", fake_backend)
+    monkeypatch.setattr(transport, "_call_backend", fake_backend)
     values = client_cards.validate_client_card_args(CARD)
 
     result = client_cards.create_client_card(
