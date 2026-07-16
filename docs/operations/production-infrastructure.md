@@ -18,6 +18,12 @@ Hermes profile environment: /root/.hermes/profiles/nails/.env
 Hermes profile config: /root/.hermes/profiles/nails/config.yaml
 ```
 
+The working Telegram bot token lives in the **Hermes profile environment**
+(`/root/.hermes/profiles/nails/.env`), not in the backend environment
+(`/opt/nails/.env`). Any bot-side action (e.g. a manual `sendMessage`) must
+read the token from the profile `.env`. Reading `/opt/nails/.env` for a
+Telegram token is wrong and fails.
+
 Expected permissions verified on 2026-07-13:
 
 ```text
