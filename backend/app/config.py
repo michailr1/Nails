@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     app_timezone: str = Field(alias="APP_TIMEZONE", min_length=1)
     database_url: str = Field(alias="DATABASE_URL", min_length=1)
     internal_api_key: SecretStr = Field(alias="INTERNAL_API_KEY", min_length=32)
+    feedback_retention_days: int = Field(
+        default=30,
+        alias="FEEDBACK_RETENTION_DAYS",
+        ge=1,
+        le=365,
+    )
 
     @field_validator("app_timezone")
     @classmethod
