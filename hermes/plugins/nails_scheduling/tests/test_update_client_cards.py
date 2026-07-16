@@ -90,6 +90,82 @@ def test_update_existing_client_merges_only_supplied_fields(monkeypatch):
     assert "id" not in saved
 
 
+def test_update_client_renames_with_existing_put(monkeypatch):
+    calls = []
+
+    def fake_backend(**kwargs):
+        calls.append(kwargs)
+        if kwargs["action"] == "find_client":
+            return {"ok": True, "result": {"found": True, "client": CURRENT_CARD}}
+        return {
+            "ok": True,
+            "result": {
+                "client": {**CURRENT_CARD, "public_name": "Татьяна"},
+                "changed": True,
+                "changed_fields": ["public_name"],
+            },
+        }
+
+    monkeypatch.setattr(transport, "_call_backend", fake_backend)
+    values = client_cards.validate_client_card_update_args(
+        {
+            "action": "update_client",
+            "client_public_name": "Кристина",
+            "new_public_name": " Татьяна ",
+            "confirmed": True,
+        }
+    )
+
+    result = client_cards.update_client_card(
+        values,
+        telegram_user_id="700000001",
+        api_key="k" * 64,
+    )
+
+    assert values["updates"] == {"public_name": "Татьяна"}
+    assert calls[1]["json_body"]["current_public_name"] == "Кристина"
+    assert calls[1]["json_body"]["public_name"] == "Татьяна"
+    assert result["result"]["client"]["public_name"] == "Татьяна"
+    assert result["result"]["changed_fields"] == ["public_name"]
+
+
+def test_update_client_returns_name_conflict_without_retry(monkeypatch):
+    calls = []
+
+    def fake_backend(**kwargs):
+        calls.append(kwargs)
+        if kwargs["action"] == "find_client":
+            return {"ok": True, "result": {"found": True, "client": CURRENT_CARD}}
+        return {
+            "ok": False,
+            "action": "update_client",
+            "error": {
+                "code": "client_name_conflict",
+                "message": "A client with this public name already exists.",
+            },
+        }
+
+    monkeypatch.setattr(transport, "_call_backend", fake_backend)
+    values = client_cards.validate_client_card_update_args(
+        {
+            "action": "update_client",
+            "client_public_name": "Кристина",
+            "new_public_name": "Татьяна",
+            "confirmed": True,
+        }
+    )
+
+    result = client_cards.update_client_card(
+        values,
+        telegram_user_id="700000001",
+        api_key="k" * 64,
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "client_name_conflict"
+    assert len(calls) == 2
+
+
 def test_update_client_allows_explicit_field_clear():
     values = client_cards.validate_client_card_update_args(
         {
