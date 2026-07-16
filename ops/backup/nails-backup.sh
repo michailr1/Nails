@@ -43,7 +43,9 @@ drop_restore_db() {
   RESTORE_ACTIVE=false
 }
 cleanup() {
-  [[ "$RESTORE_ACTIVE" == "true" ]] && drop_restore_db
+  if [[ "$RESTORE_ACTIVE" == "true" ]]; then
+    drop_restore_db
+  fi
 }
 trap cleanup EXIT
 
@@ -72,8 +74,12 @@ promote_generations() {
   local archive="$1" weekday monthday week month
   weekday="$(date -u +%u)"; monthday="$(date -u +%d)"
   week="$(date -u +%G-W%V)"; month="$(date -u +%Y-%m)"
-  [[ "$weekday" == "7" ]] && cp -f "$archive" "${BACKUP_ROOT}/nails-weekly-${week}.sql.gz"
-  [[ "$monthday" == "01" ]] && cp -f "$archive" "${BACKUP_ROOT}/nails-monthly-${month}.sql.gz"
+  if [[ "$weekday" == "7" ]]; then
+    cp -f "$archive" "${BACKUP_ROOT}/nails-weekly-${week}.sql.gz"
+  fi
+  if [[ "$monthday" == "01" ]]; then
+    cp -f "$archive" "${BACKUP_ROOT}/nails-monthly-${month}.sql.gz"
+  fi
 }
 
 rotate_files() {
