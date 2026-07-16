@@ -1,8 +1,10 @@
 # Nails — текущий контекст для продолжения работы
 
-Дата фиксации: **14 июля 2026 года**.
+Дата фиксации: **16 июля 2026 года**.
 
-Сначала прочитать [`../../AGENTS.md`](../../AGENTS.md), затем этот файл, [`../operations/production-infrastructure.md`](../operations/production-infrastructure.md) и [`../operations/hermes-plugin-runtime.md`](../operations/hermes-plugin-runtime.md).
+Сначала прочитать [`../../AGENTS.md`](../../AGENTS.md), затем этот файл, [`../operations/engineering-principles.md`](../operations/engineering-principles.md), [`../operations/production-infrastructure.md`](../operations/production-infrastructure.md) и [`../operations/hermes-plugin-runtime.md`](../operations/hermes-plugin-runtime.md).
+
+Это handoff для нового контекста основного агента. Не угадывай состояние по памяти — проверяй по GitHub, а для production — по фактическому preflight.
 
 ## 1. Рабочий контракт
 
@@ -13,163 +15,80 @@ production repo: /opt/nails/repo
 backend env: /opt/nails/.env
 backend API: http://127.0.0.1:8210
 Hermes profile: /root/.hermes/profiles/nails
-Hermes config: /root/.hermes/profiles/nails/config.yaml
 production branch: main
 ```
 
-- основной агент ChatGPT пишет код, меняет GitHub, проводит review/CI, выполняет merge и готовит точные runbooks;
-- VPS-агент только исполняет утверждённый merged runbook;
-- один живой Telegram-тест выполняется за раз;
-- Issue #34 закрывается только после deployment и ручной приёмки.
+- основной агент пишет код, меняет GitHub, проводит review/CI, мержит и готовит точные runbooks;
+- VPS-агент только исполняет утверждённый runbook и возвращает компактный отчёт (`docs/operations/vps-reporting.md`);
+- один живой Telegram-тест за раз;
+- в GitHub — только роли (`master`, `admin`, `client`), без персональных имён; имя ассистента мастера — «Нэйли».
 
-## 2. Последнее доказанное production-состояние
+## 2. Деплой — один постоянный скрипт (ADR-003)
 
-```text
-production HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3
-working tree: clean
-Alembic: 0006
-backend health: ok
-backend ready: ok
-gateway: active
-nails-onboarding: 0.5.0
-nails-scheduling: 0.1.0
-last success: NAILS_002E4_V3_DEPLOYMENT_OK
-```
+Все релизы идут через `ops/deploy/deploy.sh <exact-SHA>`. Одноразовые релизные runbook'и запрещены (CI-гейт `deploy-script.yml`). Поток: PR → CI → candidate-validation VPS-агентом по точному PR-head SHA (`NAILS_RELEASE_REF=origin/pr/<n>`, checkout не меняется) → основной агент fast-forward-мержит **тот же** SHA → VPS finalize `git merge --ff-only`. Rollback = `deploy.sh <prev-SHA>`. Тождество кода — по `NAILS_GIT_SHA`, зашитому в образ.
 
-Пользователь не прислал результат E5, поэтому production также может находиться на строго проверяемом состоянии:
+Исторические E4/E5/E6-runbook'и неактивны, VPS-агенту не выдаются. Их безопасные инварианты Hermes и деплоя живут в `production-infrastructure.md` и `hermes-plugin-runtime.md` — читать оттуда, не по памяти.
+
+**Production state не предполагать.** `deploy.sh` сам фиксирует фактический clean checkout перед candidate-деплоем; жёстко заданные baseline из прошлых запусков запрещены (engineering-principles §3.6). Актуальный HEAD и версии плагинов устанавливаются preflight'ом, а не из этого документа.
+
+## 3. Что уже в production-контуре
 
 ```text
-HEAD: a0ef8c5c26301a9f6950544afd0e070b7e691582
-nails-scheduling: 0.2.0
+backend: FastAPI + PostgreSQL, Alembic серии 000x
+Hermes profile nails: gateway root user-level systemd (XDG_RUNTIME_DIR=/run/user/0 systemctl --user)
+plugins: nails-onboarding, nails-scheduling (profile-local, restricted)
 ```
 
-Никакое из этих состояний нельзя предполагать: E6 определяет его по фактическому HEAD и plugin list.
+Работает: онбординг-интервью и materialization в рабочие таблицы; управление услугами (create/update/archive/restore со snapshot цен); календарь и доступность на конкретные даты; клиентки (exact + candidate поиск); создание/перенос/отмена записей (guarded read→write→readback в одном tool-вызове, `verified=true`). Персона «Нэйли»: «вы» по умолчанию, вопрос «ты/вы», одно имя, BotFather-имя выставлено (#70 закрыт).
 
-Проверенные особенности Hermes:
+## 4. Состояние PR
 
-- gateway управляется root user-level systemd;
-- `_get_platform_tools()` возвращает set-like unordered collection;
-- toolsets сравниваются по множеству, а не по iteration order;
-- verification использует `discover_plugins()`, а `discover_plugins(force=True)` запрещён;
-- V2 rollback доказан маркером `ROLLBACK_PERFORMED=true`;
-- V1 или V2 никогда не запускать повторно.
+Уже смержены (предохранители против грабель §6 включены):
 
-## 3. Смёрженные исправления
+- **#63** — правило «перечисли существующие механизмы до проектирования» + ревью границ абстракций (`engineering-principles` §4, поле PR «Существующие механизмы»);
+- **#78** — правило «CI-lint чинится только `ruff --fix`, руками импорты не трогать»;
+- **#80** — ADR-004: клиентский контур v1 = детерминированный бот без LLM.
 
-PR #44 merged как `c9e400c80398bd4367aad0ed0416ee0fc6a79b2d`:
+Открыт и **не готов**:
+
+- **#81** `fix/client-card-guidance` — расширенные поля карточки клиентки, см. §5.
+
+## 5. Активная работа: PR #81 — два дефекта за Ruff
+
+Ruff на #81 починен автофиксом. Он обнажил два pytest-провала, которые прятались за Ruff (pytest не запускался после его падения) — они **не** от автофикса:
 
 ```text
-resolve_date
-update_availability
+test_read_clients.py::test_create_client_performs_exact_lookup_before_post
+test_read_clients.py::test_create_client_returns_existing_without_post
 ```
 
-PR #46 merged как `e4443a736c5a0d5a34239a5257b7764592834e5b`:
+Причина и правильный фикс — устранить дубликат, а не чинить моки:
 
-```text
-find_service
-create_service
-update_service
-```
+- `create_client` переехал в новый модуль `client_cards.create_client_card` (`tools.py`), берущий `_call_backend` из `.transport`;
+- старый `operations._create_client` делает то же (find→create) и **больше нигде не вызывается — мёртвый дубликат**;
+- `test_read_clients.py` мокает `operations._call_backend` — старое место → реальный HTTP → «transport failure» → `ok:false`.
 
-Общий продуктовый принцип:
+Правильно: удалить мёртвый `operations._create_client`, свести тесты к одному модулю (`client_cards`). Это нарушение правила «Существующих механизмов» (#63) — новую логику написали рядом со старой.
 
-> Onboarding — только мастер первичного заполнения. После `complete` услуги, график, клиентки и записи управляются restricted domain operations. Повторный onboarding не используется для обычного редактирования.
+## 6. Известные грабли этого проекта (не повторять)
 
-Service management поддерживает создание, переименование, описание, цену, валюту, длительность, buffers, архив и восстановление. Существующие bookings сохраняют snapshots цены, валюты, длительности и buffers; новые значения применяются только к будущим bookings.
+Повторяющийся failure mode, из-за которого меняется контекст. Все закрываются `engineering-principles` — читать его как рабочий чек-лист, не как фон.
 
-PR #46 final checks:
+1. **Проектирование поверх существующего.** Были: предложение добавить `exclude_booking_id` (уже реализован автором); `client_cards` дублирует `operations._create_client`; предложение stateful-планировщика вместо диалогового плана. → §4 «Проверка фактов до проектирования» + поле PR «Существующие механизмы».
+2. **Ручная правка импортов → круги CI.** Импорты/формат правили руками, каждый раз новая I001. → только `ruff check --fix`, локальное воспроизведение (#78).
+3. **Чинили не тот файл.** Правку вносили по догадке, не воспроизведя ошибку; при недоступном DNS — гадание. → diff-инструмент называет файл и строку; воспроизводить локально или запросить ревьюера с checkout.
+4. **Контракт-тесты отстают от кода.** После переезда модуля дословные assert'ы падали (skill-фразы; `from .tools` → `.reliable_tools`), а CI-контракты окаменевали на старом состоянии. → при переименовании/переезде и при обновлении handoff синхронно обновлять контракт-тесты; в контрактах якорить структурные инварианты, не волатильные SHA/PR/даты.
 
-```text
-CI #145: success
-Agent responsibility contract #55: success
-Production infrastructure contract #29: success
-backend: success
-onboarding plugin Python 3.11/3.12: success
-scheduling plugin Python 3.11/3.12: success
-compose-smoke: success
-review threads: none
-```
+## 7. Следующая веха: NAILS-002F
 
-## 4. Активный deployment candidate
+После разбора открытых PR — автоматические бэкапы PostgreSQL + **подтверждённый restore-тест** (restore в отдельную БД, документированный результат). Это **жёсткий барьер**: реальные данные мастера не заводятся до успешного restore-теста. Крупные подсистемы (Google Calendar, публичный бот, multi-master) не начинать, пока мастер не живёт на системе.
 
-```text
-branch: ops/nails-002e6-combined-operations
-entrypoint: ops/deploy/nails-002e6-combined-operations.sh
-runtime: ops/deploy/lib/nails-002e6-runtime.sh
-shared rollback library: ops/deploy/lib/nails-002e5-common.sh
-success marker: NAILS_002E6_DEPLOYMENT_OK
-final scheduling plugin: 0.3.0
-Alembic: 0006
-```
-
-E6 принимает только два исходных состояния:
-
-```text
-385a92962e3736553335d717adcdf4b83ac8a8b3 + scheduling 0.1.0
-a0ef8c5c26301a9f6950544afd0e070b7e691582 + scheduling 0.2.0
-```
-
-Runbook:
-
-- создаёт PostgreSQL и runtime backups;
-- обновляет только `nails-api`, scheduling plugin и оба skills;
-- не меняет `nails-db`, Docker daemon, Alembic revision или Hermes config;
-- проверяет date, availability и service-management OpenAPI routes;
-- проверяет plugin registry, Telegram visibility и полный action set;
-- выполняет rollback к фактически обнаруженному исходному HEAD/plugin/image/runtime при ошибке;
-- не изменяет календарь или услуги во время deployment.
-
-Expected markers:
-
-```text
-calendar_data_changed_by_deployment=false
-service_data_changed_by_deployment=false
-manual_sql_executed=false
-schema_revision_changed=false
-```
-
-## 5. Исторический E5
-
-```text
-ops/nails-002e5-date-availability
-ops/deploy/nails-002e5-date-availability.sh
-NAILS_002E5_DEPLOYMENT_OK
-calendar_data_changed_by_deployment=false
-manual_sql_executed=false
-```
-
-Отдельный E5 больше не выдаётся VPS-агенту: E6 безопасно поддерживает и pre-E5, и post-E5 baseline.
-
-## 6. Acceptance после E6
-
-По одному сообщению:
-
-1. `Какая дата у ближайшей пятницы?` → 17 июля 2026, пятница.
-2. Исправить график: 17 июля 11:00–15:00, ошибочную дату 18 июля убрать как `unknown`.
-3. Проверить, что 14 и 15 июля не изменились.
-4. Изменить цену одной услуги: exact lookup, «сейчас → будет», подтверждение.
-5. Проверить новую цену для будущих записей и старый snapshot существующей записи.
-6. Проверить архив и восстановление услуги без удаления истории.
-7. Выполнить финальные read-only counts и log-privacy проверки.
-
-Старый тест `Что у меня 18 июля?` с ожиданием рабочего интервала отменён.
-
-## 7. Запрещённые действия
-
-- не запускать отдельный E5;
-- не считать production обновлённым без `NAILS_002E6_DEPLOYMENT_OK`;
-- не исправлять календарь или услуги SQL-командами;
-- не проходить onboarding заново ради графика или услуг;
-- не запускать V1 или V2;
-- не давать VPS-агенту самостоятельные команды.
+Latency (Issue #69): guarded mutation уже схлопывает read→write→readback в один tool-вызов; оптимизация читающей фазы — после замера доли времени модель/tool, не раньше.
 
 ## 8. Точка продолжения
 
 ```text
-открыть E6 PR
-получить green CI и review
-merge E6 runbook
-выдать VPS-агенту одну exact-SHA команду
-проверить deployment output
-после deployment выполнить acceptance по одному сообщению
+1. довести PR #81: удалить мёртвый operations._create_client, свести тесты к client_cards, зелёный pytest
+2. по готовности PR — candidate-validation по exact PR-head SHA, затем ff-merge того же SHA (ADR-003)
+3. затем NAILS-002F: бэкапы + проверенный restore
 ```
