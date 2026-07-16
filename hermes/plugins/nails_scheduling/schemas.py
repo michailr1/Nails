@@ -46,6 +46,8 @@ NAILS_SCHEDULING = {
         "Before creating a client, call find_client and find_client_candidates; when "
         "candidates exist, ask the master which existing card is intended and never "
         "create a duplicate without explicit confirmation that this is another person. "
+        "When creating a confirmed new client, optional private card fields may be stored "
+        "and later read back; private_alias is never a client-facing name. "
         "Create, reschedule, or cancel a booking only after showing a complete "
         "human-readable current-to-future summary and receiving explicit confirmation. "
         "Rescheduling must use an exact backend free slot. Cancellation is soft and "
@@ -139,6 +141,20 @@ NAILS_SCHEDULING = {
                 ),
             },
             "phone": {"type": ["string", "null"]},
+            "private_alias": {
+                "type": ["string", "null"],
+                "description": "Master-only search alias; never use it to address the client.",
+            },
+            "contact_channel": {"type": ["string", "null"]},
+            "birthday": {
+                "type": ["string", "null"],
+                "description": "Optional YYYY-MM-DD birthday.",
+            },
+            "notes": {"type": ["string", "null"]},
+            "nail_skin_notes": {"type": ["string", "null"]},
+            "sensitivity_notes": {"type": ["string", "null"]},
+            "style_preferences": {"type": ["string", "null"]},
+            "communication_preferences": {"type": ["string", "null"]},
             "start_time": {
                 "type": "string",
                 "description": "Current local HH:MM start.",

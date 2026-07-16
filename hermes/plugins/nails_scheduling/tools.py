@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Any
 
-from .operations import _create_client
+from .client_cards import create_client_card, validate_client_card_args
 from .presenters import _sanitize_success
 from .transport import _call_backend, _error
 from .validation import ToolInputError, _request_spec, _validate_args
@@ -53,12 +53,17 @@ def _api_key() -> str:
 def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
     del kwargs
     try:
-        action, values = _validate_args(args)
+        action = args.get("action") if isinstance(args, dict) else None
+        if action == "create_client":
+            values = validate_client_card_args(args)
+        else:
+            action, values = _validate_args(args)
+
         telegram_user_id = _trusted_telegram_user_id()
         api_key = _api_key()
 
         if action == "create_client":
-            response = _create_client(
+            response = create_client_card(
                 values,
                 telegram_user_id=telegram_user_id,
                 api_key=api_key,

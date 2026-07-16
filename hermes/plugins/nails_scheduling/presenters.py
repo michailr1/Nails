@@ -15,6 +15,18 @@ _TECHNICAL_MARKERS = (
     "environment variable",
 )
 _ABSOLUTE_SERVER_PATH = re.compile(r"(?:^|\s)/(?:opt|root|etc|var|home|usr)/\S+")
+_CLIENT_FIELDS = (
+    "public_name",
+    "phone",
+    "private_alias",
+    "contact_channel",
+    "birthday",
+    "notes",
+    "nail_skin_notes",
+    "sensitivity_notes",
+    "style_preferences",
+    "communication_preferences",
+)
 
 
 def _reject_technical_text(value: Any) -> None:
@@ -55,9 +67,9 @@ def _service_summary(value: Any) -> dict[str, Any]:
 def _client_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("invalid client")
-    if not {"public_name", "phone"}.issubset(value):
+    if not set(_CLIENT_FIELDS).issubset(value):
         raise ValueError("invalid client")
-    return {"public_name": value["public_name"], "phone": value["phone"]}
+    return {key: value[key] for key in _CLIENT_FIELDS}
 
 
 def _availability_summary(value: Any) -> dict[str, Any]:

@@ -42,59 +42,6 @@ def _matching_existing_booking(
     return matches[0] if matches else None
 
 
-def _create_client(
-    values: dict[str, Any],
-    *,
-    telegram_user_id: str,
-    api_key: str,
-) -> dict[str, Any]:
-    lookup = _call_backend(
-        action="find_client",
-        telegram_user_id=telegram_user_id,
-        api_key=api_key,
-        method="GET",
-        path="/api/v1/scheduling/clients/exact",
-        params={"public_name": values["client_public_name"]},
-        json_body=None,
-    )
-    if not lookup.get("ok"):
-        return lookup
-    result = lookup.get("result")
-    if not isinstance(result, dict) or not isinstance(result.get("found"), bool):
-        return _error(
-            "invalid_backend_response",
-            "Scheduling service returned an invalid response.",
-        )
-    if result["found"]:
-        client = result.get("client")
-        if not isinstance(client, dict):
-            return _error(
-                "invalid_backend_response",
-                "Scheduling service returned an invalid response.",
-            )
-        return {
-            "ok": True,
-            "action": "create_client",
-            "result": {
-                "client": client,
-                "created": False,
-                "contact_added": False,
-            },
-        }
-    return _call_backend(
-        action="create_client",
-        telegram_user_id=telegram_user_id,
-        api_key=api_key,
-        method="POST",
-        path="/api/v1/scheduling/clients",
-        params=None,
-        json_body={
-            "public_name": values["client_public_name"],
-            "phone": values["phone"],
-        },
-    )
-
-
 def _create_booking(
     values: dict[str, Any],
     *,

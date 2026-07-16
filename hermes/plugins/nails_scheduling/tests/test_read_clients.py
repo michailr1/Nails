@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from nails_scheduling import operations, tools
+from nails_scheduling import client_cards, tools
 
 
 def _set_context(monkeypatch, *, platform="telegram", user_id="700000001"):
@@ -31,6 +31,22 @@ def _service_payload():
         "buffer_before_minutes": 0,
         "buffer_after_minutes": 21,
         "is_active": True,
+    }
+
+
+def _client_payload():
+    return {
+        "id": "33333333-3333-4333-8333-333333333333",
+        "public_name": "Анна",
+        "phone": None,
+        "private_alias": None,
+        "contact_channel": None,
+        "birthday": None,
+        "notes": None,
+        "nail_skin_notes": None,
+        "sensitivity_notes": None,
+        "style_preferences": None,
+        "communication_preferences": None,
     }
 
 
@@ -174,17 +190,13 @@ def test_create_client_performs_exact_lookup_before_post(monkeypatch):
             "ok": True,
             "action": "create_client",
             "result": {
-                "client": {
-                    "id": "33333333-3333-4333-8333-333333333333",
-                    "public_name": "Анна",
-                    "phone": None,
-                },
+                "client": _client_payload(),
                 "created": True,
                 "contact_added": False,
             },
         }
 
-    monkeypatch.setattr(operations, "_call_backend", fake_call_backend)
+    monkeypatch.setattr(client_cards, "_call_backend", fake_call_backend)
     result = json.loads(
         tools.nails_scheduling(
             {"action": "create_client", "client_public_name": " Анна ", "confirmed": True}
@@ -196,7 +208,18 @@ def test_create_client_performs_exact_lookup_before_post(monkeypatch):
         "/api/v1/scheduling/clients/exact",
         "/api/v1/scheduling/clients",
     ]
-    assert calls[1]["json_body"] == {"public_name": "Анна", "phone": None}
+    assert calls[1]["json_body"] == {
+        "public_name": "Анна",
+        "phone": None,
+        "private_alias": None,
+        "contact_channel": None,
+        "birthday": None,
+        "notes": None,
+        "nail_skin_notes": None,
+        "sensitivity_notes": None,
+        "style_preferences": None,
+        "communication_preferences": None,
+    }
     assert "id" not in result["result"]["client"]
 
 
@@ -212,15 +235,11 @@ def test_create_client_returns_existing_without_post(monkeypatch):
             "action": "find_client",
             "result": {
                 "found": True,
-                "client": {
-                    "id": "33333333-3333-4333-8333-333333333333",
-                    "public_name": "Анна",
-                    "phone": None,
-                },
+                "client": _client_payload(),
             },
         }
 
-    monkeypatch.setattr(operations, "_call_backend", fake_call_backend)
+    monkeypatch.setattr(client_cards, "_call_backend", fake_call_backend)
     result = json.loads(
         tools.nails_scheduling(
             {"action": "create_client", "client_public_name": "Анна", "confirmed": True}

@@ -47,6 +47,14 @@ def test_schema_exposes_only_public_business_arguments():
         "is_active",
         "client_public_name",
         "phone",
+        "private_alias",
+        "contact_channel",
+        "birthday",
+        "notes",
+        "nail_skin_notes",
+        "sensitivity_notes",
+        "style_preferences",
+        "communication_preferences",
         "start_time",
         "new_start_time",
         "confirmed",
@@ -207,6 +215,12 @@ def test_missing_key_fails_before_http(monkeypatch):
         {"action": "find_client", "client_public_name": ""},
         {"action": "find_client_candidates", "client_public_name": ""},
         {"action": "create_client", "client_public_name": "Анна", "confirmed": False},
+        {
+            "action": "create_client",
+            "client_public_name": "Анна",
+            "birthday": "31.12.1990",
+            "confirmed": True,
+        },
         {
             "action": "update_availability",
             "days": [
