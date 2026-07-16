@@ -15,6 +15,7 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DAILY_BACKUP="${BACKUP_ROOT}/nails-daily-${STAMP}.sql.gz"
 RESTORE_DB="nails_restore_${STAMP,,}"
 RESTORE_DB="${RESTORE_DB//[^a-z0-9_]/_}"
+RESTORE_ACTIVE=false
 
 log() { printf '== nails-backup: %s ==\n' "$*"; }
 die() { printf 'BACKUP_FAILED: %s\n' "$*" >&2; exit 1; }
@@ -39,8 +40,12 @@ drop_restore_db() {
   compose exec -T nails-db sh -c \
     'dropdb --if-exists --force -U "$POSTGRES_USER" "$1"' sh "$RESTORE_DB" \
     < /dev/null >/dev/null 2>&1 || true
+  RESTORE_ACTIVE=false
 }
-trap drop_restore_db EXIT
+cleanup() {
+  [[ "$RESTORE_ACTIVE" == "true" ]] && drop_restore_db
+}
+trap cleanup EXIT
 
 verify_restore() {
   local archive="$1" table_count alembic_revision
@@ -48,6 +53,7 @@ verify_restore() {
   drop_restore_db
   compose exec -T nails-db sh -c \
     'createdb -U "$POSTGRES_USER" "$1"' sh "$RESTORE_DB" < /dev/null
+  RESTORE_ACTIVE=true
   gzip -dc "$archive" | compose exec -T nails-db sh -c \
     'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1"' sh "$RESTORE_DB" >/dev/null
   table_count="$(compose exec -T nails-db sh -c \
@@ -96,10 +102,14 @@ send_telegram() {
 
 [[ "$MODE" == "daily" || "$MODE" == "verify" || "$MODE" == "rotate" ]] || \
   die "usage: nails-backup.sh daily|verify <archive>|rotate"
-[[ "$(id -u)" -eq 0 ]] || die "root is required"
-[[ -f "$REPO/compose.yaml" ]] || die "repository compose.yaml is missing"
-[[ -f "$BACKEND_ENV" ]] || die "backend env is missing"
+if [[ "$MODE" != "rotate" || "${NAILS_BACKUP_TEST_MODE:-false}" != "true" ]]; then
+  [[ "$(id -u)" -eq 0 ]] || die "root is required"
+fi
 install -d -m 700 "$BACKUP_ROOT"
+if [[ "$MODE" != "rotate" ]]; then
+  [[ -f "$REPO/compose.yaml" ]] || die "repository compose.yaml is missing"
+  [[ -f "$BACKEND_ENV" ]] || die "backend env is missing"
+fi
 
 case "$MODE" in
   daily)
