@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from nails_scheduling import register, schemas, tools
+from nails_scheduling import feedback_tool, register, schemas, tools
 
 
 def _set_context(monkeypatch, *, platform="telegram", user_id="700000001"):
@@ -95,14 +95,16 @@ def test_schema_exposes_only_public_business_arguments():
         assert forbidden not in serialized
 
 
-def test_plugin_registers_one_dedicated_toolset():
+def test_plugin_registers_two_tools_in_one_dedicated_toolset():
     calls = []
     ctx = SimpleNamespace(register_tool=lambda **kwargs: calls.append(kwargs))
     register(ctx)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "nails_scheduling"
-    assert calls[0]["toolset"] == "nails_scheduling"
-    assert calls[0]["handler"] is tools.nails_scheduling
+    assert len(calls) == 2
+    registered = {call["name"]: call for call in calls}
+    assert set(registered) == {"nails_scheduling", "save_feedback"}
+    assert {call["toolset"] for call in calls} == {"nails_scheduling"}
+    assert registered["nails_scheduling"]["handler"] is tools.nails_scheduling
+    assert registered["save_feedback"]["handler"] is feedback_tool.save_feedback
 
 
 @pytest.mark.parametrize(
