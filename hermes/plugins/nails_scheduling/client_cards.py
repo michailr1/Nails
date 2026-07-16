@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from .transport import _call_backend, _error
+from . import transport
 from .validation import ToolInputError
 
 _CLIENT_OPTIONAL_FIELDS = {
@@ -117,7 +117,7 @@ def _lookup_client(
     telegram_user_id: str,
     api_key: str,
 ) -> dict[str, Any]:
-    return _call_backend(
+    return transport._call_backend(
         action="find_client",
         telegram_user_id=telegram_user_id,
         api_key=api_key,
@@ -143,7 +143,7 @@ def create_client_card(
         return lookup
     result = lookup.get("result")
     if not isinstance(result, dict) or not isinstance(result.get("found"), bool):
-        return _error(
+        return transport._error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
@@ -151,7 +151,7 @@ def create_client_card(
         try:
             safe_client = _safe_client(result.get("client"))
         except ValueError:
-            return _error(
+            return transport._error(
                 "invalid_backend_response",
                 "Scheduling service returned an invalid response.",
             )
@@ -165,7 +165,7 @@ def create_client_card(
             },
         }
 
-    response = _call_backend(
+    response = transport._call_backend(
         action="create_client",
         telegram_user_id=telegram_user_id,
         api_key=api_key,
@@ -189,14 +189,14 @@ def create_client_card(
         return response
     result = response.get("result")
     if not isinstance(result, dict):
-        return _error(
+        return transport._error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
     try:
         safe_client = _safe_client(result.get("client"))
     except ValueError:
-        return _error(
+        return transport._error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
@@ -229,24 +229,24 @@ def update_client_card(
     if not isinstance(lookup_result, dict) or not isinstance(
         lookup_result.get("found"), bool
     ):
-        return _error(
+        return transport._error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
     if not lookup_result["found"]:
-        return _error("client_not_found", "Client card was not found.")
+        return transport._error("client_not_found", "Client card was not found.")
 
     try:
         current = _safe_client(lookup_result.get("client"))
     except ValueError:
-        return _error(
+        return transport._error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
 
     desired = dict(current)
     desired.update(values["updates"])
-    response = _call_backend(
+    response = transport._call_backend(
         action="update_client",
         telegram_user_id=telegram_user_id,
         api_key=api_key,
@@ -262,7 +262,7 @@ def update_client_card(
         return response
     result = response.get("result")
     if not isinstance(result, dict):
-        return _error(
+        return transport._error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
@@ -272,14 +272,14 @@ def update_client_card(
         or not isinstance(changed_fields, list)
         or not all(isinstance(field, str) for field in changed_fields)
     ):
-        return _error(
+        return transport._error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
     try:
         safe_client = _safe_client(result.get("client"))
     except ValueError:
-        return _error(
+        return transport._error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
