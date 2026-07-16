@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.feedback import router as feedback_router
 from app.api.onboarding import router as onboarding_router
 from app.api.scheduling import router as scheduling_router
 from app.config import get_settings
@@ -29,6 +30,7 @@ app = FastAPI(
 )
 app.include_router(onboarding_router)
 app.include_router(scheduling_router)
+app.include_router(feedback_router)
 
 
 @app.get("/health", tags=["system"])
