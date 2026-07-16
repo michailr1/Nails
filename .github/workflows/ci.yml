@@ -192,7 +192,7 @@ jobs:
         run: |
           flags="$(docker compose --env-file .env.example exec -T nails-db \
             psql -U nails_admin -d nails -Atc \
-            "SELECT CASE WHEN rolsuper THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreatedb THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreaterole THEN 1 ELSE 0 END || '|' || CASE WHEN rolreplication THEN 1 ELSE 0 END FROM pg_roles WHERE rolname = 'nails_app')"
+            "SELECT CASE WHEN rolsuper THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreatedb THEN 1 ELSE 0 END || '|' || CASE WHEN rolcreaterole THEN 1 ELSE 0 END || '|' || CASE WHEN rolreplication THEN 1 ELSE 0 END FROM pg_roles WHERE rolname = 'nails_app'")"
           test "$flags" = "0|0|0|0"
 
       - name: Verify API connects as the restricted role
