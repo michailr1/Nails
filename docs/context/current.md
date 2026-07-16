@@ -31,27 +31,34 @@ Hermes plugins: nails-onboarding, nails-scheduling
 ## 3. Актуальный production milestone
 
 ```text
-production SHA: f53a77a213cfb21cf63839d5e3c10d7e01bcd298
-PR #95: owner-scoped list_clients
+production SHA: 429130e5b8d4908e3a9d39bd61eb9448ac3dd386
+PR #96: verified automated PostgreSQL backups
 checkout = origin/main = running SHA
 health = 200
 readiness = 200
 gateway = active
+backup timer = enabled, active
 ```
 
-Работает: онбординг; услуги; календарь и доступность; клиентские карточки с расширенными private fields; exact/candidate поиск; переименование карточки; общий список активных клиенток; создание, перенос и мягкая отмена записей.
+Работает: онбординг; услуги; календарь и доступность; клиентские карточки с расширенными private fields; exact/candidate поиск; переименование карточки; общий список активных клиенток; создание, корректный перенос и мягкая отмена записей.
 
-## 4. Активная работа: NAILS-002F
+Корректный перенос уже реализован:
 
-Основная задача: issue #91 `automated PostgreSQL backup, restore verification and retention`.
+- PR #62 удалил ошибочную `free_slots`-предпроверку из plugin-flow;
+- backend `reschedule` исключает текущую переносимую запись через `exclude_booking_id`;
+- конфликты с другими записями, buffers и рабочим временем сохраняются;
+- повторный перенос остаётся идемпотентным;
+- regression tests присутствуют;
+- PR #66 закрепил fresh-read/readback contract;
+- PR #74 добавил verified readback в одном tool-вызове.
 
-Дубли #89 и #8 закрыты как duplicate. Рабочая ветка:
+Issue #61 остаётся открытым только как контейнер отдельных UX-дефектов. Самоблокировка записи при переносе уже не является незавершённой задачей.
 
-```text
-feat/automated-backup-restore
-```
+## 4. Завершённый этап: NAILS-002F
 
-Реализуемый постоянный механизм:
+Issue #91 и PR #96 завершены.
+
+Постоянный production-механизм:
 
 - daily `pg_dump` + `gzip -t`;
 - restore в отдельную временную DB;
@@ -65,6 +72,8 @@ feat/automated-backup-restore
 - установка только через постоянный `deploy.sh`;
 - источник истины: `docs/operations/backups.md`.
 
+Финальная production-приёмка подтверждена: ручной backup успешен, isolated restore совпал, временных restore DB нет, архив получен в Telegram, timer активен.
+
 ## 5. Известные грабли
 
 1. Не добавлять одноразовые deploy/install scripts.
@@ -73,14 +82,13 @@ feat/automated-backup-restore
 4. CI-lint чинить только после воспроизведения; Ruff imports — только автофиксом.
 5. Candidate checkout остаётся на baseline; merge только exact validated head.
 6. `app.routes` показывает mount entries как пустые paths; полные scheduling paths проверять через router или HTTP.
+7. Не считать открытый issue доказательством незавершённого дефекта: сначала проверять фактический `main`, merged PR и regression tests.
 
 ## 6. Точка продолжения
 
 ```text
-1. завершить PR NAILS-002F: review diff, CI, contract/retention tests
-2. candidate устанавливает timer, но ручной backup запускается отдельной проверкой
-3. production manual run: dump + gzip + isolated restore + counts + Telegram receipt
-4. retention dry-run, затем apply; проверить сохранность hermes-local-patches
-5. ff-merge exact candidate SHA, finalize checkout, закрыть #91
-6. следующий функциональный defect: issue #61 reschedule slot excluding current booking
+1. не планировать повторно исправление self-reschedule: оно уже в production
+2. issue #61 рассматривать только по оставшимся UX-пунктам, а не по исходному дефекту переноса
+3. перед выбором следующей задачи сверить открытые issues с фактическим кодом и merged PR
+4. поддерживать current.md после каждого завершённого production milestone
 ```
