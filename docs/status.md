@@ -8,16 +8,18 @@
 
 | Область | Состояние |
 |---|---|
-| GitHub `main` | `0c08ffcd06752e13b8fa1372058d1dce079c455e` |
-| Production API/PostgreSQL | healthy/ready по последнему production-отчёту |
-| Alembic | `0006` |
+| GitHub `main` | `847a6342911b5bf32a9e6c0885065e161c6d2d06` |
+| Production API/PostgreSQL | healthy/ready |
+| API bind | `127.0.0.1:8210` |
+| Health endpoints | `/health`, `/ready` |
+| Alembic | `0008` |
 | Hermes gateway | active |
 | Shutdown/restart Telegram notification | disabled только для profile `nails` |
 | Backup/restore | NAILS-002F завершён и принят в production |
 | Pilot | завершён после живой проверки двумя мастерами |
-| Active issue | #104 — корректировка ограничений рабочего времени |
-| Active PR | draft #105 — availability preview before mutation |
-| Следующий порядок | рабочее время → web-интерфейс мастера → клиентский контур ADR-004 |
+| NAILS-003 | завершён: preview, несколько окон и ADR-006 в production |
+| Следующий этап | web-интерфейс мастера |
+| После web | клиентский контур ADR-004 |
 
 ## 2. Что уже работает
 
@@ -26,6 +28,9 @@
 - услуги: создание, изменение, архив и восстановление;
 - точное разрешение дат;
 - доступность по конкретным датам и несколько интервалов в день;
+- read-only preview изменения доступности;
+- исправление и снятие сохранённой настройки даты;
+- целый выходной с защитой существующих записей;
 - просмотр дня и свободных окон;
 - клиентские карточки с расширенными private fields;
 - exact/candidate поиск и защита от случайных дублей;
@@ -33,30 +38,14 @@
 - корректный перенос без самоблокировки;
 - мягкая отмена;
 - fresh-read/readback и verified guarded mutations;
-- ежедневные backup + isolated restore-test + retention + Telegram archive.
+- ежедневные backup + isolated restore-test + retention + Telegram archive;
+- защищённое сохранение негативного feedback.
 
-## 3. Активный slice PR #105
+## 3. Завершённый NAILS-003
 
-Фактический источник рабочего времени — таблица `availability_intervals`. Новая таблица или миграция не добавляется.
+Фактический источник настройки окон — `availability_intervals`. Параллельные `schedule_rules` или `schedule_exceptions` не создавались.
 
-PR #105 добавляет:
-
-```text
-POST /api/v1/scheduling/availability/preview
-restricted action: preview_availability
-```
-
-Preview принимает тот же итоговый набор интервалов конкретных дат, что существующий `update_availability`, и возвращает:
-
-- текущее состояние;
-- предлагаемое состояние;
-- `changed`;
-- `can_apply`;
-- конкретные конфликтующие scheduled bookings с учётом reserved intervals и buffers.
-
-Preview является read-only и не требует `confirmed`. Write остаётся только в `update_availability`, который повторно выполняет server-side conflict check под owner schedule lock.
-
-Обязательный skill-flow:
+Рабочий flow:
 
 ```text
 resolve_date
@@ -68,37 +57,45 @@ resolve_date
 → day_view readback
 ```
 
-Если `can_apply=false`, write не выполняется. Существующие записи не переносятся и не отменяются автоматически.
+`preview_availability` принимает тот же итоговый набор интервалов, что write, и возвращает текущее/предлагаемое состояние, `changed`, `can_apply` и конфликты. Preview read-only. Write owner-scoped, audited, подтверждаемый и идемпотентный.
 
-## 4. Проверки PR #105
+Частичное закрытие дня уже поддерживается как преобразование положительных окон, например:
 
-На head `660b0f2391294545e3d2972398e528906516a130` подтверждалось:
+```text
+11:00–20:00
+→ 11:00–13:00 + 16:00–20:00
+```
 
-- backend Ruff, migrations и pytest — success;
-- scheduling plugin Ruff — success;
-- первое падение scheduling plugin pytest было вызвано устаревшим точным contract-ожиданием списка actions;
-- contract обновлён и добавлен отдельный read-only preview tool test;
-- agent responsibility contract — success;
-- production infrastructure contract не запускается корректно, так как охраняемые path-filter файлы не менялись на этом head.
+Исправление выполняется новой заменой итоговых окон; снятие настройки — `state=unknown`; целый выходной — `state=unavailable`.
 
-После обновления skill и документации требуется новый полный CI на финальном head.
+## 4. Семантика ADR-006
 
-## 5. Границы
+Явно названное мастером время открыто по умолчанию.
 
-PR #105:
+Прямая запись отклоняется только при:
 
-- является первым отдельным инкрементом issue #104;
-- не является полной реализацией issue #100 / ADR-006;
-- не переводит scheduling на семантику «открыто по умолчанию»;
-- не меняет `ensure_reservation_available`;
-- не начинает web-интерфейс;
-- не начинает клиентский контур.
+- явно сохранённом целом выходном;
+- overlap с активной записью с учётом reserved intervals и buffers.
 
-## 6. До merge
+Положительные интервалы и диапазон подсказок `10:00–23:00` не являются жёстким запретом. Они формируют только предлагаемые свободные окна. Поэтому жёсткие частичные блоки сознательно не входят в текущую модель.
 
-1. Получить зелёный CI на финальном PR-head.
-2. Проверить review threads и ff от свежего `main`.
-3. Выполнить production candidate exact PR-head SHA через постоянный `ops/deploy/deploy.sh`.
-4. Fast-forward merge только того же проверенного SHA.
-5. Finalize production checkout.
-6. Выполнить Telegram acceptance: preview → сводка → confirmation → update → readback.
+## 5. Production acceptance
+
+Для SHA `847a6342911b5bf32a9e6c0885065e161c6d2d06` подтверждено:
+
+```text
+running_sha=847a6342911b5bf32a9e6c0885065e161c6d2d06
+working_tree_clean=true
+nails-api=running
+container_health=healthy
+api_bind=127.0.0.1:8210
+GET /health=200
+GET /ready=200
+gateway_active=true
+```
+
+## 6. Следующий этап
+
+Web-интерфейс мастера начинается до клиентского контура.
+
+Сначала нужно сверить ADR-005 с текущими backend-инвариантами, определить минимальный implementation issue и не дублировать бизнес-логику Telegram-контура в web.
