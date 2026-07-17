@@ -101,9 +101,6 @@ jobs:
           for item in required_plugin:
               assert item in text["plugin"], f"missing plugin runtime fact: {item}"
 
-          # Structural handoff invariants only — not volatile SHAs/PRs/dates
-          # (see engineering-principles грабля §6.4: окаменевшие якоря блокируют
-          # обновление handoff и сами становятся источником кругов CI).
           required_context = (
               "production branch: main",
               "ops/deploy/deploy.sh",
@@ -115,14 +112,14 @@ jobs:
           for item in required_context:
               assert item in text["context"], f"missing current context fact: {item}"
 
+          # Structural status invariants only. Volatile SHAs, PRs, issues, dates and
+          # retired deployment markers are intentionally not pinned here.
           required_status = (
-              "HEAD: 385a92962e3736553335d717adcdf4b83ac8a8b3",
               "Alembic | `0006`",
-              "NAILS_002E4_V3_DEPLOYMENT_OK",
-              "Issue #34",
-              "PR #44 merged",
-              "candidate `0.2.0`",
-              "NAILS-002E5",
+              "context/current.md",
+              "Active issue",
+              "Production API/PostgreSQL",
+              "До merge",
           )
           for item in required_status:
               assert item in text["status"], f"missing status fact: {item}"
@@ -166,5 +163,5 @@ jobs:
           for item in deploy_required:
               assert item in text["deploy"], f"missing deployment contract: {item}"
 
-          print("PRODUCTION_INFRASTRUCTURE_AND_E5_CONTEXT_CONTRACT_OK")
+          print("PRODUCTION_INFRASTRUCTURE_CONTEXT_CONTRACT_OK")
           PY
