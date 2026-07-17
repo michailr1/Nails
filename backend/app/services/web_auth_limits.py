@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request, status
@@ -10,9 +11,16 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity
 from app.config import Settings, get_settings
 from app.services.web_auth import _consume_rate_bucket, _keyed_hash
-from app.web_auth_models import WebLoginChallenge
+from app.web_auth_models import WebChallengeStatus, WebLoginChallenge
 
 _LOGIN_COOKIE = "__Host-nails_login"
+
+
+@dataclass(frozen=True, slots=True)
+class ChallengeStatusView:
+    challenge_id: uuid.UUID
+    status: str
+    expires_at: datetime
 
 
 def _now() -> datetime:
@@ -72,11 +80,11 @@ def enforce_status_rate_limit(
     session.commit()
 
 
-def enforce_status_browser_binding(
+def read_bound_challenge_status(
     session: Session,
     request: Request,
     challenge_id: uuid.UUID,
-) -> None:
+) -> ChallengeStatusView:
     settings = _settings()
     challenge = session.get(WebLoginChallenge, challenge_id)
     login_token = request.cookies.get(_LOGIN_COOKIE, "")
@@ -89,6 +97,22 @@ def enforce_status_browser_binding(
     )
     if not hmac.compare_digest(supplied_hash, challenge.browser_token_hash):
         _raise_challenge_not_found()
+
+    effective_status = challenge.status
+    if (
+        challenge.status
+        in {
+            WebChallengeStatus.pending.value,
+            WebChallengeStatus.approved.value,
+        }
+        and _now() >= challenge.expires_at
+    ):
+        effective_status = WebChallengeStatus.expired.value
+    return ChallengeStatusView(
+        challenge_id=challenge.id,
+        status=effective_status,
+        expires_at=challenge.expires_at,
+    )
 
 
 def enforce_consume_rate_limit(
