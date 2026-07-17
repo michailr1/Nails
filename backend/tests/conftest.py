@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-TEST_INTERNAL_API_KEY = "i" * 64
+TEST_INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "i" * 64)
 TEST_WEB_AUTH_HMAC_KEY = "w" * 64
 
 os.environ.setdefault("APP_TIMEZONE", "Europe/Berlin")
