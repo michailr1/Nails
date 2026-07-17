@@ -4,6 +4,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
@@ -130,15 +131,19 @@ def approve_from_telegram(
 @router.get("/web/api/auth/session", response_model=WebSessionStateResponse)
 def session_state(
     request: Request,
-    response: Response,
     session: SessionDependency,
-) -> WebSessionStateResponse:
+) -> WebSessionStateResponse | JSONResponse:
     try:
         require_web_session_identity(session, request)
     except HTTPException as exc:
-        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
-            clear_auth_cookies(response)
-        raise
+        if exc.status_code != status.HTTP_401_UNAUTHORIZED:
+            raise
+        response = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": {"code": "unauthorized"}},
+        )
+        clear_auth_cookies(response)
+        return response
     return WebSessionStateResponse(authenticated=True)
 
 
