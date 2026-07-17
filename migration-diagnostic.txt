@@ -1,7 +1,0 @@
-INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-INFO  [alembic.runtime.migration] Will assume transactional DDL.
-/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/alembic/script/revision.py:213: UserWarning: Revision 0008 is present more than once
-  util.warn(
-ERROR [alembic.util.messaging] Multiple head revisions are present for given argument 'head'; please specify a specific target revision, '<branchname>@head' to narrow to a specific head, or 'heads' for all heads
-FAILED: Multiple head revisions are present for given argument 'head'; please specify a specific target revision, '<branchname>@head' to narrow to a specific head, or 'heads' for all heads
-exit_code=255
