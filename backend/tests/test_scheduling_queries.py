@@ -106,7 +106,31 @@ def test_free_slots_use_service_duration_buffers_and_trusted_weekday(
 
 
 @pytest.mark.usefixtures("clean_database")
-def test_unknown_and_unavailable_days_never_become_free(
+def test_unknown_day_is_open_and_uses_default_suggestion_window(
+    client: TestClient,
+    create_user: Callable,
+    create_service: Callable,
+    auth_headers: Callable,
+) -> None:
+    user = create_user()
+    create_service(user.id)
+
+    response = client.get(
+        "/api/v1/scheduling/slots",
+        headers=auth_headers(),
+        params={"day": "2026-07-17", "service_name": "Маникюр"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["availability_known"] is False
+    assert body["is_working"] is True
+    assert body["starts_at"][0] == "2026-07-17T10:00:00+02:00"
+    assert body["starts_at"][-1] == "2026-07-17T20:30:00+02:00"
+
+
+@pytest.mark.usefixtures("clean_database")
+def test_explicit_day_off_has_no_free_slots(
     client: TestClient,
     create_user: Callable,
     create_service: Callable,
@@ -115,17 +139,6 @@ def test_unknown_and_unavailable_days_never_become_free(
 ) -> None:
     user = create_user()
     create_service(user.id)
-
-    unknown = client.get(
-        "/api/v1/scheduling/slots",
-        headers=auth_headers(),
-        params={"day": "2026-07-17", "service_name": "Маникюр"},
-    )
-    assert unknown.status_code == 200, unknown.text
-    assert unknown.json()["availability_known"] is False
-    assert unknown.json()["is_working"] is False
-    assert unknown.json()["starts_at"] == []
-
     create_availability(
         user.id,
         day=date(2026, 7, 18),
@@ -134,12 +147,15 @@ def test_unknown_and_unavailable_days_never_become_free(
         is_available=False,
         note="не работаю",
     )
-    unavailable = client.get(
+
+    response = client.get(
         "/api/v1/scheduling/slots",
         headers=auth_headers(),
         params={"day": "2026-07-18", "service_name": "Маникюр"},
     )
-    assert unavailable.status_code == 200, unavailable.text
-    assert unavailable.json()["availability_known"] is True
-    assert unavailable.json()["is_working"] is False
-    assert unavailable.json()["starts_at"] == []
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["availability_known"] is True
+    assert body["is_working"] is False
+    assert body["starts_at"] == []
