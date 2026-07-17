@@ -91,6 +91,36 @@ class Settings(BaseSettings):
         ge=60,
         le=86400,
     )
+    web_rate_approve_server_limit: int = Field(
+        default=100,
+        alias="WEB_RATE_APPROVE_SERVER_LIMIT",
+        ge=1,
+        le=1000,
+    )
+    web_rate_status_limit: int = Field(
+        default=30,
+        alias="WEB_RATE_STATUS_LIMIT",
+        ge=1,
+        le=300,
+    )
+    web_rate_status_window_seconds: int = Field(
+        default=600,
+        alias="WEB_RATE_STATUS_WINDOW_SECONDS",
+        ge=60,
+        le=86400,
+    )
+    web_rate_consume_limit: int = Field(
+        default=10,
+        alias="WEB_RATE_CONSUME_LIMIT",
+        ge=1,
+        le=100,
+    )
+    web_rate_consume_window_seconds: int = Field(
+        default=600,
+        alias="WEB_RATE_CONSUME_WINDOW_SECONDS",
+        ge=60,
+        le=86400,
+    )
 
     @field_validator("app_timezone")
     @classmethod
