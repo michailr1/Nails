@@ -270,3 +270,29 @@ def test_status_requires_original_browser_cookie(client, clean_database):
     assert client.get(path, headers=WEB_ORIGIN_HEADERS).status_code == 200
     client.cookies.clear()
     assert client.get(path, headers=WEB_ORIGIN_HEADERS).status_code == 404
+
+
+def test_status_reports_expiry_without_mutating_challenge(client, clean_database):
+    from datetime import UTC, datetime, timedelta
+
+    created = client.post(
+        "/web/api/auth/challenges",
+        headers=WEB_ORIGIN_HEADERS,
+    )
+    assert created.status_code == 201
+    challenge_id = created.json()["challenge_id"]
+    with get_session_factory()() as session:
+        challenge = session.get(WebLoginChallenge, challenge_id)
+        assert challenge is not None
+        challenge.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        session.commit()
+
+    path = f"/web/api/auth/challenges/{challenge_id}"
+    response = client.get(path, headers=WEB_ORIGIN_HEADERS)
+    assert response.status_code == 200
+    assert response.json()["status"] == "expired"
+
+    with get_session_factory()() as session:
+        challenge = session.get(WebLoginChallenge, challenge_id)
+        assert challenge is not None
+        assert challenge.status == "pending"
