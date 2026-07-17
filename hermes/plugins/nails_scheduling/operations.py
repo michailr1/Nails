@@ -71,96 +71,50 @@ def _create_booking(
             "The client was not found. Confirm and create the client first.",
         )
 
-    slots_response = _call_backend(
-        action="free_slots",
+    # ADR-006: free slots are suggestions, not an authorization gate for an
+    # explicitly requested time. Read the day only to resolve the authoritative
+    # timezone and preserve idempotent recognition of an already-created booking.
+    day_response = _call_backend(
+        action="day_view",
         telegram_user_id=telegram_user_id,
         api_key=api_key,
         method="GET",
-        path="/api/v1/scheduling/slots",
-        params={"day": values["day"], "service_name": values["service_name"]},
+        path="/api/v1/scheduling/day",
+        params={"day": values["day"]},
         json_body=None,
     )
-    if not slots_response.get("ok"):
-        return slots_response
-    slots_result = slots_response.get("result")
-    if not isinstance(slots_result, dict):
-        return _error(
-            "invalid_backend_response",
-            "Scheduling service returned an invalid response.",
-        )
+    if not day_response.get("ok"):
+        return day_response
 
     try:
-        timezone_name = slots_result["timezone"]
-        step_minutes = slots_result["step_minutes"]
-        starts_at_values = slots_result["starts_at"]
-        availability_known = slots_result["availability_known"]
-        is_working = slots_result["is_working"]
-        if not isinstance(timezone_name, str) or not isinstance(step_minutes, int):
+        day_result = day_response["result"]
+        timezone_name = day_result["timezone"]
+        if not isinstance(timezone_name, str):
             raise ValueError
-        if step_minutes <= 0 or step_minutes > 1440 or not isinstance(starts_at_values, list):
-            raise ValueError
-        timezone = ZoneInfo(timezone_name)
-        local_time = wall_time.fromisoformat(values["start_time"])
-        local_day = date.fromisoformat(values["day"])
-        requested_start = datetime.combine(local_day, local_time, tzinfo=timezone)
-        if requested_start.minute % step_minutes != 0:
-            return _error(
-                "slot_not_on_grid",
-                "The requested time is not a valid slot start.",
-            )
-        free_starts = [_parse_backend_datetime(item) for item in starts_at_values]
+        requested_start = _local_datetime(
+            values["day"],
+            values["start_time"],
+            timezone_name,
+        )
+        existing = _matching_existing_booking(
+            day_result,
+            client_public_name=values["client_public_name"],
+            service_name=values["service_name"],
+            starts_at=requested_start,
+        )
     except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError):
         return _error(
             "invalid_backend_response",
             "Scheduling service returned an invalid response.",
         )
 
-    if requested_start not in free_starts:
-        day_response = _call_backend(
-            action="day_view",
-            telegram_user_id=telegram_user_id,
-            api_key=api_key,
-            method="GET",
-            path="/api/v1/scheduling/day",
-            params={"day": values["day"]},
-            json_body=None,
-        )
-        if not day_response.get("ok"):
-            return day_response
-        try:
-            existing = _matching_existing_booking(
-                day_response["result"],
-                client_public_name=values["client_public_name"],
-                service_name=values["service_name"],
-                starts_at=requested_start,
-            )
-        except (KeyError, TypeError, ValueError):
-            return _error(
-                "invalid_backend_response",
-                "Scheduling service returned an invalid response.",
-            )
-        if existing is not None:
-            return {
-                "ok": True,
-                "action": "create_booking",
-                "result": {"booking": existing, "created": False},
-            }
-        if availability_known is not True:
-            return _error(
-                "availability_unknown",
-                "Availability is not confirmed for this day.",
-            )
-        if is_working is not True:
-            return _error(
-                "day_unavailable",
-                "The selected day is not available for bookings.",
-            )
-        return _error(
-            "slot_unavailable",
-            "The selected slot is no longer available.",
-        )
+    if existing is not None:
+        return {
+            "ok": True,
+            "action": "create_booking",
+            "result": {"booking": existing, "created": False},
+        }
 
-    starts_at = requested_start.isoformat()
     return _call_backend(
         action="create_booking",
         telegram_user_id=telegram_user_id,
@@ -171,7 +125,7 @@ def _create_booking(
         json_body={
             "client_public_name": values["client_public_name"],
             "service_name": values["service_name"],
-            "starts_at": starts_at,
+            "starts_at": requested_start.isoformat(),
         },
     )
 
