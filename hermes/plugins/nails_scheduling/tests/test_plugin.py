@@ -73,6 +73,7 @@ def test_schema_exposes_only_public_business_arguments():
         "find_client_candidates",
         "create_client",
         "update_client",
+        "preview_availability",
         "update_availability",
         "create_booking",
         "reschedule_booking",
@@ -161,6 +162,99 @@ def test_missing_key_fails_before_http(monkeypatch):
     assert result["error"]["code"] == "plugin_not_configured"
 
 
+def test_preview_availability_calls_read_only_endpoint(monkeypatch):
+    _set_context(monkeypatch)
+    _set_key(monkeypatch)
+    calls = []
+
+    def fake_call_backend(**kwargs):
+        calls.append(kwargs)
+        return {
+            "ok": True,
+            "result": {
+                "days": [
+                    {
+                        "day": "2026-07-18",
+                        "weekday_iso": 6,
+                        "availability_known": True,
+                        "current_availability": [
+                            {
+                                "start_time": "11:00:00",
+                                "end_time": "20:00:00",
+                                "is_available": True,
+                                "note": None,
+                            }
+                        ],
+                        "proposed_availability": [
+                            {
+                                "start_time": "11:00:00",
+                                "end_time": "13:00:00",
+                                "is_available": True,
+                                "note": "Личные дела",
+                            },
+                            {
+                                "start_time": "16:00:00",
+                                "end_time": "20:00:00",
+                                "is_available": True,
+                                "note": "Личные дела",
+                            },
+                        ],
+                        "changed": True,
+                        "can_apply": True,
+                        "conflicts": [],
+                    }
+                ]
+            },
+        }
+
+    monkeypatch.setattr(tools, "_call_backend", fake_call_backend)
+    result = json.loads(
+        tools.nails_scheduling(
+            {
+                "action": "preview_availability",
+                "days": [
+                    {
+                        "day": "2026-07-18",
+                        "state": "available",
+                        "intervals": [
+                            {"start_time": "11:00", "end_time": "13:00"},
+                            {"start_time": "16:00", "end_time": "20:00"},
+                        ],
+                        "note": "Личные дела",
+                    }
+                ],
+            }
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["action"] == "preview_availability"
+    assert result["result"]["days"][0]["can_apply"] is True
+    assert calls == [
+        {
+            "action": "preview_availability",
+            "telegram_user_id": "700000001",
+            "api_key": "k" * 64,
+            "method": "POST",
+            "path": "/api/v1/scheduling/availability/preview",
+            "params": None,
+            "json_body": {
+                "days": [
+                    {
+                        "day": "2026-07-18",
+                        "state": "available",
+                        "intervals": [
+                            {"start_time": "11:00", "end_time": "13:00"},
+                            {"start_time": "16:00", "end_time": "20:00"},
+                        ],
+                        "note": "Личные дела",
+                    }
+                ]
+            },
+        }
+    ]
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -236,6 +330,23 @@ def test_missing_key_fails_before_http(monkeypatch):
         {
             "action": "update_client",
             "client_public_name": "Анна",
+            "confirmed": True,
+        },
+        {
+            "action": "preview_availability",
+            "days": [
+                {
+                    "day": "2026-07-17",
+                    "state": "available",
+                    "intervals": [{"start_time": "15:00", "end_time": "11:00"}],
+                }
+            ],
+        },
+        {
+            "action": "preview_availability",
+            "days": [
+                {"day": "2026-07-18", "state": "unknown", "intervals": []}
+            ],
             "confirmed": True,
         },
         {
