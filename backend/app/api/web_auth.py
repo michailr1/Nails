@@ -20,7 +20,6 @@ from app.schemas.web_auth import (
 )
 from app.services.web_auth import (
     approve_challenge,
-    challenge_status,
     clear_auth_cookies,
     consume_challenge,
     logout_web_session,
@@ -32,8 +31,8 @@ from app.services.web_auth import (
 from app.services.web_auth_limits import (
     enforce_approval_server_rate_limit,
     enforce_consume_rate_limit,
-    enforce_status_browser_binding,
     enforce_status_rate_limit,
+    read_bound_challenge_status,
 )
 
 router = APIRouter(tags=["web-auth"])
@@ -75,10 +74,9 @@ def get_challenge_status(
     session: SessionDependency,
 ) -> ChallengeStatusResponse:
     enforce_status_rate_limit(session, request, challenge_id)
-    enforce_status_browser_binding(session, request, challenge_id)
-    challenge = challenge_status(session, request, challenge_id)
+    challenge = read_bound_challenge_status(session, request, challenge_id)
     return ChallengeStatusResponse(
-        challenge_id=challenge.id,
+        challenge_id=challenge.challenge_id,
         status=challenge.status,
         expires_at=challenge.expires_at,
     )
