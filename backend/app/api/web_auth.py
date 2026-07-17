@@ -32,6 +32,7 @@ from app.services.web_auth import (
 from app.services.web_auth_limits import (
     enforce_approval_server_rate_limit,
     enforce_consume_rate_limit,
+    enforce_status_browser_binding,
     enforce_status_rate_limit,
 )
 
@@ -74,6 +75,7 @@ def get_challenge_status(
     session: SessionDependency,
 ) -> ChallengeStatusResponse:
     enforce_status_rate_limit(session, request, challenge_id)
+    enforce_status_browser_binding(session, request, challenge_id)
     challenge = challenge_status(session, request, challenge_id)
     return ChallengeStatusResponse(
         challenge_id=challenge.id,
