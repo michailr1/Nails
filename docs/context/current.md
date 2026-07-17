@@ -2,139 +2,108 @@
 
 Дата фиксации: **17 июля 2026 года**.
 
-Сначала прочитать [`../../AGENTS.md`](../../AGENTS.md), затем этот файл, [`../operations/engineering-principles.md`](../operations/engineering-principles.md), [`../operations/production-infrastructure.md`](../operations/production-infrastructure.md), [`../operations/hermes-plugin-runtime.md`](../operations/hermes-plugin-runtime.md) и [`../operations/backups.md`](../operations/backups.md).
+Перед работой прочитать `AGENTS.md`, operational-документы, ADR-005, ADR-006, `docs/design/lovable-web-baseline.md` и `docs/plans/WEB-001-implementation-plan.md`.
 
-Это handoff для нового контекста основного агента. Не угадывай состояние по памяти — проверяй по GitHub, а для production — по фактическому preflight.
+Не полагаться на память: GitHub проверять по API, production — фактическим preflight.
 
-## 1. Рабочий контракт
+## Рабочий контракт
 
 ```text
 repository: michailr1/Nails
-production hostname: de.funti.cc
+GitHub main: 11dd79d6a8d7dfecd2beb5211b98e73c91e96e0d
+production host: de.funti.cc
 production repo: /opt/nails/repo
 backend env: /opt/nails/.env
-backend API: http://127.0.0.1:8210
+internal API: http://127.0.0.1:8210
 health: /health
 readiness: /ready
-Hermes profile: /root/.hermes/profiles/nails
-production branch: main
-Hermes plugins: nails-onboarding, nails-scheduling
+timezone: Europe/Moscow
 ```
 
-- основной агент пишет код, меняет GitHub, проводит review/CI, мержит и готовит точные runbooks;
-- VPS-агент только исполняет утверждённый runbook и возвращает компактный отчёт;
-- один живой Telegram-тест за раз;
-- в GitHub — только роли (`master`, `admin`, `client`), без персональных имён; имя ассистента мастера — «Нэйли».
+Основной агент пишет код, тесты и документацию, управляет GitHub, review, CI и fast-forward merge. VPS-агент только выполняет утверждённый runbook и не меняет код или GitHub.
 
-## 2. Деплой — один постоянный скрипт
+Релизы выполняются постоянным `ops/deploy/deploy.sh <exact-SHA>` по схеме PR → CI → candidate exact SHA → fast-forward того же SHA → finalize.
 
-Все релизы идут через `ops/deploy/deploy.sh <exact-SHA>`. Поток: PR → CI → candidate exact PR-head SHA → fast-forward того же SHA → finalize `git merge --ff-only`. Rollback = deploy предыдущего SHA. **Production state не предполагать**: каждый запуск устанавливает его свежим preflight.
-
-Production compose требует явный `--env-file /opt/nails/.env`. Host API port определяется через compose и сейчас равен `8210`. Корректный readiness endpoint — `/ready`, не `/readiness`.
-
-## 3. Актуальный production milestone
-
-Последний подтверждённый GitHub `main` и production checkout:
+## Production milestone
 
 ```text
-main SHA: 847a6342911b5bf32a9e6c0885065e161c6d2d06
-PR #106: merged fast-forward
-issue #100: completed
+production backend SHA: 847a6342911b5bf32a9e6c0885065e161c6d2d06
 ADR-006: accepted and deployed
-working_tree_clean=true
-nails-api=running
-container_health=healthy
-api_bind=127.0.0.1:8210
-GET /health=200
-GET /ready=200
-gateway_active=true
+API bind: 127.0.0.1:8210
+health: ok
+readiness: ok
+gateway: active
 ```
 
-Shutdown/restart Telegram-уведомления остаются отключены только для профиля Nails. Backup timer остаётся enabled/active.
+Документационные коммиты после production SHA deployment не требовали.
 
-Работает: onboarding; услуги; календарь и доступность; несколько интервалов в день; preview изменения доступности; клиентские карточки с расширенными private fields; exact/candidate поиск; переименование карточки; общий список активных клиенток; создание, корректный перенос и мягкая отмена записей; negative feedback; автоматические backup/restore tests.
+## Завершено
 
-## 4. Завершённый этап: NAILS-002F
+- NAILS-002F;
+- NAILS-003 и issue #104;
+- ADR-006;
+- ADR-005, PR #108;
+- Lovable baseline, PR #110.
 
-Issue #91 и PR #96 завершены.
+Клиентский контур начинается только после web-интерфейса.
 
-Постоянный production-механизм:
+## ADR-006
 
-- daily `pg_dump` + `gzip -t`;
-- restore в отдельную временную DB;
-- совпадение Alembic revision и row counts всех public tables;
-- гарантированное удаление временной DB;
-- daily/weekly/monthly/pre-deploy/runtime/log retention;
-- `hermes-local-patches` не удаляется;
-- Telegram archive администратору до 15 MiB;
-- disk warning 80%, critical 90%;
-- root system `nails-backup.service` + `nails-backup.timer`;
-- установка только через постоянный `deploy.sh`;
-- источник истины: `docs/operations/backups.md`.
+Availability intervals и диапазон 10:00–23:00 являются подсказками. Явно названное время открыто по умолчанию. Отказ допускается только для целого выходного или конфликта с активной записью с учётом buffers.
 
-## 5. Завершённый этап: NAILS-003
+## Текущая задача
 
-Issue #104 закрывается как реализованный фактическими механизмами `availability_intervals`, PR #105 и ADR-006/PR #106.
+Issue #109 — WEB-001: Telegram auth, server-side session и read-only calendar.
 
-Поддерживается:
-
-- несколько положительных интервалов подсказок на конкретную дату;
-- частичное закрытие через замену одного окна несколькими итоговыми окнами;
-- дополнительное открытие через тот же итоговый набор;
-- read-only `preview_availability` до подтверждения;
-- сводка «сейчас → будет»;
-- единственный write `update_availability`;
-- owner schedule lock, audit и идемпотентность;
-- исправление повторной заменой;
-- снятие настройки через `state=unknown`;
-- целый выходной через `state=unavailable`;
-- защита существующих записей при попытке поставить целый выходной.
-
-ADR-006 определяет финальную семантику:
-
-- явно названное время доступно по умолчанию;
-- положительные интервалы и диапазон `10:00–23:00` формируют только подсказки;
-- явная запись разрешена вне сетки и вне положительного окна;
-- отказ только при целом выходном или overlap с active booking с учётом buffers;
-- жёсткие частичные запреты не вводятся, потому что противоречат этой модели.
-
-## 6. Следующий этап: web-интерфейс мастера
-
-Порядок после пилота:
-
-1. NAILS-003 — завершён;
-2. web-интерфейс мастера — следующий;
-3. клиентский контур ADR-004 — только после web.
-
-ADR-005 уже подготовлен в отдельном открытом PR #87, но был создан до завершения NAILS-003. Перед merge необходимо:
-
-- сверить ADR с актуальным `main` и ADR-006;
-- убрать устаревшие допущения;
-- убедиться, что web является тонким слоем над существующим Booking API;
-- не выставлять loopback API напрямую наружу;
-- сохранить owner scoping, confirmation, audit, CSRF и защищённые сессии;
-- после принятия ADR создать отдельный минимальный implementation issue.
-
-## 7. Известные грабли
-
-1. Не добавлять одноразовые deploy/install scripts.
-2. Не выполнять production restore поверх рабочей DB.
-3. Не печатать `.env`, token, chat ID или dump content.
-4. CI-lint чинить только после воспроизведения; Ruff imports — только автофиксом.
-5. Candidate checkout остаётся на baseline; merge только exact validated head.
-6. `app.routes` показывает mount entries как пустые paths; полные scheduling paths проверять через router или HTTP.
-7. Не считать открытый issue доказательством незавершённого дефекта: сначала проверять фактический `main`, merged PR и regression tests.
-8. Не возвращать shutdown/restart Telegram-уведомления профилю Nails при обновлении Hermes, unit-файла или profile runtime.
-9. Compose-команды production выполнять с `--env-file /opt/nails/.env`.
-10. Проверять readiness через `/ready`, а не `/readiness`.
-
-## 8. Точка продолжения
+Принятый стек:
 
 ```text
-1. проверить CI документационного PR закрытия NAILS-003
-2. fast-forward merge документации без production deploy
-3. закрыть issue #104 как completed
-4. ревью и актуализация ADR-005 / PR #87 относительно main и ADR-006
-5. принять ADR-005
-6. создать implementation issue минимального web-интерфейса мастера
+Browser
+  -> HTTPS reverse proxy на высоком нестандартном порту
+  -> React + Vite frontend
+  -> существующий FastAPI как web/BFF
+  -> существующие owner-scoped services
+  -> PostgreSQL
+```
+
+Внутренний API остаётся loopback-only. Lovable используется как визуальный baseline; его runtime и служебный scaffold целиком не переносятся.
+
+## Инвентаризация
+
+Переиспользуются User, RequestIdentity как внутренний тип, owner-scoped scheduling services, get_day_view, presenters, AuditEvent, APP_TIMEZONE, Alembic, backup/restore и deploy contracts.
+
+Нужны новые web-specific механизмы входа и сессий, week read model, booking detail read model, frontend contract и edge deployment.
+
+## Разбиение
+
+Источник истины: `docs/plans/WEB-001-implementation-plan.md`.
+
+```text
+WEB-001A: login challenge и server-side session
+WEB-001B: read-only day/week/appointment API
+WEB-001C: React + Vite frontend
+WEB-001D: reverse proxy, deployment и acceptance
+```
+
+Порядок: A → B → C → D.
+
+## Ограничения
+
+- без внешнего auth/backend;
+- не выставлять internal API наружу;
+- не дублировать booking logic;
+- не доверять identity или owner из browser;
+- не начинать web-мутации, admin, export или клиентский контур;
+- не создавать одноразовые deploy scripts;
+- production compose запускать с `--env-file /opt/nails/.env`;
+- readiness проверять через `/ready`.
+
+## Точка продолжения
+
+```text
+1. принять документационный PR без production deploy
+2. начать отдельный design/review PR WEB-001A
+3. зафиксировать модели challenge/session, state machine, TTL и rate limits
+4. зафиксировать Telegram delivery boundary и threat-model tests
+5. после review начать реализацию WEB-001A
 ```
