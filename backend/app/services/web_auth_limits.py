@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import uuid
 from datetime import UTC, datetime
 
@@ -9,6 +10,9 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity
 from app.config import Settings, get_settings
 from app.services.web_auth import _consume_rate_bucket, _keyed_hash
+from app.web_auth_models import WebLoginChallenge
+
+_LOGIN_COOKIE = "__Host-nails_login"
 
 
 def _now() -> datetime:
@@ -37,6 +41,13 @@ def _raise_rate_limited(session: Session) -> None:
     )
 
 
+def _raise_challenge_not_found() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={"code": "challenge_not_found"},
+    )
+
+
 def enforce_status_rate_limit(
     session: Session,
     request: Request,
@@ -59,6 +70,25 @@ def enforce_status_rate_limit(
     if not allowed:
         _raise_rate_limited(session)
     session.commit()
+
+
+def enforce_status_browser_binding(
+    session: Session,
+    request: Request,
+    challenge_id: uuid.UUID,
+) -> None:
+    settings = _settings()
+    challenge = session.get(WebLoginChallenge, challenge_id)
+    login_token = request.cookies.get(_LOGIN_COOKIE, "")
+    if challenge is None or not login_token:
+        _raise_challenge_not_found()
+    supplied_hash = _keyed_hash(
+        login_token,
+        purpose="login-token",
+        settings=settings,
+    )
+    if not hmac.compare_digest(supplied_hash, challenge.browser_token_hash):
+        _raise_challenge_not_found()
 
 
 def enforce_consume_rate_limit(
