@@ -12,12 +12,13 @@
 | Production API/PostgreSQL | healthy/ready |
 | API bind | `127.0.0.1:8210` |
 | Health endpoints | `/health`, `/ready` |
-| Alembic | `0008` |
+| Alembic | `0006` |
 | Hermes gateway | active |
 | Shutdown/restart Telegram notification | disabled только для profile `nails` |
 | Backup/restore | NAILS-002F завершён и принят в production |
 | Pilot | завершён после живой проверки двумя мастерами |
 | NAILS-003 | завершён: preview, несколько окон и ADR-006 в production |
+| Active issue | отсутствует; следующий issue создаётся для web-интерфейса мастера |
 | Следующий этап | web-интерфейс мастера |
 | После web | клиентский контур ADR-004 |
 
@@ -99,3 +100,11 @@ gateway_active=true
 Web-интерфейс мастера начинается до клиентского контура.
 
 Сначала нужно сверить ADR-005 с текущими backend-инвариантами, определить минимальный implementation issue и не дублировать бизнес-логику Telegram-контура в web.
+
+## 7. До merge документационного PR
+
+1. Получить зелёные CI и contract-workflow на точном PR-head.
+2. Проверить отсутствие незакрытых review threads и fast-forward от актуального `main`.
+3. Fast-forward merge без production deploy: меняется только документация.
+4. Закрыть issue #104 как completed.
+5. Перейти к ревью ADR-005 и web-интерфейсу мастера.
