@@ -175,6 +175,36 @@ def test_start_rate_limit_is_postgres_backed(client, clean_database):
     assert limited.status_code == 429
 
 
+def test_status_polling_rate_limit_is_postgres_backed(client, clean_database):
+    started = _start(client)
+    path = f"/web/api/auth/challenges/{started['challenge_id']}"
+    for _ in range(30):
+        response = client.get(path, headers=WEB_ORIGIN_HEADERS)
+        assert response.status_code == 200
+    limited = client.get(path, headers=WEB_ORIGIN_HEADERS)
+    assert limited.status_code == 429
+
+
+def test_consume_rate_limit_is_postgres_backed(client, clean_database):
+    started = _start(client)
+    for _ in range(10):
+        response = _consume(client, started)
+        assert response.status_code == 200
+    limited = _consume(client, started)
+    assert limited.status_code == 429
+
+
+def test_bot_code_bruteforce_is_rate_limited(client, create_user, auth_headers):
+    create_user()
+    for value in range(10):
+        response = _approve(client, auth_headers, f"{value:06d}")
+        assert response.status_code == 200
+        assert response.json() == {"approved": False}
+    limited = _approve(client, auth_headers, "999999")
+    assert limited.status_code == 200
+    assert limited.json() == {"approved": False}
+
+
 def test_plaintext_code_and_tokens_are_not_persisted_or_audited(
     client,
     create_user,
