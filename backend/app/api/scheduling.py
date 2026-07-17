@@ -22,6 +22,7 @@ from app.schemas.scheduling import (
     ServiceReplaceRequest,
     ServiceReplaceResponse,
 )
+from app.schemas.scheduling_availability import AvailabilityPreviewResponse
 from app.schemas.scheduling_management import (
     BookingCancelRequest,
     BookingMutationResponse,
@@ -35,6 +36,7 @@ from app.schemas.scheduling_management import (
     ClientReplaceResponse,
 )
 from app.services.scheduling_availability import replace_availability
+from app.services.scheduling_availability_preview import preview_availability
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_clients import create_or_reuse_client, replace_client
 from app.services.scheduling_common import SchedulingDomainError
@@ -197,6 +199,15 @@ def slots(
         return find_free_slots(session, identity, day, service_name)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
+
+
+@router.post("/availability/preview", response_model=AvailabilityPreviewResponse)
+def availability_preview(
+    body: AvailabilityReplaceRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> AvailabilityPreviewResponse:
+    return preview_availability(session, identity, body)
 
 
 @router.put("/availability", response_model=AvailabilityReplaceResponse)
