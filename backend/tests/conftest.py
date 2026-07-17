@@ -15,6 +15,10 @@ os.environ.setdefault(
 os.environ.setdefault(
     "INTERNAL_API_KEY", "test-only-internal-api-key-0000000000000000"
 )
+os.environ.setdefault("WEB_AUTH_ENABLED", "true")
+os.environ.setdefault("WEB_AUTH_HMAC_KEY", "test-only-web-auth-hmac-key-000000000000000000")
+os.environ.setdefault("WEB_ALLOWED_HOSTS", "testserver")
+os.environ.setdefault("WEB_ALLOWED_ORIGINS", "https://testserver")
 
 from app.db import clear_runtime_caches, get_engine, get_session_factory  # noqa: E402
 from app.main import app  # noqa: E402
@@ -22,6 +26,7 @@ from app.models import AvailabilityInterval, Service, User, UserRole  # noqa: E4
 from app.services.normalization import normalize_public_name  # noqa: E402
 
 TEST_INTERNAL_API_KEY = "test-only-internal-api-key-0000000000000000"
+WEB_ORIGIN_HEADERS = {"Origin": "https://testserver"}
 
 
 @pytest.fixture(autouse=True)
@@ -33,13 +38,16 @@ def reset_runtime_caches():
 
 @pytest.fixture
 def client():
-    with TestClient(app) as test_client:
+    with TestClient(app, base_url="https://testserver") as test_client:
         yield test_client
 
 
 @pytest.fixture
 def clean_database():
     tables = (
+        "web_auth_rate_buckets",
+        "web_sessions",
+        "web_login_challenges",
         "feedback_events",
         "audit_events",
         "onboarding_drafts",
