@@ -43,6 +43,8 @@ NAILS_SCHEDULING = {
     "name": "nails_scheduling",
     "description": (
         "Use only fixed owner-scoped Nails operations. Resolve dates through the backend. "
+        "Approve a web login only when the master explicitly asks to confirm the short code "
+        "shown in the Nails web interface; never accept Telegram identity from model input. "
         "Preview every availability change before confirmation so the master sees the exact "
         "current-to-future intervals and any conflicting bookings. Use list_clients when the "
         "master asks to see all active client cards. Before creating a client, call find_client "
@@ -65,6 +67,7 @@ NAILS_SCHEDULING = {
             "action": {
                 "type": "string",
                 "enum": [
+                    "approve_web_login",
                     "resolve_date",
                     "list_services",
                     "find_service",
@@ -83,6 +86,11 @@ NAILS_SCHEDULING = {
                     "reschedule_booking",
                     "cancel_booking",
                 ],
+            },
+            "confirmation_code": {
+                "type": "string",
+                "pattern": "^[0-9]{6}$",
+                "description": "Six-digit code shown by the Nails web interface.",
             },
             "date_kind": {
                 "type": "string",
