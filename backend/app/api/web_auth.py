@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -36,6 +37,10 @@ from app.services.web_auth_limits import (
     invalidate_pending_browser_challenge,
     read_bound_challenge_status,
 )
+from app.services.web_auth_rate_bucket import (
+    ensure_approval_bucket,
+    ensure_start_bucket,
+)
 from app.web_auth_identity import require_web_approval_identity
 
 router = APIRouter(tags=["web-auth"])
@@ -57,6 +62,7 @@ def create_challenge(
     response: Response,
     session: SessionDependency,
 ) -> ChallengeStartResponse:
+    ensure_start_bucket(session, request, datetime.now(UTC))
     invalidate_pending_browser_challenge(session, request)
     started = start_challenge(session, request)
     set_start_cookies(response, started)
@@ -117,6 +123,7 @@ def approve_from_telegram(
 ) -> TelegramChallengeApproveResponse:
     if identity is None:
         return TelegramChallengeApproveResponse(approved=False)
+    ensure_approval_bucket(session, identity, datetime.now(UTC))
     if not enforce_approval_server_rate_limit(session, identity):
         return TelegramChallengeApproveResponse(approved=False)
     return TelegramChallengeApproveResponse(
