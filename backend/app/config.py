@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from functools import lru_cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -26,8 +28,14 @@ class Settings(BaseSettings):
     )
 
     web_auth_enabled: bool = Field(default=False, alias="WEB_AUTH_ENABLED")
-    web_auth_hmac_key: SecretStr = Field(default=SecretStr(""), alias="WEB_AUTH_HMAC_KEY")
-    web_allowed_hosts: str = Field(default="localhost,127.0.0.1,testserver", alias="WEB_ALLOWED_HOSTS")
+    web_auth_hmac_key: SecretStr = Field(
+        default=SecretStr(""),
+        alias="WEB_AUTH_HMAC_KEY",
+    )
+    web_allowed_hosts: str = Field(
+        default="localhost,127.0.0.1,testserver",
+        alias="WEB_ALLOWED_HOSTS",
+    )
     web_allowed_origins: str = Field(default="", alias="WEB_ALLOWED_ORIGINS")
     web_challenge_ttl_seconds: int = Field(
         default=600,
@@ -59,14 +67,24 @@ class Settings(BaseSettings):
         ge=30,
         le=3600,
     )
-    web_rate_start_limit: int = Field(default=5, alias="WEB_RATE_START_LIMIT", ge=1, le=100)
+    web_rate_start_limit: int = Field(
+        default=5,
+        alias="WEB_RATE_START_LIMIT",
+        ge=1,
+        le=100,
+    )
     web_rate_start_window_seconds: int = Field(
         default=900,
         alias="WEB_RATE_START_WINDOW_SECONDS",
         ge=60,
         le=86400,
     )
-    web_rate_approve_limit: int = Field(default=10, alias="WEB_RATE_APPROVE_LIMIT", ge=1, le=100)
+    web_rate_approve_limit: int = Field(
+        default=10,
+        alias="WEB_RATE_APPROVE_LIMIT",
+        ge=1,
+        le=100,
+    )
     web_rate_approve_window_seconds: int = Field(
         default=600,
         alias="WEB_RATE_APPROVE_WINDOW_SECONDS",
@@ -91,7 +109,9 @@ class Settings(BaseSettings):
     def validate_database_url(cls, value: str) -> str:
         candidate = value.strip()
         if not candidate.startswith("postgresql+psycopg://"):
-            raise ValueError("DATABASE_URL must use the postgresql+psycopg SQLAlchemy driver")
+            raise ValueError(
+                "DATABASE_URL must use the postgresql+psycopg SQLAlchemy driver"
+            )
         return candidate
 
     @field_validator("internal_api_key")
@@ -107,11 +127,17 @@ class Settings(BaseSettings):
         return ",".join(item.strip() for item in value.split(",") if item.strip())
 
     @model_validator(mode="after")
-    def validate_web_auth(self) -> "Settings":
-        if self.web_auth_enabled and len(self.web_auth_hmac_key.get_secret_value().strip()) < 32:
-            raise ValueError("WEB_AUTH_HMAC_KEY must contain at least 32 characters when web auth is enabled")
+    def validate_web_auth(self) -> Settings:
+        hmac_key = self.web_auth_hmac_key.get_secret_value().strip()
+        if self.web_auth_enabled and len(hmac_key) < 32:
+            raise ValueError(
+                "WEB_AUTH_HMAC_KEY must contain at least 32 characters "
+                "when web auth is enabled"
+            )
         if self.web_session_absolute_ttl_seconds < self.web_session_idle_ttl_seconds:
-            raise ValueError("WEB_SESSION_ABSOLUTE_TTL_SECONDS must be at least the idle TTL")
+            raise ValueError(
+                "WEB_SESSION_ABSOLUTE_TTL_SECONDS must be at least the idle TTL"
+            )
         return self
 
     @property
