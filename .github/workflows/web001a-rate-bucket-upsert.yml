@@ -1,0 +1,140 @@
+name: WEB-001A rate bucket upsert
+on:
+  push:
+    branches: [feat/web001a-auth-session]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[rate-bucket-upsert]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/web001a-auth-session
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply upsert and concurrency test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          service = Path('backend/app/services/web_auth.py')
+          text = service.read_text()
+          text = text.replace(
+              'from sqlalchemy import select\n',
+              'from sqlalchemy import select\nfrom sqlalchemy.dialects.postgresql import insert as pg_insert\n',
+              1,
+          )
+          old = '''    bucket = session.scalar(
+              select(WebAuthRateBucket)
+              .where(
+                  WebAuthRateBucket.action == action,
+                  WebAuthRateBucket.scope_hash == scope_hash,
+              )
+              .with_for_update()
+          )
+          if bucket is None:
+              session.add(
+                  WebAuthRateBucket(
+                      action=action,
+                      scope_hash=scope_hash,
+                      window_started_at=now,
+                      count=1,
+                  )
+              )
+              return True
+
+          if now >= bucket.window_started_at + timedelta(seconds=window_seconds):
+'''
+          new = '''    session.execute(
+              pg_insert(WebAuthRateBucket)
+              .values(
+                  action=action,
+                  scope_hash=scope_hash,
+                  window_started_at=now,
+                  count=0,
+              )
+              .on_conflict_do_nothing(
+                  constraint="uq_web_auth_rate_bucket_scope",
+              )
+          )
+          bucket = session.scalar(
+              select(WebAuthRateBucket)
+              .where(
+                  WebAuthRateBucket.action == action,
+                  WebAuthRateBucket.scope_hash == scope_hash,
+              )
+              .with_for_update()
+          )
+          if bucket is None:
+              raise RuntimeError("rate bucket upsert did not produce a row")
+
+          if now >= bucket.window_started_at + timedelta(seconds=window_seconds):
+'''
+          if old not in text:
+              raise SystemExit('rate bucket anchor missing')
+          service.write_text(text.replace(old, new, 1))
+
+          tests = Path('backend/tests/test_web_auth.py')
+          text = tests.read_text()
+          text = text.replace(
+              'from collections.abc import Callable\n',
+              'from collections.abc import Callable\nfrom concurrent.futures import ThreadPoolExecutor\nfrom datetime import UTC, datetime\nfrom threading import Barrier\n',
+              1,
+          )
+          text = text.replace(
+              'from app.web_auth_models import WebLoginChallenge, WebSession\n',
+              'from app.services.web_auth import _consume_rate_bucket\nfrom app.web_auth_models import WebAuthRateBucket, WebLoginChallenge, WebSession\n',
+              1,
+          )
+          addition = '''
+
+          def test_rate_bucket_first_insert_is_concurrency_safe(clean_database):
+              barrier = Barrier(2)
+              now = datetime.now(UTC)
+
+              def consume_once() -> bool:
+                  with get_session_factory()() as session:
+                      barrier.wait(timeout=5)
+                      allowed = _consume_rate_bucket(
+                          session,
+                          action="concurrent_test",
+                          scope_hash="same-scope",
+                          limit=10,
+                          window_seconds=600,
+                          now=now,
+                      )
+                      session.commit()
+                      return allowed
+
+              with ThreadPoolExecutor(max_workers=2) as executor:
+                  results = list(executor.map(lambda _: consume_once(), range(2)))
+
+              assert results == [True, True]
+              with get_session_factory()() as session:
+                  buckets = session.scalars(
+                      select(WebAuthRateBucket).where(
+                          WebAuthRateBucket.action == "concurrent_test",
+                          WebAuthRateBucket.scope_hash == "same-scope",
+                      )
+                  ).all()
+                  assert len(buckets) == 1
+                  assert buckets[0].count == 2
+          '''
+          tests.write_text(text + addition)
+          PY
+          rm .github/workflows/web001a-rate-bucket-upsert.yml
+      - name: Format and push
+        run: |
+          python -m pip install 'ruff>=0.9,<1'
+          ruff check --fix backend/app/services/web_auth.py backend/tests/test_web_auth.py
+          ruff check backend/app/services/web_auth.py backend/tests/test_web_auth.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/app/services/web_auth.py backend/tests/test_web_auth.py .github/workflows/web001a-rate-bucket-upsert.yml
+          git diff --cached --check
+          git commit -m 'fix: make rate bucket creation race-safe [rate-bucket-upsert]'
+          git push origin HEAD:feat/web001a-auth-session
