@@ -12,6 +12,8 @@ from app.config import get_settings
 from app.models import AvailabilityInterval, Booking, BookingStatus, Service
 
 SLOT_STEP_MINUTES = 15
+DEFAULT_SUGGESTION_START = time(10)
+DEFAULT_SUGGESTION_END = time(23)
 
 
 class SchedulingDomainError(Exception):
@@ -118,46 +120,14 @@ def ensure_reservation_available(
     exclude_booking_id: uuid.UUID | None = None,
 ) -> None:
     timezone = app_timezone()
-    local_reserved_start = reservation.reserved_starts_at.astimezone(timezone)
-    local_reserved_end = reservation.reserved_ends_at.astimezone(timezone)
-    local_service_start = reservation.starts_at.astimezone(timezone)
+    service_day = reservation.starts_at.astimezone(timezone).date()
+    availability = availability_for_day(session, owner_user_id, service_day)
 
-    if (
-        local_reserved_start.date() != local_service_start.date()
-        or local_reserved_end.date() != local_service_start.date()
-    ):
-        raise SchedulingDomainError("booking_outside_availability")
-
-    availability = availability_for_day(
-        session,
-        owner_user_id,
-        local_service_start.date(),
-    )
-    if not availability:
-        raise SchedulingDomainError("availability_unknown")
-
-    fits = False
-    for interval in availability:
-        if not interval.is_available or interval.start_time is None or interval.end_time is None:
-            continue
-        interval_start = datetime.combine(
-            local_service_start.date(),
-            interval.start_time,
-            tzinfo=timezone,
-        ).astimezone(UTC)
-        interval_end = datetime.combine(
-            local_service_start.date(),
-            interval.end_time,
-            tzinfo=timezone,
-        ).astimezone(UTC)
-        if (
-            reservation.reserved_starts_at >= interval_start
-            and reservation.reserved_ends_at <= interval_end
-        ):
-            fits = True
-            break
-    if not fits:
-        raise SchedulingDomainError("booking_outside_availability")
+    # ADR-006: explicit booking is open by default. A false row is the existing
+    # whole-day day-off marker. Positive intervals only bound suggested slots;
+    # they never gate an explicitly requested booking time.
+    if any(not interval.is_available for interval in availability):
+        raise SchedulingDomainError("booking_on_day_off")
 
     statement = select(Booking.id).where(
         Booking.owner_user_id == owner_user_id,
