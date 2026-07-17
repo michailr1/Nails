@@ -13,7 +13,12 @@ from .client_cards import (
 )
 from .presenters import _sanitize_success
 from .transport import _call_backend, _error
-from .validation import ToolInputError, _request_spec, _validate_args
+from .validation import (
+    ToolInputError,
+    _availability_days,
+    _request_spec,
+    _validate_args,
+)
 from .verified_operations import (
     _verified_booking_mutation,
     _verified_create_booking,
@@ -55,6 +60,12 @@ def _api_key() -> str:
     return value
 
 
+def _preview_values(args: dict[str, Any]) -> dict[str, Any]:
+    if set(args) != {"action", "days"}:
+        raise ToolInputError("invalid tool arguments")
+    return {"days": _availability_days(args.get("days"))}
+
+
 def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
     del kwargs
     try:
@@ -67,6 +78,8 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             if set(args) != {"action"}:
                 raise ToolInputError("invalid tool arguments")
             values = {}
+        elif action == "preview_availability":
+            values = _preview_values(args)
         else:
             action, values = _validate_args(args)
 
@@ -94,6 +107,16 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 path="/api/v1/scheduling/clients",
                 params=None,
                 json_body=None,
+            )
+        elif action == "preview_availability":
+            response = _call_backend(
+                action=action,
+                telegram_user_id=telegram_user_id,
+                api_key=api_key,
+                method="POST",
+                path="/api/v1/scheduling/availability/preview",
+                params=None,
+                json_body={"days": values["days"]},
             )
         elif action == "create_booking":
             response = _verified_create_booking(
