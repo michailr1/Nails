@@ -257,3 +257,16 @@ def test_deactivated_user_is_rejected_on_next_request(
 
     denied = client.get("/web/api/auth/session", headers=WEB_ORIGIN_HEADERS)
     assert denied.status_code == 401
+
+
+def test_status_requires_original_browser_cookie(client, clean_database):
+    created = client.post(
+        "/web/api/auth/challenges",
+        headers=WEB_ORIGIN_HEADERS,
+    )
+    assert created.status_code == 201
+    challenge_id = created.json()["challenge_id"]
+    path = f"/web/api/auth/challenges/{challenge_id}"
+    assert client.get(path, headers=WEB_ORIGIN_HEADERS).status_code == 200
+    client.cookies.clear()
+    assert client.get(path, headers=WEB_ORIGIN_HEADERS).status_code == 404
