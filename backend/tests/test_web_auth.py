@@ -12,7 +12,10 @@ from conftest import WEB_ORIGIN_HEADERS
 
 
 def _start(client: TestClient) -> dict[str, object]:
-    response = client.post("/web/api/auth/challenges", headers=WEB_ORIGIN_HEADERS)
+    response = client.post(
+        "/web/api/auth/challenges",
+        headers=WEB_ORIGIN_HEADERS,
+    )
     assert response.status_code == 201
     return response.json()
 
@@ -30,10 +33,17 @@ def _approve(
     )
 
 
+def _csrf_headers(started: dict[str, object]) -> dict[str, str]:
+    return {
+        **WEB_ORIGIN_HEADERS,
+        "X-CSRF-Token": str(started["csrf_token"]),
+    }
+
+
 def _consume(client: TestClient, started: dict[str, object]):
     return client.post(
         "/web/api/auth/challenges/consume",
-        headers={**WEB_ORIGIN_HEADERS, "X-CSRF-Token": str(started["csrf_token"])},
+        headers=_csrf_headers(started),
         json={"challenge_id": started["challenge_id"]},
     )
 
@@ -42,7 +52,11 @@ def test_web_login_happy_path_and_logout(client, create_user, auth_headers):
     create_user()
     started = _start(client)
 
-    approval = _approve(client, auth_headers, str(started["confirmation_code"]))
+    approval = _approve(
+        client,
+        auth_headers,
+        str(started["confirmation_code"]),
+    )
     assert approval.status_code == 200
     assert approval.json() == {"approved": True}
 
@@ -59,7 +73,7 @@ def test_web_login_happy_path_and_logout(client, create_user, auth_headers):
 
     logout = client.post(
         "/web/api/auth/logout",
-        headers={**WEB_ORIGIN_HEADERS, "X-CSRF-Token": str(started["csrf_token"])},
+        headers=_csrf_headers(started),
     )
     assert logout.status_code == 200
     assert logout.json() == {"logged_out": True}
@@ -75,15 +89,21 @@ def test_challenge_is_one_time_and_bound_to_original_browser(
 ):
     create_user()
     started = _start(client)
-    assert _approve(client, auth_headers, str(started["confirmation_code"])).json() == {
-        "approved": True
-    }
+    assert _approve(
+        client,
+        auth_headers,
+        str(started["confirmation_code"]),
+    ).json() == {"approved": True}
 
     other = TestClient(client.app, base_url="https://testserver")
-    other.cookies.set("__Host-nails_csrf", str(started["csrf_token"]), secure=True)
+    other.cookies.set(
+        "__Host-nails_csrf",
+        str(started["csrf_token"]),
+        secure=True,
+    )
     wrong_browser = other.post(
         "/web/api/auth/challenges/consume",
-        headers={**WEB_ORIGIN_HEADERS, "X-CSRF-Token": str(started["csrf_token"])},
+        headers=_csrf_headers(started),
         json={"challenge_id": started["challenge_id"]},
     )
     assert wrong_browser.status_code == 200
@@ -114,7 +134,10 @@ def test_unknown_code_and_inactive_user_do_not_create_session(
         assert session.scalar(select(WebSession)) is None
 
 
-def test_web_boundary_rejects_missing_origin_and_bad_host(client, clean_database):
+def test_web_boundary_rejects_missing_origin_and_bad_host(
+    client,
+    clean_database,
+):
     missing_origin = client.post("/web/api/auth/challenges")
     assert missing_origin.status_code == 403
 
@@ -127,8 +150,15 @@ def test_web_boundary_rejects_missing_origin_and_bad_host(client, clean_database
 
 def test_start_rate_limit_is_postgres_backed(client, clean_database):
     for _ in range(5):
-        assert client.post("/web/api/auth/challenges", headers=WEB_ORIGIN_HEADERS).status_code == 201
-    limited = client.post("/web/api/auth/challenges", headers=WEB_ORIGIN_HEADERS)
+        response = client.post(
+            "/web/api/auth/challenges",
+            headers=WEB_ORIGIN_HEADERS,
+        )
+        assert response.status_code == 201
+    limited = client.post(
+        "/web/api/auth/challenges",
+        headers=WEB_ORIGIN_HEADERS,
+    )
     assert limited.status_code == 429
 
 
@@ -169,9 +199,11 @@ def test_deactivated_user_is_rejected_on_next_request(
 ):
     user = create_user()
     started = _start(client)
-    assert _approve(client, auth_headers, str(started["confirmation_code"])).json() == {
-        "approved": True
-    }
+    assert _approve(
+        client,
+        auth_headers,
+        str(started["confirmation_code"]),
+    ).json() == {"approved": True}
     assert _consume(client, started).json()["authenticated"] is True
 
     with get_session_factory()() as session:
