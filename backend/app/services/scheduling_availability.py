@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -63,26 +62,11 @@ def _scheduled_bookings_for_day(
 
 
 def _booking_fits_update(booking: Booking, update: AvailabilityDayReplace) -> bool:
-    if update.state != "available":
-        return False
-    timezone = app_timezone()
-    for interval in update.intervals:
-        interval_start = datetime.combine(
-            update.day,
-            interval.start_time,
-            tzinfo=timezone,
-        ).astimezone(UTC)
-        interval_end = datetime.combine(
-            update.day,
-            interval.end_time,
-            tzinfo=timezone,
-        ).astimezone(UTC)
-        if (
-            booking.reserved_starts_at >= interval_start
-            and booking.reserved_ends_at <= interval_end
-        ):
-            return True
-    return False
+    del booking
+    # ADR-006: positive intervals only define suggestion windows. Removing them
+    # or changing their boundaries cannot invalidate an explicit booking.
+    # Only marking the whole day unavailable conflicts with existing bookings.
+    return update.state != "unavailable"
 
 
 def _validate_booking_safety(
