@@ -14,6 +14,8 @@ production hostname: de.funti.cc
 production repo: /opt/nails/repo
 backend env: /opt/nails/.env
 backend API: http://127.0.0.1:8210
+health: /health
+readiness: /ready
 Hermes profile: /root/.hermes/profiles/nails
 production branch: main
 Hermes plugins: nails-onboarding, nails-scheduling
@@ -28,45 +30,29 @@ Hermes plugins: nails-onboarding, nails-scheduling
 
 Все релизы идут через `ops/deploy/deploy.sh <exact-SHA>`. Поток: PR → CI → candidate exact PR-head SHA → fast-forward того же SHA → finalize `git merge --ff-only`. Rollback = deploy предыдущего SHA. **Production state не предполагать**: каждый запуск устанавливает его свежим preflight.
 
+Production compose требует явный `--env-file /opt/nails/.env`. Host API port определяется через compose и сейчас равен `8210`. Корректный readiness endpoint — `/ready`, не `/readiness`.
+
 ## 3. Актуальный production milestone
 
-Последний подтверждённый GitHub `main`:
+Последний подтверждённый GitHub `main` и production checkout:
 
 ```text
-main SHA: 0c08ffcd06752e13b8fa1372058d1dce079c455e
-PR #103: merged fast-forward
-```
-
-PR #103 зафиксировал отключение Hermes shutdown/restart Telegram-уведомлений только для профиля Nails. Production-проверка подтвердила:
-
-```text
-profile=nails
-telegram_gateway_restart_notification=false
+main SHA: 847a6342911b5bf32a9e6c0885065e161c6d2d06
+PR #106: merged fast-forward
+issue #100: completed
+ADR-006: accepted and deployed
+working_tree_clean=true
+nails-api=running
+container_health=healthy
+api_bind=127.0.0.1:8210
+GET /health=200
+GET /ready=200
 gateway_active=true
-api_health=true
-api_readiness=true
-SHUTDOWN_NOTIFICATION_DISABLED=true
 ```
 
-Также подтверждено:
+Shutdown/restart Telegram-уведомления остаются отключены только для профиля Nails. Backup timer остаётся enabled/active.
 
-```text
-backup timer = enabled, active
-```
-
-Работает: онбординг; услуги; календарь и доступность; клиентские карточки с расширенными private fields; exact/candidate поиск; переименование карточки; общий список активных клиенток; создание, корректный перенос и мягкая отмена записей.
-
-Корректный перенос уже реализован:
-
-- PR #62 удалил ошибочную `free_slots`-предпроверку из plugin-flow;
-- backend `reschedule` исключает текущую переносимую запись через `exclude_booking_id`;
-- конфликты с другими записями, buffers и рабочим временем сохраняются;
-- повторный перенос остаётся идемпотентным;
-- regression tests присутствуют;
-- PR #66 закрепил fresh-read/readback contract;
-- PR #74 добавил verified readback в одном tool-вызове.
-
-Issue #61 остаётся открытым только как контейнер отдельных UX-дефектов. Самоблокировка записи при переносе уже не является незавершённой задачей.
+Работает: onboarding; услуги; календарь и доступность; несколько интервалов в день; preview изменения доступности; клиентские карточки с расширенными private fields; exact/candidate поиск; переименование карточки; общий список активных клиенток; создание, корректный перенос и мягкая отмена записей; negative feedback; автоматические backup/restore tests.
 
 ## 4. Завершённый этап: NAILS-002F
 
@@ -86,49 +72,50 @@ Issue #91 и PR #96 завершены.
 - установка только через постоянный `deploy.sh`;
 - источник истины: `docs/operations/backups.md`.
 
-Финальная production-приёмка подтверждена: ручной backup успешен, isolated restore совпал, временных restore DB нет, архив получен в Telegram, timer активен.
+## 5. Завершённый этап: NAILS-003
 
-## 5. Активный этап: NAILS-003, issue #104
+Issue #104 закрывается как реализованный фактическими механизмами `availability_intervals`, PR #105 и ADR-006/PR #106.
 
-Порядок после пилота зафиксирован:
+Поддерживается:
 
-1. скорректировать ограничения рабочего времени;
-2. сделать web-интерфейс мастера;
-3. только затем двигать клиентский контур ADR-004.
+- несколько положительных интервалов подсказок на конкретную дату;
+- частичное закрытие через замену одного окна несколькими итоговыми окнами;
+- дополнительное открытие через тот же итоговый набор;
+- read-only `preview_availability` до подтверждения;
+- сводка «сейчас → будет»;
+- единственный write `update_availability`;
+- owner schedule lock, audit и идемпотентность;
+- исправление повторной заменой;
+- снятие настройки через `state=unknown`;
+- целый выходной через `state=unavailable`;
+- защита существующих записей при попытке поставить целый выходной.
 
-Активный первый slice — draft PR #105 `NAILS-003: preview working-time restrictions before mutation`.
+ADR-006 определяет финальную семантику:
 
-```text
-base main: 0c08ffcd06752e13b8fa1372058d1dce079c455e
-active branch: feat/nails-003-availability-preview
-latest documented head before final CI: 660b0f2391294545e3d2972398e528906516a130
-Alembic: unchanged
-new tables: none
-```
+- явно названное время доступно по умолчанию;
+- положительные интервалы и диапазон `10:00–23:00` формируют только подсказки;
+- явная запись разрешена вне сетки и вне положительного окна;
+- отказ только при целом выходном или overlap с active booking с учётом buffers;
+- жёсткие частичные запреты не вводятся, потому что противоречат этой модели.
 
-Фактическая модель рабочего времени — `availability_intervals`, а не отдельные `schedule_rules`/`schedule_exceptions`. Existing write `replace_availability` уже:
+## 6. Следующий этап: web-интерфейс мастера
 
-- заменяет итоговый набор интервалов конкретной даты;
-- блокирует вытеснение scheduled bookings с учётом reserved interval и buffers;
-- сериализуется owner schedule lock;
-- пишет safe audit;
-- идемпотентен по фактическому состоянию.
+Порядок после пилота:
 
-PR #105 добавляет read-only `preview_availability` поверх того же запроса и той же авторитетной логики. Preview показывает текущее и предлагаемое состояние, `changed`, `can_apply` и конкретные конфликтующие записи. `update_availability` остаётся единственным write-путём и повторно проверяет конфликт при мутации.
+1. NAILS-003 — завершён;
+2. web-интерфейс мастера — следующий;
+3. клиентский контур ADR-004 — только после web.
 
-Skill-flow после PR #105:
+ADR-005 уже подготовлен в отдельном открытом PR #87, но был создан до завершения NAILS-003. Перед merge необходимо:
 
-```text
-resolve_date → day_view → preview_availability →
-сводка сейчас/будет → явное подтверждение →
-update_availability → day_view readback
-```
+- сверить ADR с актуальным `main` и ADR-006;
+- убрать устаревшие допущения;
+- убедиться, что web является тонким слоем над существующим Booking API;
+- не выставлять loopback API напрямую наружу;
+- сохранить owner scoping, confirmation, audit, CSRF и защищённые сессии;
+- после принятия ADR создать отдельный минимальный implementation issue.
 
-Если `can_apply=false`, write запрещён; существующие записи не переносятся и не отменяются автоматически.
-
-PR #105 — отдельный инкремент issue #104, а не полная реализация issue #100 / ADR-006 и не переход к модели «открыто по умолчанию».
-
-## 6. Известные грабли
+## 7. Известные грабли
 
 1. Не добавлять одноразовые deploy/install scripts.
 2. Не выполнять production restore поверх рабочей DB.
@@ -138,15 +125,16 @@ PR #105 — отдельный инкремент issue #104, а не полна
 6. `app.routes` показывает mount entries как пустые paths; полные scheduling paths проверять через router или HTTP.
 7. Не считать открытый issue доказательством незавершённого дефекта: сначала проверять фактический `main`, merged PR и regression tests.
 8. Не возвращать shutdown/restart Telegram-уведомления профилю Nails при обновлении Hermes, unit-файла или profile runtime.
-9. Отсутствующий `production-infrastructure-contract` допустим, если PR не меняет охраняемые path-filter файлы.
+9. Compose-команды production выполнять с `--env-file /opt/nails/.env`.
+10. Проверять readiness через `/ready`, а не `/readiness`.
 
-## 7. Точка продолжения
+## 8. Точка продолжения
 
 ```text
-1. дождаться зелёного CI на финальном head PR #105
-2. проверить unresolved review threads и ff от свежего main
-3. выполнить candidate validation exact PR-head SHA через постоянный deploy.sh
-4. только после candidate fast-forward merge того же SHA
-5. finalize production checkout и Telegram acceptance preview → confirmation → update → readback
-6. после production закрыть первый slice #104 и проектировать следующий минимальный slice ограничений
+1. проверить CI документационного PR закрытия NAILS-003
+2. fast-forward merge документации без production deploy
+3. закрыть issue #104 как completed
+4. ревью и актуализация ADR-005 / PR #87 относительно main и ADR-006
+5. принять ADR-005
+6. создать implementation issue минимального web-интерфейса мастера
 ```
