@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
@@ -54,6 +55,30 @@ def _raise_challenge_not_found() -> None:
         status_code=status.HTTP_404_NOT_FOUND,
         detail={"code": "challenge_not_found"},
     )
+
+
+def invalidate_pending_browser_challenge(session: Session, request: Request) -> None:
+    login_token = request.cookies.get(_LOGIN_COOKIE, "")
+    if not login_token:
+        return
+    settings = _settings()
+    browser_token_hash = _keyed_hash(
+        login_token,
+        purpose="login-token",
+        settings=settings,
+    )
+    challenge = session.scalar(
+        select(WebLoginChallenge)
+        .where(
+            WebLoginChallenge.browser_token_hash == browser_token_hash,
+            WebLoginChallenge.status == WebChallengeStatus.pending.value,
+        )
+        .with_for_update()
+    )
+    if challenge is None:
+        return
+    challenge.status = WebChallengeStatus.denied.value
+    session.commit()
 
 
 def enforce_status_rate_limit(
