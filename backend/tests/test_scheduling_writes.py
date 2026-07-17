@@ -181,7 +181,7 @@ def test_booking_creation_snapshots_service_and_is_idempotent(
 
 
 @pytest.mark.usefixtures("clean_database")
-def test_booking_rejects_overlap_outside_hours_unknown_day_and_key_conflict(
+def test_booking_preserves_overlap_and_key_conflict_while_open_by_default(
     client: TestClient,
     create_user: Callable,
     create_service: Callable,
@@ -213,25 +213,25 @@ def test_booking_rejects_overlap_outside_hours_unknown_day_and_key_conflict(
     assert overlap.status_code == 409, overlap.text
     assert overlap.json()["detail"]["code"] == "booking_overlap"
 
-    outside = _create_booking(
+    outside_suggestion_window = _create_booking(
         client,
         headers,
         client_public_name="Мария",
         starts_at="2026-07-18T10:45:00+02:00",
         idempotency_key="booking-outside",
     )
-    assert outside.status_code == 409, outside.text
-    assert outside.json()["detail"]["code"] == "booking_outside_availability"
+    assert outside_suggestion_window.status_code == 200, outside_suggestion_window.text
+    assert outside_suggestion_window.json()["created"] is True
 
-    unknown = _create_booking(
+    unknown_day = _create_booking(
         client,
         headers,
         client_public_name="Мария",
         starts_at="2026-07-19T13:00:00+02:00",
         idempotency_key="booking-unknown-day",
     )
-    assert unknown.status_code == 409, unknown.text
-    assert unknown.json()["detail"]["code"] == "availability_unknown"
+    assert unknown_day.status_code == 200, unknown_day.text
+    assert unknown_day.json()["created"] is True
 
     key_conflict = _create_booking(
         client,
@@ -241,6 +241,32 @@ def test_booking_rejects_overlap_outside_hours_unknown_day_and_key_conflict(
     )
     assert key_conflict.status_code == 409, key_conflict.text
     assert key_conflict.json()["detail"]["code"] == "idempotency_conflict"
+
+
+@pytest.mark.usefixtures("clean_database")
+def test_booking_on_explicit_day_off_is_rejected(
+    client: TestClient,
+    create_user: Callable,
+    create_service: Callable,
+    create_availability: Callable,
+    auth_headers: Callable,
+) -> None:
+    user = create_user()
+    create_service(user.id)
+    create_availability(
+        user.id,
+        day=date(2026, 7, 18),
+        start_time=None,
+        end_time=None,
+        is_available=False,
+    )
+    headers = auth_headers(request_id="booking-day-off")
+    _create_client(client, headers)
+
+    response = _create_booking(client, headers)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "booking_on_day_off"
 
 
 @pytest.mark.usefixtures("clean_database")
