@@ -13,6 +13,8 @@ from app.schemas.scheduling import (
     FreeSlotsResponse,
 )
 from app.services.scheduling_common import (
+    DEFAULT_SUGGESTION_END,
+    DEFAULT_SUGGESTION_START,
     SLOT_STEP_MINUTES,
     app_timezone,
     availability_for_day,
@@ -91,7 +93,20 @@ def find_free_slots(
     timezone = app_timezone()
     service = get_active_service(session, identity.user_id, service_name)
     availability = availability_for_day(session, identity.user_id, day)
-    working_intervals = [item for item in availability if item.is_available]
+    is_day_off = any(not item.is_available for item in availability)
+    explicit_windows = [item for item in availability if item.is_available]
+
+    if is_day_off:
+        suggestion_windows = []
+    elif explicit_windows:
+        suggestion_windows = [
+            (item.start_time, item.end_time)
+            for item in explicit_windows
+            if item.start_time is not None and item.end_time is not None
+        ]
+    else:
+        suggestion_windows = [(DEFAULT_SUGGESTION_START, DEFAULT_SUGGESTION_END)]
+
     start_at, end_at = day_bounds(day, timezone)
     busy = [
         (booking.reserved_starts_at, booking.reserved_ends_at)
@@ -105,11 +120,9 @@ def find_free_slots(
     ]
 
     starts: set[datetime] = set()
-    for interval in working_intervals:
-        if interval.start_time is None or interval.end_time is None:
-            continue
-        interval_start = datetime.combine(day, interval.start_time, tzinfo=timezone)
-        interval_end = datetime.combine(day, interval.end_time, tzinfo=timezone)
+    for start_time, end_time in suggestion_windows:
+        interval_start = datetime.combine(day, start_time, tzinfo=timezone)
+        interval_end = datetime.combine(day, end_time, tzinfo=timezone)
         candidate = ceil_to_step(
             interval_start + timedelta(minutes=service.buffer_before_minutes),
             SLOT_STEP_MINUTES,
@@ -136,7 +149,7 @@ def find_free_slots(
         timezone=str(timezone),
         weekday_iso=day.isoweekday(),
         availability_known=bool(availability),
-        is_working=bool(working_intervals),
+        is_working=not is_day_off,
         step_minutes=SLOT_STEP_MINUTES,
         service=service_summary(service),
         starts_at=sorted(starts),
