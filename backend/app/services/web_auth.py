@@ -56,10 +56,16 @@ def _settings() -> Settings:
     return settings
 
 
-def _keyed_hash(value: str, *, purpose: str, settings: Settings | None = None) -> str:
+def _keyed_hash(
+    value: str,
+    *,
+    purpose: str,
+    settings: Settings | None = None,
+) -> str:
     active_settings = settings or _settings()
     key = active_settings.web_auth_hmac_key.get_secret_value().encode("utf-8")
-    return hmac.new(key, f"{purpose}\x1f{value}".encode("utf-8"), hashlib.sha256).hexdigest()
+    message = f"{purpose}\x1f{value}".encode("utf-8")
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
 
 
 def _request_ip(request: Request) -> str:
@@ -72,19 +78,35 @@ def _request_id() -> str:
 
 def _user_agent_hash(request: Request, settings: Settings) -> str | None:
     value = request.headers.get("user-agent", "").strip()
-    return _keyed_hash(value[:512], purpose="user-agent", settings=settings) if value else None
+    if not value:
+        return None
+    return _keyed_hash(
+        value[:512],
+        purpose="user-agent",
+        settings=settings,
+    )
 
 
 def validate_web_boundary(request: Request) -> None:
     settings = _settings()
     host = request.headers.get("host", "").split(":", 1)[0].strip().lower()
     if host not in settings.allowed_web_hosts:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": "invalid_host"})
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_host"},
+        )
+
     origin = request.headers.get("origin")
     if origin is not None and origin not in settings.allowed_web_origins:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "invalid_origin"})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "invalid_origin"},
+        )
     if request.method not in {"GET", "HEAD", "OPTIONS"} and origin is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "origin_required"})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "origin_required"},
+        )
 
 
 def validate_csrf(request: Request) -> None:
@@ -92,7 +114,10 @@ def validate_csrf(request: Request) -> None:
     cookie = request.cookies.get(_CSRF_COOKIE, "")
     header = request.headers.get("x-csrf-token", "")
     if not cookie or not header or not hmac.compare_digest(cookie, header):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "csrf_failed"})
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "csrf_failed"},
+        )
 
 
 def _audit(
@@ -100,9 +125,9 @@ def _audit(
     *,
     action: str,
     request_id: str,
+    object_type: str,
     owner_user_id: uuid.UUID | None = None,
     actor_user_id: uuid.UUID | None = None,
-    object_type: str,
     object_id: uuid.UUID | None = None,
     safe_changes: dict[str, object] | None = None,
 ) -> None:
@@ -130,7 +155,10 @@ def _consume_rate_bucket(
 ) -> bool:
     bucket = session.scalar(
         select(WebAuthRateBucket)
-        .where(WebAuthRateBucket.action == action, WebAuthRateBucket.scope_hash == scope_hash)
+        .where(
+            WebAuthRateBucket.action == action,
+            WebAuthRateBucket.scope_hash == scope_hash,
+        )
         .with_for_update()
     )
     if bucket is None:
@@ -143,12 +171,14 @@ def _consume_rate_bucket(
             )
         )
         return True
+
     if now >= bucket.window_started_at + timedelta(seconds=window_seconds):
         bucket.window_started_at = now
         bucket.count = 1
         return True
     if bucket.count >= limit:
         return False
+
     bucket.count += 1
     return True
 
@@ -158,7 +188,11 @@ def start_challenge(session: Session, request: Request) -> StartedChallenge:
     settings = _settings()
     now = _now()
     request_id = _request_id()
-    ip_hash = _keyed_hash(_request_ip(request), purpose="ip", settings=settings)
+    ip_hash = _keyed_hash(
+        _request_ip(request),
+        purpose="ip",
+        settings=settings,
+    )
     allowed = _consume_rate_bucket(
         session,
         action="challenge_start",
@@ -176,24 +210,37 @@ def start_challenge(session: Session, request: Request) -> StartedChallenge:
             safe_changes={"scope": "ip", "operation": "start"},
         )
         session.commit()
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail={"code": "rate_limited"})
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "rate_limited"},
+        )
 
     browser_token = secrets.token_urlsafe(32)
     csrf_token = secrets.token_urlsafe(32)
     challenge: WebLoginChallenge | None = None
     confirmation_code = ""
+
     for _ in range(8):
         confirmation_code = f"{secrets.randbelow(1_000_000):06d}"
         challenge = WebLoginChallenge(
-            code_hash=_keyed_hash(confirmation_code, purpose="challenge-code", settings=settings),
-            browser_token_hash=_keyed_hash(browser_token, purpose="login-token", settings=settings),
+            code_hash=_keyed_hash(
+                confirmation_code,
+                purpose="challenge-code",
+                settings=settings,
+            ),
+            browser_token_hash=_keyed_hash(
+                browser_token,
+                purpose="login-token",
+                settings=settings,
+            ),
             status=WebChallengeStatus.pending.value,
             attempt_count=0,
             max_attempts=settings.web_challenge_max_attempts,
             request_ip_hash=ip_hash,
             user_agent_hash=_user_agent_hash(request, settings),
             request_id=request_id,
-            expires_at=now + timedelta(seconds=settings.web_challenge_ttl_seconds),
+            expires_at=now
+            + timedelta(seconds=settings.web_challenge_ttl_seconds),
         )
         session.add(challenge)
         try:
@@ -202,8 +249,12 @@ def start_challenge(session: Session, request: Request) -> StartedChallenge:
         except IntegrityError:
             session.rollback()
             challenge = None
+
     if challenge is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail={"code": "challenge_unavailable"})
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "challenge_unavailable"},
+        )
 
     _audit(
         session,
@@ -214,7 +265,12 @@ def start_challenge(session: Session, request: Request) -> StartedChallenge:
     )
     session.commit()
     session.refresh(challenge)
-    return StartedChallenge(challenge, confirmation_code, browser_token, csrf_token)
+    return StartedChallenge(
+        challenge,
+        confirmation_code,
+        browser_token,
+        csrf_token,
+    )
 
 
 def set_start_cookies(response: Response, started: StartedChallenge) -> None:
@@ -238,13 +294,25 @@ def set_start_cookies(response: Response, started: StartedChallenge) -> None:
     )
 
 
-def challenge_status(session: Session, request: Request, challenge_id: uuid.UUID) -> WebLoginChallenge:
+def challenge_status(
+    session: Session,
+    request: Request,
+    challenge_id: uuid.UUID,
+) -> WebLoginChallenge:
     validate_web_boundary(request)
     challenge = session.get(WebLoginChallenge, challenge_id)
     if challenge is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "challenge_not_found"})
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "challenge_not_found"},
+        )
+
     now = _now()
-    if challenge.status in {WebChallengeStatus.pending.value, WebChallengeStatus.approved.value} and now >= challenge.expires_at:
+    open_statuses = {
+        WebChallengeStatus.pending.value,
+        WebChallengeStatus.approved.value,
+    }
+    if challenge.status in open_statuses and now >= challenge.expires_at:
         challenge.status = WebChallengeStatus.expired.value
         session.commit()
     return challenge
@@ -259,8 +327,13 @@ def approve_challenge(
     settings = _settings()
     if identity.role != UserRole.master:
         return False
+
     now = _now()
-    account_scope = _keyed_hash(str(identity.user_id), purpose="approve-account", settings=settings)
+    account_scope = _keyed_hash(
+        str(identity.user_id),
+        purpose="approve-account",
+        settings=settings,
+    )
     if not _consume_rate_bucket(
         session,
         action="challenge_approve",
@@ -273,15 +346,19 @@ def approve_challenge(
             session,
             action="web_login_rate_limited",
             request_id=identity.request_id,
+            object_type="web_login_challenge",
             owner_user_id=identity.user_id,
             actor_user_id=identity.user_id,
-            object_type="web_login_challenge",
             safe_changes={"scope": "account", "operation": "approve"},
         )
         session.commit()
         return False
 
-    code_hash = _keyed_hash(confirmation_code, purpose="challenge-code", settings=settings)
+    code_hash = _keyed_hash(
+        confirmation_code,
+        purpose="challenge-code",
+        settings=settings,
+    )
     challenge = session.scalar(
         select(WebLoginChallenge)
         .where(WebLoginChallenge.code_hash == code_hash)
@@ -290,9 +367,13 @@ def approve_challenge(
     if challenge is None:
         session.commit()
         return False
-    if challenge.status != WebChallengeStatus.pending.value or now >= challenge.expires_at:
-        if now >= challenge.expires_at and challenge.status == WebChallengeStatus.pending.value:
-            challenge.status = WebChallengeStatus.expired.value
+
+    if (
+        now >= challenge.expires_at
+        and challenge.status == WebChallengeStatus.pending.value
+    ):
+        challenge.status = WebChallengeStatus.expired.value
+    if challenge.status != WebChallengeStatus.pending.value:
         session.commit()
         return False
 
@@ -303,37 +384,57 @@ def approve_challenge(
         session,
         action="web_login_challenge_approved",
         request_id=identity.request_id,
+        object_type="web_login_challenge",
         owner_user_id=identity.user_id,
         actor_user_id=identity.user_id,
-        object_type="web_login_challenge",
         object_id=challenge.id,
     )
     session.commit()
     return True
 
 
-def consume_challenge(session: Session, request: Request, challenge_id: uuid.UUID) -> ConsumedChallenge:
+def consume_challenge(
+    session: Session,
+    request: Request,
+    challenge_id: uuid.UUID,
+) -> ConsumedChallenge:
     validate_csrf(request)
     settings = _settings()
     now = _now()
     request_id = _request_id()
     challenge = session.scalar(
-        select(WebLoginChallenge).where(WebLoginChallenge.id == challenge_id).with_for_update()
+        select(WebLoginChallenge)
+        .where(WebLoginChallenge.id == challenge_id)
+        .with_for_update()
     )
     if challenge is None:
         return ConsumedChallenge(False, "invalid")
-    if now >= challenge.expires_at and challenge.status in {
+
+    open_statuses = {
         WebChallengeStatus.pending.value,
         WebChallengeStatus.approved.value,
-    }:
+    }
+    if now >= challenge.expires_at and challenge.status in open_statuses:
         challenge.status = WebChallengeStatus.expired.value
-    if challenge.status != WebChallengeStatus.approved.value or challenge.user_id is None:
+    if (
+        challenge.status != WebChallengeStatus.approved.value
+        or challenge.user_id is None
+    ):
         session.commit()
         return ConsumedChallenge(False, challenge.status)
 
     login_token = request.cookies.get(_LOGIN_COOKIE, "")
-    supplied_hash = _keyed_hash(login_token, purpose="login-token", settings=settings) if login_token else ""
-    if not supplied_hash or not hmac.compare_digest(supplied_hash, challenge.browser_token_hash):
+    supplied_hash = ""
+    if login_token:
+        supplied_hash = _keyed_hash(
+            login_token,
+            purpose="login-token",
+            settings=settings,
+        )
+    if not supplied_hash or not hmac.compare_digest(
+        supplied_hash,
+        challenge.browser_token_hash,
+    ):
         challenge.attempt_count += 1
         if challenge.attempt_count >= challenge.max_attempts:
             challenge.status = WebChallengeStatus.locked.value
@@ -353,13 +454,23 @@ def consume_challenge(session: Session, request: Request, challenge_id: uuid.UUI
         return ConsumedChallenge(False, challenge.status)
 
     session_token = secrets.token_urlsafe(32)
-    ip_hash = _keyed_hash(_request_ip(request), purpose="ip", settings=settings)
+    ip_hash = _keyed_hash(
+        _request_ip(request),
+        purpose="ip",
+        settings=settings,
+    )
     web_session = WebSession(
-        token_hash=_keyed_hash(session_token, purpose="session-token", settings=settings),
+        token_hash=_keyed_hash(
+            session_token,
+            purpose="session-token",
+            settings=settings,
+        ),
         user_id=user.id,
         last_seen_at=now,
-        idle_expires_at=now + timedelta(seconds=settings.web_session_idle_ttl_seconds),
-        absolute_expires_at=now + timedelta(seconds=settings.web_session_absolute_ttl_seconds),
+        idle_expires_at=now
+        + timedelta(seconds=settings.web_session_idle_ttl_seconds),
+        absolute_expires_at=now
+        + timedelta(seconds=settings.web_session_absolute_ttl_seconds),
         rotation_counter=1,
         created_ip_hash=ip_hash,
         last_ip_hash=ip_hash,
@@ -373,16 +484,24 @@ def consume_challenge(session: Session, request: Request, challenge_id: uuid.UUI
         session,
         action="web_session_created",
         request_id=request_id,
+        object_type="web_session",
         owner_user_id=user.id,
         actor_user_id=user.id,
-        object_type="web_session",
         object_id=web_session.id,
     )
     session.commit()
-    return ConsumedChallenge(True, WebChallengeStatus.consumed.value, session_token)
+    return ConsumedChallenge(
+        True,
+        WebChallengeStatus.consumed.value,
+        session_token,
+    )
 
 
-def set_session_cookie(response: Response, session_token: str, settings: Settings | None = None) -> None:
+def set_session_cookie(
+    response: Response,
+    session_token: str,
+    settings: Settings | None = None,
+) -> None:
     active_settings = settings or _settings()
     response.set_cookie(
         _SESSION_COOKIE,
@@ -393,23 +512,58 @@ def set_session_cookie(response: Response, session_token: str, settings: Setting
         path="/",
         max_age=active_settings.web_session_absolute_ttl_seconds,
     )
-    response.delete_cookie(_LOGIN_COOKIE, path="/", secure=True, httponly=True, samesite="strict")
+    response.delete_cookie(
+        _LOGIN_COOKIE,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="strict",
+    )
 
 
 def clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(_SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
-    response.delete_cookie(_LOGIN_COOKIE, path="/", secure=True, httponly=True, samesite="strict")
+    response.delete_cookie(
+        _SESSION_COOKIE,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
+    response.delete_cookie(
+        _LOGIN_COOKIE,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="strict",
+    )
 
 
-def require_web_session_identity(session: Session, request: Request) -> RequestIdentity:
+def _unauthorized() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={"code": "unauthorized"},
+    )
+
+
+def require_web_session_identity(
+    session: Session,
+    request: Request,
+) -> RequestIdentity:
     validate_web_boundary(request)
     settings = _settings()
     token = request.cookies.get(_SESSION_COOKIE, "")
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"code": "unauthorized"})
-    token_hash = _keyed_hash(token, purpose="session-token", settings=settings)
+        raise _unauthorized()
+
+    token_hash = _keyed_hash(
+        token,
+        purpose="session-token",
+        settings=settings,
+    )
     web_session = session.scalar(
-        select(WebSession).where(WebSession.token_hash == token_hash).with_for_update()
+        select(WebSession)
+        .where(WebSession.token_hash == token_hash)
+        .with_for_update()
     )
     now = _now()
     if (
@@ -418,7 +572,8 @@ def require_web_session_identity(session: Session, request: Request) -> RequestI
         or now >= web_session.idle_expires_at
         or now >= web_session.absolute_expires_at
     ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"code": "unauthorized"})
+        raise _unauthorized()
+
     user = session.scalar(
         select(User).where(
             User.id == web_session.user_id,
@@ -427,15 +582,24 @@ def require_web_session_identity(session: Session, request: Request) -> RequestI
         )
     )
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"code": "unauthorized"})
-    if now >= web_session.last_seen_at + timedelta(seconds=settings.web_session_touch_interval_seconds):
+        raise _unauthorized()
+
+    touch_after = web_session.last_seen_at + timedelta(
+        seconds=settings.web_session_touch_interval_seconds
+    )
+    if now >= touch_after:
         web_session.last_seen_at = now
         web_session.idle_expires_at = min(
             now + timedelta(seconds=settings.web_session_idle_ttl_seconds),
             web_session.absolute_expires_at,
         )
-        web_session.last_ip_hash = _keyed_hash(_request_ip(request), purpose="ip", settings=settings)
+        web_session.last_ip_hash = _keyed_hash(
+            _request_ip(request),
+            purpose="ip",
+            settings=settings,
+        )
         session.commit()
+
     return RequestIdentity(
         user_id=user.id,
         telegram_user_id=user.telegram_user_id,
@@ -450,21 +614,28 @@ def logout_web_session(session: Session, request: Request) -> bool:
     token = request.cookies.get(_SESSION_COOKIE, "")
     if not token:
         return True
-    token_hash = _keyed_hash(token, purpose="session-token", settings=settings)
+
+    token_hash = _keyed_hash(
+        token,
+        purpose="session-token",
+        settings=settings,
+    )
     web_session = session.scalar(
-        select(WebSession).where(WebSession.token_hash == token_hash).with_for_update()
+        select(WebSession)
+        .where(WebSession.token_hash == token_hash)
+        .with_for_update()
     )
     if web_session is None or web_session.revoked_at is not None:
         return True
-    now = _now()
-    web_session.revoked_at = now
+
+    web_session.revoked_at = _now()
     _audit(
         session,
         action="web_session_revoked",
         request_id=_request_id(),
+        object_type="web_session",
         owner_user_id=web_session.user_id,
         actor_user_id=web_session.user_id,
-        object_type="web_session",
         object_id=web_session.id,
     )
     session.commit()
