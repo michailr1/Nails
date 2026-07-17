@@ -3,10 +3,10 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.auth import RequestIdentity, require_request_identity
+from app.auth import RequestIdentity
 from app.db import get_db_session
 from app.schemas.web_auth import (
     ChallengeConsumeRequest,
@@ -35,13 +35,14 @@ from app.services.web_auth_limits import (
     invalidate_pending_browser_challenge,
     read_bound_challenge_status,
 )
+from app.web_auth_identity import require_web_approval_identity
 
 router = APIRouter(tags=["web-auth"])
 
 SessionDependency = Annotated[Session, Depends(get_db_session)]
-InternalIdentityDependency = Annotated[
-    RequestIdentity,
-    Depends(require_request_identity),
+WebApprovalIdentityDependency = Annotated[
+    RequestIdentity | None,
+    Depends(require_web_approval_identity),
 ]
 
 
@@ -111,8 +112,10 @@ def consume(
 def approve_from_telegram(
     body: TelegramChallengeApproveRequest,
     session: SessionDependency,
-    identity: InternalIdentityDependency,
+    identity: WebApprovalIdentityDependency,
 ) -> TelegramChallengeApproveResponse:
+    if identity is None:
+        return TelegramChallengeApproveResponse(approved=False)
     if not enforce_approval_server_rate_limit(session, identity):
         return TelegramChallengeApproveResponse(approved=False)
     return TelegramChallengeApproveResponse(
@@ -127,9 +130,15 @@ def approve_from_telegram(
 @router.get("/web/api/auth/session", response_model=WebSessionStateResponse)
 def session_state(
     request: Request,
+    response: Response,
     session: SessionDependency,
 ) -> WebSessionStateResponse:
-    require_web_session_identity(session, request)
+    try:
+        require_web_session_identity(session, request)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+            clear_auth_cookies(response)
+        raise
     return WebSessionStateResponse(authenticated=True)
 
 
