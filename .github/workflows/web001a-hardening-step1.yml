@@ -1,0 +1,221 @@
+name: WEB-001A hardening step 1
+on:
+  push:
+    branches: [feat/web001a-auth-session]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[hardening-1]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/web001a-auth-session
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply deterministic patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          config = Path('backend/app/config.py')
+          text = config.read_text()
+          anchor = '''    web_rate_approve_window_seconds: int = Field(
+              default=600,
+              alias="WEB_RATE_APPROVE_WINDOW_SECONDS",
+              ge=60,
+              le=86400,
+          )
+'''
+          replacement = anchor + '''    web_rate_approve_server_limit: int = Field(
+              default=100,
+              alias="WEB_RATE_APPROVE_SERVER_LIMIT",
+              ge=1,
+              le=1000,
+          )
+          web_rate_status_limit: int = Field(
+              default=30,
+              alias="WEB_RATE_STATUS_LIMIT",
+              ge=1,
+              le=300,
+          )
+          web_rate_status_window_seconds: int = Field(
+              default=600,
+              alias="WEB_RATE_STATUS_WINDOW_SECONDS",
+              ge=60,
+              le=86400,
+          )
+          web_rate_consume_limit: int = Field(
+              default=10,
+              alias="WEB_RATE_CONSUME_LIMIT",
+              ge=1,
+              le=100,
+          )
+          web_rate_consume_window_seconds: int = Field(
+              default=600,
+              alias="WEB_RATE_CONSUME_WINDOW_SECONDS",
+              ge=60,
+              le=86400,
+          )
+'''
+          if anchor not in text:
+              raise SystemExit('config anchor missing')
+          config.write_text(text.replace(anchor, replacement, 1))
+
+          service = Path('backend/app/services/web_auth.py')
+          text = service.read_text()
+          status_anchor = '''    validate_web_boundary(request)
+              challenge = session.get(WebLoginChallenge, challenge_id)
+'''
+          status_replacement = '''    validate_web_boundary(request)
+              settings = _settings()
+              now = _now()
+              status_scope = _keyed_hash(
+                  f"{challenge_id}:{_request_ip(request)}",
+                  purpose="status-scope",
+                  settings=settings,
+              )
+              if not _consume_rate_bucket(
+                  session,
+                  action="challenge_status",
+                  scope_hash=status_scope,
+                  limit=settings.web_rate_status_limit,
+                  window_seconds=settings.web_rate_status_window_seconds,
+                  now=now,
+              ):
+                  session.commit()
+                  raise HTTPException(
+                      status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                      detail={"code": "rate_limited"},
+                  )
+              challenge = session.get(WebLoginChallenge, challenge_id)
+'''
+          if status_anchor not in text:
+              raise SystemExit('status anchor missing')
+          text = text.replace(status_anchor, status_replacement, 1)
+          text = text.replace('''    now = _now()
+              open_statuses = {
+''', '''    open_statuses = {
+''', 1)
+
+          approve_anchor = '''    if not _consume_rate_bucket(
+              session,
+              action="challenge_approve",
+              scope_hash=account_scope,
+              limit=settings.web_rate_approve_limit,
+              window_seconds=settings.web_rate_approve_window_seconds,
+              now=now,
+          ):
+'''
+          approve_replacement = '''    server_scope = _keyed_hash(
+              "internal-api",
+              purpose="approve-server",
+              settings=settings,
+          )
+          account_allowed = _consume_rate_bucket(
+              session,
+              action="challenge_approve",
+              scope_hash=account_scope,
+              limit=settings.web_rate_approve_limit,
+              window_seconds=settings.web_rate_approve_window_seconds,
+              now=now,
+          )
+          server_allowed = _consume_rate_bucket(
+              session,
+              action="challenge_approve_server",
+              scope_hash=server_scope,
+              limit=settings.web_rate_approve_server_limit,
+              window_seconds=settings.web_rate_approve_window_seconds,
+              now=now,
+          )
+          if not account_allowed or not server_allowed:
+'''
+          if approve_anchor not in text:
+              raise SystemExit('approve anchor missing')
+          text = text.replace(approve_anchor, approve_replacement, 1)
+
+          consume_anchor = '''    request_id = _request_id()
+              challenge = session.scalar(
+'''
+          consume_replacement = '''    request_id = _request_id()
+              consume_scope = _keyed_hash(
+                  f"{challenge_id}:{_request_ip(request)}",
+                  purpose="consume-scope",
+                  settings=settings,
+              )
+              if not _consume_rate_bucket(
+                  session,
+                  action="challenge_consume",
+                  scope_hash=consume_scope,
+                  limit=settings.web_rate_consume_limit,
+                  window_seconds=settings.web_rate_consume_window_seconds,
+                  now=now,
+              ):
+                  session.commit()
+                  raise HTTPException(
+                      status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                      detail={"code": "rate_limited"},
+                  )
+              challenge = session.scalar(
+'''
+          if consume_anchor not in text:
+              raise SystemExit('consume anchor missing')
+          text = text.replace(consume_anchor, consume_replacement, 1)
+          text = text.replace('''    if challenge is None:
+              return ConsumedChallenge(False, "invalid")
+''', '''    if challenge is None:
+              session.commit()
+              return ConsumedChallenge(False, "invalid")
+''', 1)
+          service.write_text(text)
+
+          tests = Path('backend/tests/test_web_auth.py')
+          text = tests.read_text()
+          addition = '''
+
+          def test_status_polling_rate_limit_is_postgres_backed(client, clean_database):
+              started = _start(client)
+              path = f"/web/api/auth/challenges/{started['challenge_id']}"
+              for _ in range(30):
+                  response = client.get(path, headers=WEB_ORIGIN_HEADERS)
+                  assert response.status_code == 200
+              limited = client.get(path, headers=WEB_ORIGIN_HEADERS)
+              assert limited.status_code == 429
+
+
+          def test_consume_rate_limit_is_postgres_backed(client, clean_database):
+              started = _start(client)
+              for _ in range(10):
+                  response = _consume(client, started)
+                  assert response.status_code == 200
+              limited = _consume(client, started)
+              assert limited.status_code == 429
+
+
+          def test_bot_code_bruteforce_is_rate_limited(client, create_user, auth_headers):
+              create_user()
+              for value in range(10):
+                  response = _approve(client, auth_headers, f"{value:06d}")
+                  assert response.status_code == 200
+                  assert response.json() == {"approved": False}
+              limited = _approve(client, auth_headers, "999999")
+              assert limited.status_code == 200
+              assert limited.json() == {"approved": False}
+          '''
+          tests.write_text(text + addition)
+          PY
+          rm .github/workflows/web001a-hardening-step1.yml
+      - name: Validate and push
+        run: |
+          python -m pip install 'ruff>=0.9,<1'
+          ruff check --fix backend/app/config.py backend/app/services/web_auth.py backend/tests/test_web_auth.py
+          ruff check backend/app/config.py backend/app/services/web_auth.py backend/tests/test_web_auth.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/app/config.py backend/app/services/web_auth.py backend/tests/test_web_auth.py .github/workflows/web001a-hardening-step1.yml
+          git diff --cached --check
+          git commit -m 'fix: harden WEB auth rate limits [hardening-1]'
+          git push origin HEAD:feat/web001a-auth-session
