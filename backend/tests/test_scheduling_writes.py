@@ -217,7 +217,7 @@ def test_booking_preserves_overlap_and_key_conflict_while_open_by_default(
         client,
         headers,
         client_public_name="Мария",
-        starts_at="2026-07-18T10:45:00+02:00",
+        starts_at="2026-07-18T08:00:00+02:00",
         idempotency_key="booking-outside",
     )
     assert outside_suggestion_window.status_code == 200, outside_suggestion_window.text
