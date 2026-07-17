@@ -296,3 +296,22 @@ def test_status_reports_expiry_without_mutating_challenge(client, clean_database
         challenge = session.get(WebLoginChallenge, challenge_id)
         assert challenge is not None
         assert challenge.status == "pending"
+
+
+def test_only_one_pending_challenge_per_browser(client, clean_database):
+    first = _start(client)
+    second = _start(client)
+
+    with get_session_factory()() as session:
+        first_row = session.get(WebLoginChallenge, first["challenge_id"])
+        second_row = session.get(WebLoginChallenge, second["challenge_id"])
+        assert first_row is not None
+        assert second_row is not None
+        assert first_row.status == "denied"
+        assert second_row.status == "pending"
+        pending = session.scalars(
+            select(WebLoginChallenge).where(
+                WebLoginChallenge.status == "pending"
+            )
+        ).all()
+        assert len(pending) == 1
