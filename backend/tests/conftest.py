@@ -8,15 +8,17 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+TEST_INTERNAL_API_KEY = "i" * 64
+TEST_WEB_AUTH_HMAC_KEY = "w" * 64
+
 os.environ.setdefault("APP_TIMEZONE", "Europe/Berlin")
 os.environ.setdefault(
-    "DATABASE_URL", "postgresql+psycopg://nails_app:nails_test@127.0.0.1:55432/nails_test"
+    "DATABASE_URL",
+    "postgresql+psycopg://nails_app:nails_test@127.0.0.1:55432/nails_test",
 )
-os.environ.setdefault(
-    "INTERNAL_API_KEY", "test-only-internal-api-key-0000000000000000"
-)
+os.environ.setdefault("INTERNAL_API_KEY", TEST_INTERNAL_API_KEY)
 os.environ.setdefault("WEB_AUTH_ENABLED", "true")
-os.environ.setdefault("WEB_AUTH_HMAC_KEY", "test-only-web-auth-hmac-key-000000000000000000")
+os.environ.setdefault("WEB_AUTH_HMAC_KEY", TEST_WEB_AUTH_HMAC_KEY)
 os.environ.setdefault("WEB_ALLOWED_HOSTS", "testserver")
 os.environ.setdefault("WEB_ALLOWED_ORIGINS", "https://testserver")
 
@@ -25,7 +27,6 @@ from app.main import app  # noqa: E402
 from app.models import AvailabilityInterval, Service, User, UserRole  # noqa: E402
 from app.services.normalization import normalize_public_name  # noqa: E402
 
-TEST_INTERNAL_API_KEY = "test-only-internal-api-key-0000000000000000"
 WEB_ORIGIN_HEADERS = {"Origin": "https://testserver"}
 
 
