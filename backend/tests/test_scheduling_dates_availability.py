@@ -186,7 +186,7 @@ def test_schedule_can_be_corrected_without_restarting_onboarding(
 
 
 @pytest.mark.usefixtures("clean_database")
-def test_schedule_change_cannot_displace_existing_booking(
+def test_suggestion_window_change_does_not_displace_existing_booking(
     client: TestClient,
     create_user: Callable,
     create_service: Callable,
@@ -215,14 +215,14 @@ def test_schedule_change_cannot_displace_existing_booking(
             "client_public_name": "Анна",
             "service_name": "Маникюр",
             "starts_at": "2026-07-17T12:00:00+02:00",
-            "idempotency_key": "test-schedule-conflict",
+            "idempotency_key": "test-schedule-window-change",
         },
     )
     assert booking.status_code == 200, booking.text
 
     response = client.put(
         "/api/v1/scheduling/availability",
-        headers=auth_headers(request_id="conflicting-schedule-change"),
+        headers=auth_headers(request_id="suggestion-window-change"),
         json={
             "days": [
                 {
@@ -233,6 +233,61 @@ def test_schedule_change_cannot_displace_existing_booking(
             ]
         },
     )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["days"][0]["changed"] is True
+    assert response.json()["days"][0]["availability"][0]["end_time"] == "13:00:00"
+
+
+@pytest.mark.usefixtures("clean_database")
+def test_day_off_change_cannot_displace_existing_booking(
+    client: TestClient,
+    create_user: Callable,
+    create_service: Callable,
+    create_availability: Callable,
+    auth_headers: Callable,
+) -> None:
+    user = create_user()
+    create_service(user.id)
+    create_availability(
+        user.id,
+        day=date(2026, 7, 17),
+        start_time=time(11, 0),
+        end_time=time(20, 0),
+    )
+    created_client = client.post(
+        "/api/v1/scheduling/clients",
+        headers=auth_headers(),
+        json={"public_name": "Анна", "phone": None},
+    )
+    assert created_client.status_code == 200, created_client.text
+    booking = client.post(
+        "/api/v1/scheduling/bookings",
+        headers=auth_headers(request_id="booking-before-day-off"),
+        json={
+            "client_public_name": "Анна",
+            "service_name": "Маникюр",
+            "starts_at": "2026-07-17T12:00:00+02:00",
+            "idempotency_key": "test-day-off-conflict",
+        },
+    )
+    assert booking.status_code == 200, booking.text
+
+    response = client.put(
+        "/api/v1/scheduling/availability",
+        headers=auth_headers(request_id="conflicting-day-off-change"),
+        json={
+            "days": [
+                {
+                    "day": "2026-07-17",
+                    "state": "unavailable",
+                    "intervals": [],
+                    "note": "Выходной",
+                }
+            ]
+        },
+    )
+
     assert response.status_code == 409, response.text
     assert response.json()["detail"] == {
         "code": "availability_conflicts_with_bookings",
