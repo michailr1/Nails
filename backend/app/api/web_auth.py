@@ -33,7 +33,10 @@ from app.services.web_auth import (
 router = APIRouter(tags=["web-auth"])
 
 SessionDependency = Annotated[Session, Depends(get_db_session)]
-InternalIdentityDependency = Annotated[RequestIdentity, Depends(require_request_identity)]
+InternalIdentityDependency = Annotated[
+    RequestIdentity,
+    Depends(require_request_identity),
+]
 
 
 @router.post(
@@ -86,7 +89,10 @@ def consume(
     result = consume_challenge(session, request, body.challenge_id)
     if result.authenticated and result.session_token is not None:
         set_session_cookie(response, result.session_token)
-    return ChallengeConsumeResponse(authenticated=result.authenticated, status=result.status)
+    return ChallengeConsumeResponse(
+        authenticated=result.authenticated,
+        status=result.status,
+    )
 
 
 @router.post(
