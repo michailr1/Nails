@@ -32,6 +32,7 @@ from app.services.web_auth_limits import (
     enforce_approval_server_rate_limit,
     enforce_consume_rate_limit,
     enforce_status_rate_limit,
+    invalidate_pending_browser_challenge,
     read_bound_challenge_status,
 )
 
@@ -54,6 +55,7 @@ def create_challenge(
     response: Response,
     session: SessionDependency,
 ) -> ChallengeStartResponse:
+    invalidate_pending_browser_challenge(session, request)
     started = start_challenge(session, request)
     set_start_cookies(response, started)
     return ChallengeStartResponse(
