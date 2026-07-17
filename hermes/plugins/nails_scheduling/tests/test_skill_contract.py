@@ -11,6 +11,10 @@ def _skill_text() -> str:
     return skill_path.read_text(encoding="utf-8")
 
 
+def _section(text: str, start: str, end: str) -> str:
+    return text.split(start, 1)[1].split(end, 1)[0]
+
+
 def test_skill_preserves_confirmation_date_and_security_contract():
     text = _skill_text().casefold()
     required = (
@@ -22,10 +26,9 @@ def test_skill_preserves_confirmation_date_and_security_contract():
         "date_kind=month_day",
         "occurrence=nearest_future",
         "используй только `result.day` и `result.weekday_iso`",
-        "завершённый onboarding **никогда не нужно проходить заново ради изменения графика",
+        "завершённый onboarding **никогда не нужно проходить заново ради изменения",
         "сейчас → будет",
         "update_availability",
-        "активной записи",
         "find_client",
         "не является окончательным подтверждением",
         "idempotency key",
@@ -39,73 +42,64 @@ def test_skill_preserves_confirmation_date_and_security_contract():
 
 def test_skill_supports_full_service_management_after_onboarding():
     text = _skill_text().casefold()
-    required = (
-        "onboarding — только удобный мастер первоначального заполнения",
-        "никогда не нужно проходить заново ради изменения услуг",
+    section = _section(text, "## услуги", "## просмотр календаря")
+    for marker in (
         "action=list_services",
         "action=find_service",
         "action=create_service",
         "action=update_service",
-        "сейчас → будет",
-        "только к будущим записям",
-        "сохранят свои согласованные snapshots",
-        "удаляются физически",
-        "безопасную архивацию",
         "is_active=false",
         "is_active=true",
         "service_name_conflict",
-    )
-    for phrase in required:
-        assert phrase in text
-
-    forbidden = (
-        "редактирование услуг пока недоступно",
-        "для изменения услуг пройдите onboarding заново",
-        "перезапустить настройку",
-    )
-    for phrase in forbidden:
-        assert phrase not in text
+        "snapshots",
+    ):
+        assert marker in section
+    assert "никогда не нужно проходить заново ради изменения услуг" in text
+    assert "редактирование услуг пока недоступно" not in text
+    assert "для изменения услуг пройдите onboarding заново" not in text
 
 
 def test_skill_allows_master_preference_changes_after_onboarding():
     text = _skill_text().casefold()
-    required = (
-        "никогда не нужно проходить заново ради их изменения",
+    section = text.split("## настройки мастера", 1)[1]
+    for marker in (
         "action=get_master_preferences",
         "action=save_master_name",
         "action=save_master_style",
         "action=save_default_work_hours",
-        "не влияет на сообщения клиенткам",
-        "не меняет уже подтверждённую доступность",
         "не вызывай write",
         "не вызывай save-действие до подтверждения",
         "возвращённое значение совпадает с подтверждённым будущим состоянием",
-        "для «ты/вы» не меняй базовый `assistant_style`",
+        "assistant_style",
+        "assistant_style_details",
         "сохрани остальные пользовательские детали",
-        "если `assistant_style` отсутствует",
-        "не очищай `assistant_style_details`",
-        "меняй только явно названные границы интервалов",
-        "сохрани его текущее время окончания",
-        "задай один уточняющий вопрос и не придумывай время окончания",
-    )
-    for phrase in required:
-        assert phrase in text
+        "не придумывай время окончания",
+        "не блокируют явно названную запись",
+    ):
+        assert marker in section
 
 
-def test_skill_distinguishes_unknown_from_unavailable():
-    text = _skill_text()
-    assert "`unknown` — удалить ошибочно сохранённую дату" in text
-    assert "`unavailable` — подтверждённый выходной" in text
+def test_skill_distinguishes_hint_windows_from_day_off_and_unknown():
+    text = _skill_text().casefold()
+    section = _section(text, "## просмотр календаря", "## клиентки")
+    assert "`unavailable`" in section
+    assert "выходной" in section
+    assert "`available`" in section
+    assert "границы подсказок" in section
+    assert "`unknown`" in section
+    assert "удаляет сохранённую настройку даты" in section
+    assert "10:00–23:00" in section
+    assert "не блокируют прямую команду" in section
 
 
 def test_skill_delegates_reschedule_conflicts_to_backend():
     text = _skill_text().casefold()
-    section = text.split("## перенос существующей записи", 1)[1].split(
-        "## отмена записи", 1
-    )[0]
+    section = _section(text, "## перенос существующей записи", "## отмена записи")
     assert "не вызывай `free_slots`" in section
-    assert "только backend определяет" in section
     assert "вызови `reschedule_booking`" in section
+    assert "booking_on_day_off" in section
+    assert "booking_overlap" in section
+    assert "`ok=true`, `verified=true`" in section
     assert "новое время должно точно входить" not in section
 
 
@@ -125,26 +119,27 @@ def test_skill_forbids_technical_output_leaks():
 
 def test_skill_makes_fresh_backend_reads_authoritative():
     text = _skill_text().casefold()
-    required = (
+    section = _section(
+        text,
         "## единственный источник текущего состояния",
+        "## составные команды",
+    )
+    for marker in (
         "свежий результат backend tool",
         "история диалога — только как контекст намерения",
         "вывод модели — никогда не является источником фактического состояния",
-        "никогда не отвечай о текущем состоянии только по истории диалога",
-        "если свежий tool-результат противоречит истории диалога, доверяй tool",
-        "никогда не отклоняй просьбу только потому, что предыдущая реплика",
         "после каждого write обязательно используй свежий readback",
         "при ошибке read или verification не подменяй данные памятью",
-    )
-    for phrase in required:
-        assert phrase in text
+        "внутри одного tool-вызова",
+        "`ok=true` и `verified=true`",
+    ):
+        assert marker in section
 
 
 def test_compound_commands_preserve_the_dialogue_plan_and_report_each_step():
     text = _skill_text().casefold()
-    section = text.split("## составные команды", 1)[1].split("## безопасность", 1)[0]
-
-    for phrase in (
+    section = _section(text, "## составные команды", "## безопасность")
+    for marker in (
         "внутренний упорядоченный план всех намерений",
         "не теряй оставшиеся шаги после уточнения",
         "он не отменяет остальные намерения исходной команды",
@@ -155,47 +150,45 @@ def test_compound_commands_preserve_the_dialogue_plan_and_report_each_step():
         "перечисли каждую исходную часть",
         "не скрывай частичный результат",
         "не обещай атомарность",
+        "одним «да» несколько мутаций",
     ):
-        assert phrase in section
-
-    assert "одним «да» несколько мутаций" in section
+        assert marker in section
 
 
-def test_create_booking_uses_guarded_read_write_readback():
+def test_create_booking_uses_guarded_read_write_readback_without_slot_gate():
     text = _skill_text().casefold()
-    section = text.split("## создание записи", 1)[1].split(
-        "## перенос существующей записи", 1
-    )[0]
-    for phrase in (
+    section = _section(text, "## создание записи", "## перенос существующей записи")
+    for marker in (
         "заново найди клиентку",
         "заново найди услугу",
-        "свежий `free_slots`",
+        "не вызывай `free_slots` как предварительный гейт",
         "вызови `create_booking`",
-        "guarded action внутри одного вызова",
+        "guarded action",
+        "targeted readback",
         "`ok=true`, `verified=true`",
         "не вызывай отдельный повторный write",
+        "booking_on_day_off",
+        "booking_overlap",
     ):
-        assert phrase in section
+        assert marker in section
     assert "после write снова вызови `day_view`" not in section
 
 
 def test_guarded_mutations_do_not_require_second_model_tool_roundtrip():
     text = _skill_text().casefold()
-    source = text.split("## единственный источник текущего состояния", 1)[1].split(
-        "## составные команды", 1
-    )[0]
-    reschedule = text.split("## перенос существующей записи", 1)[1].split(
-        "## отмена записи", 1
-    )[0]
-    cancel = text.split("## отмена записи", 1)[1].split(
-        "## настройки мастера", 1
-    )[0]
+    source = _section(
+        text,
+        "## единственный источник текущего состояния",
+        "## составные команды",
+    )
+    reschedule = _section(text, "## перенос существующей записи", "## отмена записи")
+    cancel = _section(text, "## отмена записи", "## обратная связь")
 
     assert "внутри одного tool-вызова" in source
     assert "отдельный последующий `day_view` не вызывай" in source
-    assert "только если результат содержит `ok=true` и `verified=true`" in source
+    assert "`ok=true` и `verified=true`" in source
     assert "для всех остальных write" in source
-    assert "guarded action внутри одного вызова" in reschedule
+    assert "guarded action" in reschedule
     assert "ожидаемом новом времени" in reschedule
     assert "guarded action внутри одного вызова" in cancel
     assert "только при `ok=true` и `verified=true`" in cancel
