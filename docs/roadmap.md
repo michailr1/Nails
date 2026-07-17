@@ -1,280 +1,150 @@
 # Roadmap
 
-Дата актуализации: **13 июля 2026 года**.
+Дата актуализации: **17 июля 2026 года**.
 
-План построен вертикальными срезами. Каждый срез заканчивается проверяемой функцией.
+Roadmap хранит только порядок продуктовых этапов. Фактический SHA, production runtime и активный PR смотреть в [`context/current.md`](context/current.md); завершённые возможности — в [`status.md`](status.md).
 
 ## Статусы
 
-- ✅ завершено и подтверждено в production;
-- 🧪 установлено, остался acceptance test;
-- 🟡 частично выполнено;
-- ▶️ следующий активный срез;
+- ✅ завершено и подтверждено;
+- 🟡 выполняется;
 - ⬜ запланировано.
 
 ## Текущая точка
 
 ```text
-NAILS-001  🟡 базовые правила согласованы
-NAILS-002A ✅ backend foundation production
-NAILS-002B ✅ onboarding API production
-NAILS-002C 🧪 restricted Hermes tool установлен, Telegram acceptance впереди
-NAILS-002D ▶️ production onboarding skill
-NAILS-002E ⬜ scheduling happy path
-NAILS-002F ⬜ automated backup and verified restore
+NAILS-001  ✅ базовые продуктовые и security-правила
+NAILS-002  ✅ сквозной master scheduling и backup/restore
+Пилот      ✅ живое тестирование двумя мастерами завершено
+NAILS-003  🟡 корректировка ограничений рабочего времени
+Web UI     ⬜ интерфейс мастера
+ADR-004    ⬜ детерминированный клиентский контур
 ```
 
-Production:
+## NAILS-001 — процессы и инварианты ✅
+
+Зафиксированы и сохраняются:
+
+- PostgreSQL как источник истины;
+- owner scoping;
+- restricted tools без shell, SSH, direct SQL и arbitrary HTTP;
+- trusted Telegram identity только из gateway context;
+- обязательное подтверждение каждой мутации;
+- snapshots цены, длительности и buffers в записи;
+- приватность внутренних полей клиентки;
+- точный backend date resolver и IANA timezone;
+- backup перед мутирующим deploy и проверенный restore;
+- candidate exact SHA → fast-forward того же SHA → finalize;
+- один постоянный `ops/deploy/deploy.sh`.
+
+## NAILS-002 — рабочий контур мастера ✅
+
+Завершены и приняты:
+
+- onboarding с сохранением state/draft;
+- настройки имени, стиля и обычных часов;
+- услуги: создание, изменение, архив и восстановление;
+- доступность по конкретным датам;
+- несколько рабочих интервалов в один день;
+- просмотр дня и свободных окон;
+- клиентские карточки с дополнительными private fields;
+- exact/candidate поиск и защита от случайных дублей;
+- создание записей;
+- перенос без самоблокировки;
+- мягкая отмена;
+- fresh-read/readback и verified guarded mutations;
+- ежедневные backup, isolated restore-test, retention и Telegram archive;
+- ограниченный живой пилот.
+
+## NAILS-003 — ограничения рабочего времени 🟡
+
+Активный issue: #104.
+
+### Slice 1 — preview перед изменением 🟡
+
+Цель: до подтверждения показать мастеру итоговый график и записи, которые конфликтуют с изменением.
+
+Используется существующая модель `availability_intervals`; новые таблицы и миграции не требуются.
+
+Flow:
 
 ```text
-host: de.funti.cc
-repository HEAD: ae761e5042e2af4685df7bdb1de9485e96bdac74
-backend runtime: 40b25ff5fe519eda8602d0eeac7d06a1b191138d
-Hermes plugin runtime: d8264266256f6fc2c53b6eebd3b9bb6bbc722f7c
-Alembic: 0002 (head)
+resolve_date
+→ day_view
+→ preview_availability
+→ сводка «сейчас → будет»
+→ явное подтверждение
+→ update_availability
+→ day_view readback
 ```
 
-Подробности:
+Критерии:
 
-- [`status.md`](status.md)
-- [`onboarding-api.md`](onboarding-api.md)
-- [`hermes-onboarding-plugin.md`](hermes-onboarding-plugin.md)
-- [`deployments/2026-07-13-nails-002b.md`](deployments/2026-07-13-nails-002b.md)
-- [`deployments/2026-07-13-nails-002c.md`](deployments/2026-07-13-nails-002c.md)
+- preview read-only;
+- owner-scoped;
+- использует ту же авторитетную логику, что write;
+- показывает конкретные конфликтующие записи с учётом buffers;
+- при конфликте write не выполняется;
+- существующие записи не переносятся и не отменяются автоматически;
+- повторный write остаётся идемпотентным.
 
-## NAILS-001 — процессы и правила 🟡
+### Следующие slices NAILS-003 ⬜
 
-Зафиксированы:
+Проектируются только после production acceptance Slice 1:
 
-- роли `master` и `admin`;
-- PostgreSQL как источник истины;
-- разделение public/internal data;
-- snapshot стоимости;
-- обязательный IANA timezone;
-- confirmations;
-- backup/restore как условие пилота;
-- Google Calendar как optional one-way export;
-- запрет shell and direct SQL for Hermes.
+- удобное добавление частичного закрытого интервала без ручного пересчёта мастером;
+- исправление и снятие ранее заданного ограничения;
+- единая семантика availability для просмотра окон, создания и переноса;
+- проверка поведения обычных часов и исключений конкретной даты;
+- week/period UX только после стабилизации базовых операций.
 
-Финальный checklist закрывается после первого полного end-to-end onboarding.
+Issue #100 / ADR-006 рассматривается отдельно. Переход к модели «открыто по умолчанию» не считается частью Slice 1 и требует отдельного архитектурного решения и regression-набора вокруг reservation checks.
 
-## NAILS-002 — сквозной happy path
+## Web-интерфейс мастера ⬜
 
-Цель: мастер проходит возобновляемое интервью, создаёт минимальные данные, спрашивает окна, создаёт тестовую запись и видит день.
+Начинается только после завершения NAILS-003.
 
-### NAILS-002A — backend foundation ✅
+Минимальный контур:
 
-В production:
+- безопасный вход мастера;
+- календарь и рабочие интервалы;
+- услуги;
+- клиентские карточки;
+- создание, перенос и отмена записей;
+- те же backend-инварианты и confirmation semantics, что в Telegram;
+- web не становится вторым источником бизнес-логики.
 
-- Python 3.12 + FastAPI;
-- SQLAlchemy 2 + Alembic;
-- PostgreSQL 17;
-- Pydantic Settings;
-- Ruff and pytest;
-- Docker Compose;
-- `/health`, `/ready`;
-- owner scoping;
-- restricted PostgreSQL role `nails_app`;
-- clean/repeated migration CI;
-- production-like Compose smoke-test.
+Точный scope фиксируется отдельным ADR/issue перед реализацией.
 
-Issue #3 closed.
+## Клиентский контур ADR-004 ⬜
 
-### NAILS-002B — onboarding API ✅
+Начинается только после корректировки рабочего времени и web-интерфейса мастера.
 
-В production:
+Границы:
 
-- internal authentication boundary;
-- active user and `master/admin` role checks;
-- start/get/pause/resume/complete;
-- drafts: schedule, services, buffers, bookings;
-- separate draft and confirmed payload;
-- revisions;
-- ordered confirmations;
-- downstream invalidation;
-- idempotent confirmation/completion;
-- safe audit;
-- migration `0002`;
-- restart persistence.
+- отдельный детерминированный бот без разговорной LLM-поверхности;
+- узкий публичный API;
+- self-booking только по правилам мастера;
+- отдельная abuse protection;
+- внутренние aliases и notes клиентке недоступны;
+- подтверждение мастером определяется продуктовым сценарием;
+- multi-master subscription и tenant management остаются после MVP.
 
-Production smoke confirmed authorization, revision behavior, pause/resume, idempotency, audit privacy and cleanup.
+## После MVP ⬜
 
-Issue #4 closed.
-
-### NAILS-002C — restricted Hermes onboarding tool 🧪
-
-Installed in production:
-
-- profile-local plugin `nails-onboarding` version `0.1.0`;
-- dedicated toolset `nails_onboarding`;
-- Telegram ID only from trusted task-local gateway context;
-- identity absent from model-visible arguments;
-- fixed loopback API URL;
-- no generic HTTP or arbitrary headers;
-- safe mapping of authorization/domain errors;
-- limited retry with runtime request ID;
-- profile-local secret configuration;
-- updated SOUL distinguishing draft, confirmed onboarding block and active working data;
-- exact Telegram whitelist:
-  - `clarify`;
-  - `image_gen`;
-  - `nails_onboarding`;
-  - `skills`;
-  - `tts`;
-  - `vision`.
-
-Production synthetic smoke confirmed:
-
-- plugin discovery and load;
-- identity spoofing rejection;
-- non-Telegram fail-closed;
-- unknown/inactive no-disclosure behavior;
-- two-user owner isolation;
-- backend loopback access;
-- cleanup `0|0|0`;
-- no side effects on Docker, backend, Amnezia or default Hermes profile.
-
-Remaining acceptance before issue #5 closes:
-
-- real account A starts/pause/resume through Telegram;
-- real account B starts separately and cannot see A state;
-- gateway restart between pause and resume;
-- text attempt to request another user's state cannot alter trusted identity;
-- final log privacy check.
-
-### NAILS-002D — production skill `nails-onboarding` ▶️
-
-Already available:
-
-- profile SOUL;
-- restricted production tool;
-- honest separation of draft/confirmed/active data;
-- API-backed pause/resume.
-
-Next implementation:
-
-- friendly introduction and capability explanation;
-- explicit consent before starting interview;
-- flow schedule → services → buffers → bookings;
-- one clear question at a time;
-- short resumable sessions;
-- summaries before confirmation;
-- correction and reconfirmation UX;
-- handling of safe domain errors;
-- completion summary that does not claim working schedule activation;
-- protected feedback flow.
-
-### NAILS-002E — scheduling happy path ⬜
-
-- materialize confirmed onboarding blocks;
-- minimal client card;
-- normalized-name search;
-- availability calculation;
-- overlap prevention;
-- booking with price snapshot;
-- compact day view;
-- restricted scheduling tools;
-- control queries «что у меня в четверг?» and «какие окна завтра?».
-
-### NAILS-002F — backup and restore ⬜
-
-- scheduled PostgreSQL backups;
-- copy outside active DB and single VPS disk;
-- failure logging/alerting;
-- restore into separate database;
-- documented restore result;
-- no real-data pilot before successful restore-test.
-
-### Контрольная точка NAILS-002
-
-NAILS-002 завершён, когда:
-
-- full onboarding runs through Telegram role `admin`;
-- state survives Hermes/backend restart;
-- identity spoofing blocked;
-- users isolated by owner;
-- confirmed blocks materialized;
-- scheduling uses materialized data;
-- overlap blocked by backend;
-- Hermes has no shell, SSH, direct SQL or arbitrary HTTP;
-- backup restored successfully;
-- synthetic data removed.
-
-## NAILS-003 — управление записями ⬜
-
-- transfer and cancellation;
-- time blocks;
-- confirmations;
-- idempotency;
-- delay conflict display;
-- week/period views;
-- feedback retention/deletion.
-
-## NAILS-004 — расширенная клиентская база ⬜
-
-- internal aliases and notes;
-- exact/fuzzy search;
-- typo and duplicate warning;
-- separate public-name confirmation;
+- Google Calendar one-way export;
+- no-show и завершение визита;
+- фактическая итоговая цена;
+- отчёты по выручке;
 - client service overrides;
-- personal duration/price;
-- automatic duplicate merge prohibited.
-
-## NAILS-005 — повседневные сценарии ⬜
-
-- «как обычно»;
-- no-show;
-- morning summary;
-- visit completion;
-- actual final price;
-- revenue reports;
-- pilot metrics.
-
-## NAILS-006 — Google Calendar ⬜
-
-- separate calendar and credentials;
-- one-way export;
-- retries/backoff;
-- reconciliation;
-- calendar failure isolation.
-
-## NAILS-007 — расширенное тестирование ⬜
-
-- double booking;
-- occupied transfer;
-- ambiguous names;
-- public/internal name isolation;
-- role and owner isolation;
-- day boundary and DST;
-- historical price invariance;
-- no-show/delay cases;
-- feedback expiry;
-- calendar failure isolation;
-- verified restore.
-
-## NAILS-008 — пилот ⬜
-
-- parallel old/new schedule;
-- reconciliation;
-- feedback review;
-- pilot metrics;
-- duration corrections;
-- backup monitoring;
-- transition only after explicit master trust.
-
-## После MVP
-
-- separate public client bot — детерминированный бот без LLM (ADR-004), не публичный профиль Hermes;
-- self-booking with master confirmation;
-- separate abuse protection;
-- administrative duplicate merge;
-- multi-master subscription and tenant management.
+- административное объединение дублей;
+- multi-master SaaS-контур.
 
 ## Ближайший порядок
 
-1. Real Telegram acceptance for NAILS-002C and close issue #5.
-2. NAILS-002D — production onboarding skill.
-3. NAILS-002E — materialization and scheduling happy path.
-4. NAILS-002F — automated backup and verified restore.
-5. Full synthetic end-to-end test and cleanup.
-6. Limited master pilot.
+1. Завершить PR #105 и production acceptance preview-flow.
+2. Спроектировать следующий минимальный slice issue #104 на основании живого теста.
+3. Закрыть NAILS-003 полностью.
+4. Зафиксировать scope web-интерфейса мастера.
+5. Реализовать и принять web-интерфейс.
+6. Вернуться к ADR-004 и клиентскому контуру.
