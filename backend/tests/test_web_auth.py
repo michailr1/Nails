@@ -99,7 +99,6 @@ def test_challenge_is_one_time_and_bound_to_original_browser(
     other.cookies.set(
         "__Host-nails_csrf",
         str(started["csrf_token"]),
-        secure=True,
     )
     wrong_browser = other.post(
         "/web/api/auth/challenges/consume",
@@ -122,12 +121,25 @@ def test_unknown_code_and_inactive_user_do_not_create_session(
     create_user,
     auth_headers,
 ):
-    create_user(is_active=False)
+    user = create_user()
     started = _start(client)
 
     unknown = _approve(client, auth_headers, "000000")
     assert unknown.status_code == 200
     assert unknown.json() == {"approved": False}
+
+    with get_session_factory()() as session:
+        stored = session.get(User, user.id)
+        assert stored is not None
+        stored.is_active = False
+        session.commit()
+
+    denied = _approve(
+        client,
+        auth_headers,
+        str(started["confirmation_code"]),
+    )
+    assert denied.status_code == 403
 
     consume = _consume(client, started)
     assert consume.json()["authenticated"] is False
