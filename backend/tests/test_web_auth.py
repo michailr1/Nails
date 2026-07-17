@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from conftest import WEB_ORIGIN_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.db import get_session_factory
 from app.models import AuditEvent, User
 from app.web_auth_models import WebLoginChallenge, WebSession
-from conftest import WEB_ORIGIN_HEADERS
 
 
 def _start(client: TestClient) -> dict[str, object]:

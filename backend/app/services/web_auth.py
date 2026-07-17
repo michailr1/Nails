@@ -64,7 +64,7 @@ def _keyed_hash(
 ) -> str:
     active_settings = settings or _settings()
     key = active_settings.web_auth_hmac_key.get_secret_value().encode("utf-8")
-    message = f"{purpose}\x1f{value}".encode("utf-8")
+    message = f"{purpose}\x1f{value}".encode()
     return hmac.new(key, message, hashlib.sha256).hexdigest()
 
 
