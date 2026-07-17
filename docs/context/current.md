@@ -2,9 +2,9 @@
 
 Дата фиксации: **17 июля 2026 года**.
 
-Перед работой прочитать `AGENTS.md`, operational-документы, ADR-005, ADR-006, `docs/design/lovable-web-baseline.md` и `docs/plans/WEB-001-implementation-plan.md`.
+Перед работой прочитать `AGENTS.md`, `docs/operations/engineering-principles.md`, остальные operational-документы, ADR-005, ADR-006, `docs/design/lovable-web-baseline.md` и `docs/plans/WEB-001-implementation-plan.md`.
 
-Не полагаться на память: GitHub проверять по API, production — фактическим preflight.
+Не полагаться на память: GitHub проверять по API, production — фактическим preflight. **Production state не предполагать**.
 
 ## Рабочий контракт
 
@@ -13,14 +13,22 @@ repository: michailr1/Nails
 GitHub main: 11dd79d6a8d7dfecd2beb5211b98e73c91e96e0d
 production host: de.funti.cc
 production repo: /opt/nails/repo
+production branch: main
 backend env: /opt/nails/.env
 internal API: http://127.0.0.1:8210
 health: /health
 readiness: /ready
 timezone: Europe/Moscow
+Hermes plugins: nails-onboarding, nails-scheduling
 ```
 
 Основной агент пишет код, тесты и документацию, управляет GitHub, review, CI и fast-forward merge. VPS-агент только выполняет утверждённый runbook и не меняет код или GitHub.
+
+Обязательные правила:
+
+- один живой Telegram-тест за раз;
+- в GitHub используются только роли `master`, `admin`, `client`, без персональных имён;
+- имя интерфейса и помощника — «Нэйли».
 
 Релизы выполняются постоянным `ops/deploy/deploy.sh <exact-SHA>` по схеме PR → CI → candidate exact SHA → fast-forward того же SHA → finalize.
 
