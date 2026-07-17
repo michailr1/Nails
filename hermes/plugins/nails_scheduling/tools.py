@@ -66,6 +66,35 @@ def _preview_values(args: dict[str, Any]) -> dict[str, Any]:
     return {"days": _availability_days(args.get("days"))}
 
 
+def _sanitize_preview_result(result: Any) -> dict[str, Any]:
+    if not isinstance(result, dict) or not isinstance(result.get("days"), list):
+        raise ValueError("invalid availability preview")
+    safe_days = []
+    for day in result["days"]:
+        if not isinstance(day, dict):
+            raise ValueError("invalid availability preview day")
+        current = day.get("current_availability")
+        proposed = day.get("proposed_availability")
+        conflicts = day.get("conflicts")
+        if not isinstance(current, list) or not isinstance(proposed, list):
+            raise ValueError("invalid availability preview intervals")
+        if not isinstance(conflicts, list):
+            raise ValueError("invalid availability preview conflicts")
+        safe_days.append(
+            {
+                "day": day["day"],
+                "weekday_iso": day["weekday_iso"],
+                "availability_known": day["availability_known"],
+                "current_availability": current,
+                "proposed_availability": proposed,
+                "changed": day["changed"],
+                "can_apply": day["can_apply"],
+                "conflicts": conflicts,
+            }
+        )
+    return {"days": safe_days}
+
+
 def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
     del kwargs
     try:
@@ -150,11 +179,14 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             raw_result = response.get("result")
             if action == "update_client" and not isinstance(raw_result, dict):
                 raise ValueError("invalid client update result")
-            safe_result = (
-                raw_result
-                if action == "update_client"
-                else _sanitize_success(action, raw_result)
-            )
+            if action == "preview_availability":
+                safe_result = _sanitize_preview_result(raw_result)
+            else:
+                safe_result = (
+                    raw_result
+                    if action == "update_client"
+                    else _sanitize_success(action, raw_result)
+                )
             if action in _VERIFIED_ACTIONS:
                 if not isinstance(raw_result, dict) or raw_result.get("verified") is not True:
                     raise ValueError("verified mutation result is required")
