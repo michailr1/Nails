@@ -139,7 +139,8 @@ def test_unknown_code_and_inactive_user_do_not_create_session(
         auth_headers,
         str(started["confirmation_code"]),
     )
-    assert denied.status_code == 403
+    assert denied.status_code == 200
+    assert denied.json() == {"approved": False}
 
     consume = _consume(client, started)
     assert consume.json()["authenticated"] is False
@@ -315,3 +316,32 @@ def test_only_one_pending_challenge_per_browser(client, clean_database):
             )
         ).all()
         assert len(pending) == 1
+
+
+def test_web_approval_identity_failures_are_neutral(
+    client,
+    create_user,
+    auth_headers,
+):
+    unknown = _approve(client, auth_headers, "000000", telegram_user_id=999999999)
+    assert unknown.status_code == 200
+    assert unknown.json() == {"approved": False}
+
+    create_user(telegram_user_id=100000002, is_active=False)
+    inactive = _approve(client, auth_headers, "000000", telegram_user_id=100000002)
+    assert inactive.status_code == 200
+    assert inactive.json() == {"approved": False}
+
+
+def test_invalid_session_response_clears_cookie(client, clean_database):
+    client.cookies.set("__Host-nails_session", "invalid-token")
+    response = client.get(
+        "/web/api/auth/session",
+        headers=WEB_ORIGIN_HEADERS,
+    )
+    assert response.status_code == 401
+    cookie_headers = response.headers.get_list("set-cookie")
+    assert any(
+        "__Host-nails_session=" in value and "Max-Age=0" in value
+        for value in cookie_headers
+    )
