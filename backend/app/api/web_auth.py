@@ -29,6 +29,11 @@ from app.services.web_auth import (
     set_start_cookies,
     start_challenge,
 )
+from app.services.web_auth_limits import (
+    enforce_approval_server_rate_limit,
+    enforce_consume_rate_limit,
+    enforce_status_rate_limit,
+)
 
 router = APIRouter(tags=["web-auth"])
 
@@ -68,6 +73,7 @@ def get_challenge_status(
     request: Request,
     session: SessionDependency,
 ) -> ChallengeStatusResponse:
+    enforce_status_rate_limit(session, request, challenge_id)
     challenge = challenge_status(session, request, challenge_id)
     return ChallengeStatusResponse(
         challenge_id=challenge.id,
@@ -86,6 +92,7 @@ def consume(
     response: Response,
     session: SessionDependency,
 ) -> ChallengeConsumeResponse:
+    enforce_consume_rate_limit(session, request, body.challenge_id)
     result = consume_challenge(session, request, body.challenge_id)
     if result.authenticated and result.session_token is not None:
         set_session_cookie(response, result.session_token)
@@ -104,6 +111,8 @@ def approve_from_telegram(
     session: SessionDependency,
     identity: InternalIdentityDependency,
 ) -> TelegramChallengeApproveResponse:
+    if not enforce_approval_server_rate_limit(session, identity):
+        return TelegramChallengeApproveResponse(approved=False)
     return TelegramChallengeApproveResponse(
         approved=approve_challenge(
             session,
