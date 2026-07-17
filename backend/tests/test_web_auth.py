@@ -126,7 +126,8 @@ def test_unknown_code_and_inactive_user_do_not_create_session(
     started = _start(client)
 
     unknown = _approve(client, auth_headers, "000000")
-    assert unknown.status_code == 403
+    assert unknown.status_code == 200
+    assert unknown.json() == {"approved": False}
 
     consume = _consume(client, started)
     assert consume.json()["authenticated"] is False
