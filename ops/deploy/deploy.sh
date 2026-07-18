@@ -28,7 +28,9 @@ SOURCE_REF="${NAILS_RELEASE_REF:-origin/main}"
 REPO="/opt/nails/repo"
 BACKEND_ENV="/opt/nails/.env"
 API_BASE="http://127.0.0.1:8210"
+WEB_BASE="http://127.0.0.1:8220"
 API_IMAGE="nails-nails-api:latest"
+WEB_IMAGE="nails-nails-web:latest"
 PROFILE="/root/.hermes/profiles/nails"
 HERMES_BIN="/usr/local/lib/hermes-agent/venv/bin/hermes"
 GATEWAY="hermes-gateway-nails.service"
@@ -45,7 +47,8 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 WORKTREE="/opt/nails/release-${STAMP}"
 RUNTIME_BACKUP="${PROFILE}/backups/deploy-${STAMP}"
 DB_BACKUP="${BACKUP_ROOT}/nails-before-deploy-${STAMP}.sql.gz"
-ROLLBACK_IMAGE="nails-nails-api:rollback-${STAMP}"
+ROLLBACK_API_IMAGE="nails-nails-api:rollback-${STAMP}"
+ROLLBACK_WEB_IMAGE="nails-nails-web:rollback-${STAMP}"
 
 log() { printf '== deploy %s: %s ==\n' "$STAMP" "$*"; }
 user_systemctl() { XDG_RUNTIME_DIR="$USER_RUNTIME_DIR" systemctl --user "$@"; }
@@ -57,7 +60,10 @@ compose() {
     "$@"
 }
 
-IMAGE_RETAGGED="false"
+API_IMAGE_RETAGGED="false"
+WEB_IMAGE_RETAGGED="false"
+WEB_IMAGE_EXISTED="false"
+WEB_CONTAINER_EXISTED="false"
 RUNTIME_MUTATED="false"
 
 restore_backup_runtime() {
@@ -89,21 +95,39 @@ restore_backup_runtime() {
   fi
 }
 
+restore_images() {
+  if [[ "$API_IMAGE_RETAGGED" == "true" ]]; then
+    docker image tag "$ROLLBACK_API_IMAGE" "$API_IMAGE" >/dev/null 2>&1
+    printf 'DEPLOY_API_IMAGE_TAG_RESTORED=true\n'
+  fi
+  if [[ "$WEB_IMAGE_RETAGGED" == "true" ]]; then
+    docker image tag "$ROLLBACK_WEB_IMAGE" "$WEB_IMAGE" >/dev/null 2>&1
+    printf 'DEPLOY_WEB_IMAGE_TAG_RESTORED=true\n'
+  elif [[ "$WEB_IMAGE_EXISTED" == "false" ]]; then
+    docker image rm "$WEB_IMAGE" >/dev/null 2>&1 || true
+  fi
+}
+
+restore_containers() {
+  compose up -d --no-deps --force-recreate --no-build nails-api >/dev/null 2>&1
+  if [[ "$WEB_CONTAINER_EXISTED" == "true" ]]; then
+    compose up -d --no-deps --force-recreate --no-build nails-web >/dev/null 2>&1
+  else
+    compose rm -sf nails-web >/dev/null 2>&1 || true
+  fi
+}
+
 on_error() {
   local exit_code=$?
   trap - ERR
   set +e
 
   log "FAILED (exit ${exit_code})"
-
-  if [[ "$IMAGE_RETAGGED" == "true" ]]; then
-    docker image tag "$ROLLBACK_IMAGE" "$API_IMAGE" >/dev/null 2>&1
-    printf 'DEPLOY_IMAGE_TAG_RESTORED=true\n'
-  fi
+  restore_images
 
   if [[ "$RUNTIME_MUTATED" == "true" ]]; then
-    log "rollback: restoring previous image, plugins, skills, backup timer and gateway"
-    compose up -d --no-deps --force-recreate --no-build nails-api >/dev/null 2>&1
+    log "rollback: restoring previous images, containers, plugins, skills, backup timer and gateway"
+    restore_containers
     [[ -d "${RUNTIME_BACKUP}/plugins.before" ]] && {
       rm -rf "${PROFILE}/plugins"
       cp -a "${RUNTIME_BACKUP}/plugins.before" "${PROFILE}/plugins"
@@ -120,13 +144,14 @@ on_error() {
   fi
 
   [[ -d "$RUNTIME_BACKUP" ]] && mv "$RUNTIME_BACKUP" "${PROFILE}/backups/deploy-failed-${STAMP}"
-  docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1
+  docker image rm "$ROLLBACK_API_IMAGE" >/dev/null 2>&1 || true
+  docker image rm "$ROLLBACK_WEB_IMAGE" >/dev/null 2>&1 || true
   git -C "$REPO" worktree remove --force "$WORKTREE" >/dev/null 2>&1
   exit "$exit_code"
 }
 trap on_error ERR
 
-wait_ready() {
+wait_api_ready() {
   for _ in $(seq 1 60); do
     if curl -fsS "${API_BASE}/ready" 2>/dev/null | grep -q '"ready"'; then
       return 0
@@ -134,6 +159,17 @@ wait_ready() {
     sleep 1
   done
   echo "ERROR: API did not become ready" >&2
+  return 1
+}
+
+wait_web_ready() {
+  for _ in $(seq 1 60); do
+    if curl -fsS "${WEB_BASE}/web-health" 2>/dev/null | grep -q '"ok"'; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: WEB did not become ready" >&2
   return 1
 }
 
@@ -182,12 +218,28 @@ cp -a "${PROFILE}/skills" "${RUNTIME_BACKUP}/skills.before"
 systemctl is-enabled nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-enabled.before" 2>/dev/null || true
 systemctl is-active nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-active.before" 2>/dev/null || true
 
-log "3. Сборка образа из точного дерева"
-docker image tag "$API_IMAGE" "$ROLLBACK_IMAGE"
-compose build --build-arg GIT_SHA="$RELEASE_SHA" nails-api >/dev/null
-IMAGE_RETAGGED="true"
+if docker image inspect "$WEB_IMAGE" >/dev/null 2>&1; then
+  WEB_IMAGE_EXISTED="true"
+fi
+if docker compose \
+  --project-directory "$REPO" \
+  --file "$REPO/compose.yaml" \
+  --env-file "$BACKEND_ENV" \
+  ps -q nails-web 2>/dev/null | grep -q .; then
+  WEB_CONTAINER_EXISTED="true"
+fi
+printf 'web_image_existed=%s web_container_existed=%s\n' "$WEB_IMAGE_EXISTED" "$WEB_CONTAINER_EXISTED"
 
-log "4. Проверка собранного образа ДО остановки runtime"
+log "3. Сборка образов из точного дерева"
+docker image tag "$API_IMAGE" "$ROLLBACK_API_IMAGE"
+API_IMAGE_RETAGGED="true"
+if [[ "$WEB_IMAGE_EXISTED" == "true" ]]; then
+  docker image tag "$WEB_IMAGE" "$ROLLBACK_WEB_IMAGE"
+  WEB_IMAGE_RETAGGED="true"
+fi
+compose build --build-arg GIT_SHA="$RELEASE_SHA" nails-api nails-web >/dev/null
+
+log "4. Проверка собранных образов ДО остановки runtime"
 docker run --rm -i --network none --read-only --tmpfs /tmp:size=16m \
   -e EXPECTED_SHA="$RELEASE_SHA" \
   -e APP_TIMEZONE=UTC \
@@ -211,21 +263,36 @@ app_paths = {getattr(route, "path", "") for route in app.routes}
 assert any(path.startswith("/api/v1/onboarding") for path in onboarding_paths), sorted(onboarding_paths)
 assert any(path.startswith("/api/v1/scheduling") for path in scheduling_paths), sorted(scheduling_paths)
 assert "/health" in app_paths and "/ready" in app_paths, sorted(app_paths)
-print("BUILT_IMAGE_OK=true")
+print("BUILT_API_IMAGE_OK=true")
 PY
 
-log "5. Остановка gateway и перезапуск только nails-api"
+docker run --rm --network none --read-only --tmpfs /var/cache/nginx:size=16m \
+  --tmpfs /var/run:size=1m --tmpfs /tmp:size=8m \
+  "$WEB_IMAGE" nginx -t >/dev/null
+WEB_BUILT_SHA="$(docker run --rm --network none "$WEB_IMAGE" sh -c 'printf %s "$NAILS_GIT_SHA"')"
+[[ "$WEB_BUILT_SHA" == "$RELEASE_SHA" ]] || die "WEB image built from wrong tree"
+printf 'BUILT_WEB_IMAGE_OK=true sha=%s\n' "$WEB_BUILT_SHA"
+
+log "5. Остановка gateway и перезапуск nails-api + nails-web"
 RUNTIME_MUTATED="true"
 user_systemctl stop "$GATEWAY"
-compose up -d --no-deps --force-recreate --no-build nails-api >/dev/null
-wait_ready
+compose up -d --no-deps --force-recreate --no-build nails-api nails-web >/dev/null
+wait_api_ready
+wait_web_ready
 RUNNING_SHA="$(
   compose exec -T nails-api \
     python -c 'import os; print(os.environ.get("NAILS_GIT_SHA", "unknown"))' \
     < /dev/null
 )"
 [[ "$RUNNING_SHA" == "$RELEASE_SHA" ]] || {
-  echo "ERROR: running container SHA mismatch: ${RUNNING_SHA}" >&2
+  echo "ERROR: running API container SHA mismatch: ${RUNNING_SHA}" >&2
+  exit 1
+}
+RUNNING_WEB_SHA="$(
+  compose exec -T nails-web sh -c 'printf %s "$NAILS_GIT_SHA"' < /dev/null
+)"
+[[ "$RUNNING_WEB_SHA" == "$RELEASE_SHA" ]] || {
+  echo "ERROR: running WEB container SHA mismatch: ${RUNNING_WEB_SHA}" >&2
   exit 1
 }
 
@@ -284,13 +351,14 @@ else
 fi
 
 mv "$RUNTIME_BACKUP" "${PROFILE}/backups/deploy-success-${STAMP}"
-docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
+docker image rm "$ROLLBACK_API_IMAGE" >/dev/null 2>&1 || true
+docker image rm "$ROLLBACK_WEB_IMAGE" >/dev/null 2>&1 || true
 trap - ERR
 
 if [[ "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]]; then
-  printf 'CANDIDATE_DEPLOY_OK=true candidate_sha=%s baseline_sha=%s running_sha=%s db_backup=%s\n' \
-    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_SHA" "$DB_BACKUP"
+  printf 'CANDIDATE_DEPLOY_OK=true candidate_sha=%s baseline_sha=%s running_sha=%s running_web_sha=%s db_backup=%s\n' \
+    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_SHA" "$RUNNING_WEB_SHA" "$DB_BACKUP"
 else
-  printf 'DEPLOY_OK=true sha=%s prev_sha=%s db_backup=%s\n' \
-    "$RELEASE_SHA" "$PREV_SHA" "$DB_BACKUP"
+  printf 'DEPLOY_OK=true sha=%s prev_sha=%s running_web_sha=%s db_backup=%s\n' \
+    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_WEB_SHA" "$DB_BACKUP"
 fi
