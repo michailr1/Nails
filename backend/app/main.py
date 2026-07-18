@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -16,6 +16,18 @@ from app.config import get_settings
 from app.db import get_engine
 
 _WEB_STATIC_DIR = Path(__file__).resolve().parent / "web_static"
+_WEB_CONTENT_SECURITY_POLICY = "; ".join(
+    (
+        "default-src 'self'",
+        "connect-src 'self'",
+        "img-src 'self' data:",
+        "style-src 'self'",
+        "script-src 'self'",
+        "base-uri 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+    )
+)
 
 
 @asynccontextmanager
@@ -34,6 +46,23 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def add_web_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/web"):
+        response.headers["Content-Security-Policy"] = _WEB_CONTENT_SECURITY_POLICY
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=()"
+        )
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 app.include_router(onboarding_router)
 app.include_router(scheduling_router)
 app.include_router(feedback_router)
