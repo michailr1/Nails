@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import csv
 import io
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Iterable
 
 from openpyxl import Workbook
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ def _safe_cell(value: object) -> object:
         return ""
     if isinstance(value, datetime):
         return value.isoformat()
-    if isinstance(value, (int, float, Decimal, date)):
+    if isinstance(value, int | float | Decimal | date):
         return value
     text = str(value)
     if text.startswith(_FORMULA_PREFIXES):
