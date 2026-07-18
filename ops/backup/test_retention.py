@@ -26,6 +26,7 @@ web_auth_restore_contract = importlib.util.module_from_spec(WEB_AUTH_CONTRACT_SP
 WEB_AUTH_CONTRACT_SPEC.loader.exec_module(web_auth_restore_contract)
 
 NOW = datetime(2026, 7, 16, 12, tzinfo=timezone.utc)
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
 class RetentionTest(unittest.TestCase):
@@ -143,6 +144,39 @@ class RetentionTest(unittest.TestCase):
 
     def test_web_auth_tables_are_covered_by_restore_contract(self) -> None:
         web_auth_restore_contract.main()
+
+    def test_web_edge_contract(self) -> None:
+        compose = (REPOSITORY_ROOT / "compose.yaml").read_text(encoding="utf-8")
+        nginx = (REPOSITORY_ROOT / "web" / "nginx.conf").read_text(
+            encoding="utf-8"
+        )
+        dockerfile = (REPOSITORY_ROOT / "web" / "Dockerfile").read_text(
+            encoding="utf-8"
+        )
+
+        for fragment in (
+            '${NAILS_API_BIND:-127.0.0.1}:${NAILS_API_PORT:-8210}:8000',
+            '${NAILS_WEB_BIND:-127.0.0.1}:${NAILS_WEB_PORT:-8220}:8080',
+            "WEB_AUTH_ENABLED: ${WEB_AUTH_ENABLED:-false}",
+            "WEB_AUTH_HMAC_KEY: ${WEB_AUTH_HMAC_KEY:-}",
+            "nails-web:",
+        ):
+            self.assertIn(fragment, compose)
+
+        self.assertIn("location ^~ /web/api/auth/", nginx)
+        self.assertIn("location ^~ /web/api/", nginx)
+        self.assertIn("proxy_pass http://nails-api:8000;", nginx)
+        self.assertNotIn("/api/v1/", nginx)
+        self.assertIn("client_max_body_size 16k;", nginx)
+        self.assertIn("limit_req zone=web_auth", nginx)
+        self.assertIn("frame-ancestors 'none'", nginx)
+
+        self.assertTrue(
+            dockerfile.startswith("FROM nginxinc/nginx-unprivileged:")
+        )
+        self.assertIn("EXPOSE 8080", dockerfile)
+        self.assertIn("HEALTHCHECK", dockerfile)
+        self.assertIn("/web-health", dockerfile)
 
 
 if __name__ == "__main__":
