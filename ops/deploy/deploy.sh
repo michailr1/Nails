@@ -221,11 +221,7 @@ systemctl is-active nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-active.b
 if docker image inspect "$WEB_IMAGE" >/dev/null 2>&1; then
   WEB_IMAGE_EXISTED="true"
 fi
-if docker compose \
-  --project-directory "$REPO" \
-  --file "$REPO/compose.yaml" \
-  --env-file "$BACKEND_ENV" \
-  ps -q nails-web 2>/dev/null | grep -q .; then
+if docker ps -aq --filter 'name=^/nails-nails-web-1$' | grep -q .; then
   WEB_CONTAINER_EXISTED="true"
 fi
 printf 'web_image_existed=%s web_container_existed=%s\n' "$WEB_IMAGE_EXISTED" "$WEB_CONTAINER_EXISTED"
