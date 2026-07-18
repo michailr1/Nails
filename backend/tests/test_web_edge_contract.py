@@ -7,8 +7,10 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_compose_keeps_api_and_web_on_loopback():
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
 
-    assert '${NAILS_API_BIND:-127.0.0.1}:${NAILS_API_PORT:-8210}:8000' in compose
-    assert '${NAILS_WEB_BIND:-127.0.0.1}:${NAILS_WEB_PORT:-8220}:8080' in compose
+    api_binding = '${NAILS_API_BIND:-127.0.0.1}:${NAILS_API_PORT:-8210}:8000'
+    web_binding = '${NAILS_WEB_BIND:-127.0.0.1}:${NAILS_WEB_PORT:-8220}:8080'
+    assert api_binding in compose
+    assert web_binding in compose
     assert "WEB_AUTH_ENABLED: ${WEB_AUTH_ENABLED:-false}" in compose
     assert "WEB_AUTH_HMAC_KEY: ${WEB_AUTH_HMAC_KEY:-}" in compose
     assert "nails-web:" in compose
