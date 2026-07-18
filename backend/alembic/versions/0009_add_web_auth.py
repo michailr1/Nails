@@ -24,6 +24,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("code_hash", sa.String(length=64), nullable=False),
         sa.Column("browser_token_hash", sa.String(length=64), nullable=False),
+        sa.Column("pending_scope_hash", sa.String(length=64), nullable=False),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("attempt_count", sa.Integer(), nullable=False),
@@ -57,6 +58,13 @@ def upgrade() -> None:
         "ix_web_login_challenges_ip_created",
         "web_login_challenges",
         ["request_ip_hash", "created_at"],
+    )
+    op.create_index(
+        "uq_web_login_challenges_pending_scope",
+        "web_login_challenges",
+        ["pending_scope_hash"],
+        unique=True,
+        postgresql_where=sa.text("status = 'pending'"),
     )
 
     op.create_table(
@@ -136,6 +144,10 @@ def downgrade() -> None:
     op.drop_index("ix_web_sessions_expiry", table_name="web_sessions")
     op.drop_index("ix_web_sessions_user_active", table_name="web_sessions")
     op.drop_table("web_sessions")
+    op.drop_index(
+        "uq_web_login_challenges_pending_scope",
+        table_name="web_login_challenges",
+    )
     op.drop_index(
         "ix_web_login_challenges_ip_created",
         table_name="web_login_challenges",
