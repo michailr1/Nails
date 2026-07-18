@@ -121,9 +121,12 @@ def test_calendar_and_clients_are_owner_scoped(client, create_user):
         params={"date_from": "2026-07-20", "date_to": "2026-07-20"},
     )
     assert calendar.status_code == 200
-    bookings = calendar.json()["bookings"]
+    calendar_payload = calendar.json()
+    assert calendar_payload["timezone"] == "Europe/Berlin"
+    bookings = calendar_payload["bookings"]
     assert len(bookings) == 1
     assert bookings[0]["booking_id"] == str(owner_booking.id)
+    assert bookings[0]["starts_at"] == "2026-07-20T11:00:00+02:00"
 
 
 def test_calendar_range_is_limited(client, create_user):
