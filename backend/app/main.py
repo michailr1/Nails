@@ -11,6 +11,7 @@ from app.api.feedback import router as feedback_router
 from app.api.onboarding import router as onboarding_router
 from app.api.scheduling import router as scheduling_router
 from app.api.web_auth import router as web_auth_router
+from app.api.web_auth_conversation import router as web_auth_conversation_router
 from app.api.web_read import router as web_read_router
 from app.config import get_settings
 from app.db import get_engine
@@ -82,6 +83,7 @@ app.include_router(onboarding_router)
 app.include_router(scheduling_router)
 app.include_router(feedback_router)
 app.include_router(web_auth_router)
+app.include_router(web_auth_conversation_router)
 app.include_router(web_read_router)
 app.mount(
     "/web",
