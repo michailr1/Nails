@@ -23,27 +23,26 @@ def _start(client: TestClient) -> dict[str, object]:
 def _approve(
     client: TestClient,
     auth_headers: Callable[..., dict[str, str]],
-    code: str,
+    started: dict[str, object],
     telegram_user_id: int = 100000001,
+    *,
+    verification_number: str | None = None,
 ):
     return client.post(
         "/api/v1/web-auth/challenges/approve",
         headers=auth_headers(telegram_user_id),
-        json={"confirmation_code": code},
+        json={
+            "challenge_id": started["challenge_id"],
+            "verification_number": verification_number
+            or str(started["verification_number"]),
+        },
     )
-
-
-def _csrf_headers(started: dict[str, object]) -> dict[str, str]:
-    return {
-        **WEB_ORIGIN_HEADERS,
-        "X-CSRF-Token": str(started["csrf_token"]),
-    }
 
 
 def _consume(client: TestClient, started: dict[str, object]):
     return client.post(
         "/web/api/auth/challenges/consume",
-        headers=_csrf_headers(started),
+        headers=WEB_ORIGIN_HEADERS,
         json={"challenge_id": started["challenge_id"]},
     )
 
@@ -52,11 +51,7 @@ def test_web_login_happy_path_and_logout(client, create_user, auth_headers):
     create_user()
     started = _start(client)
 
-    approval = _approve(
-        client,
-        auth_headers,
-        str(started["confirmation_code"]),
-    )
+    approval = _approve(client, auth_headers, started)
     assert approval.status_code == 200
     assert approval.json() == {"approved": True}
 
@@ -73,7 +68,7 @@ def test_web_login_happy_path_and_logout(client, create_user, auth_headers):
 
     logout = client.post(
         "/web/api/auth/logout",
-        headers=_csrf_headers(started),
+        headers=WEB_ORIGIN_HEADERS,
     )
     assert logout.status_code == 200
     assert logout.json() == {"logged_out": True}
@@ -89,20 +84,12 @@ def test_challenge_is_one_time_and_bound_to_original_browser(
 ):
     create_user()
     started = _start(client)
-    assert _approve(
-        client,
-        auth_headers,
-        str(started["confirmation_code"]),
-    ).json() == {"approved": True}
+    assert _approve(client, auth_headers, started).json() == {"approved": True}
 
     other = TestClient(client.app, base_url="https://testserver")
-    other.cookies.set(
-        "__Host-nails_csrf",
-        str(started["csrf_token"]),
-    )
     wrong_browser = other.post(
         "/web/api/auth/challenges/consume",
-        headers=_csrf_headers(started),
+        headers=WEB_ORIGIN_HEADERS,
         json={"challenge_id": started["challenge_id"]},
     )
     assert wrong_browser.status_code == 200
@@ -116,7 +103,7 @@ def test_challenge_is_one_time_and_bound_to_original_browser(
     other.close()
 
 
-def test_unknown_code_and_inactive_user_do_not_create_session(
+def test_wrong_number_and_inactive_user_do_not_create_session(
     client,
     create_user,
     auth_headers,
@@ -124,9 +111,14 @@ def test_unknown_code_and_inactive_user_do_not_create_session(
     user = create_user()
     started = _start(client)
 
-    unknown = _approve(client, auth_headers, "000000")
-    assert unknown.status_code == 200
-    assert unknown.json() == {"approved": False}
+    wrong = _approve(
+        client,
+        auth_headers,
+        started,
+        verification_number="000000",
+    )
+    assert wrong.status_code == 200
+    assert wrong.json() == {"approved": False}
 
     with get_session_factory()() as session:
         stored = session.get(User, user.id)
@@ -134,11 +126,7 @@ def test_unknown_code_and_inactive_user_do_not_create_session(
         stored.is_active = False
         session.commit()
 
-    denied = _approve(
-        client,
-        auth_headers,
-        str(started["confirmation_code"]),
-    )
+    denied = _approve(client, auth_headers, started)
     assert denied.status_code == 200
     assert denied.json() == {"approved": False}
 
@@ -146,6 +134,21 @@ def test_unknown_code_and_inactive_user_do_not_create_session(
     assert consume.json()["authenticated"] is False
     with get_session_factory()() as session:
         assert session.scalar(select(WebSession)) is None
+
+
+def test_tap_approve_contract_rejects_legacy_code_payload(
+    client,
+    create_user,
+    auth_headers,
+):
+    create_user()
+    started = _start(client)
+    response = client.post(
+        "/api/v1/web-auth/challenges/approve",
+        headers=auth_headers(),
+        json={"confirmation_code": started["verification_number"]},
+    )
+    assert response.status_code == 422
 
 
 def test_web_boundary_rejects_missing_origin_and_bad_host(
@@ -195,28 +198,43 @@ def test_consume_rate_limit_is_postgres_backed(client, clean_database):
     assert limited.status_code == 429
 
 
-def test_bot_code_bruteforce_is_rate_limited(client, create_user, auth_headers):
-    create_user()
-    for value in range(10):
-        response = _approve(client, auth_headers, f"{value:06d}")
-        assert response.status_code == 200
-        assert response.json() == {"approved": False}
-    limited = _approve(client, auth_headers, "999999")
-    assert limited.status_code == 200
-    assert limited.json() == {"approved": False}
-
-
-def test_plaintext_code_and_tokens_are_not_persisted_or_audited(
+def test_tap_approve_number_bruteforce_is_rate_limited(
     client,
     create_user,
     auth_headers,
 ):
     create_user()
     started = _start(client)
-    code = str(started["confirmation_code"])
+    for value in range(10):
+        response = _approve(
+            client,
+            auth_headers,
+            started,
+            verification_number=f"{value:06d}",
+        )
+        assert response.status_code == 200
+        assert response.json() == {"approved": False}
+    limited = _approve(
+        client,
+        auth_headers,
+        started,
+        verification_number="999999",
+    )
+    assert limited.status_code == 200
+    assert limited.json() == {"approved": False}
+
+
+def test_plaintext_number_and_tokens_are_not_persisted_or_audited(
+    client,
+    create_user,
+    auth_headers,
+):
+    create_user()
+    started = _start(client)
+    verification_number = str(started["verification_number"])
     login_cookie = client.cookies.get("__Host-nails_login")
     assert login_cookie
-    assert _approve(client, auth_headers, code).json() == {"approved": True}
+    assert _approve(client, auth_headers, started).json() == {"approved": True}
     assert _consume(client, started).json()["authenticated"] is True
     session_cookie = client.cookies.get("__Host-nails_session")
     assert session_cookie
@@ -224,14 +242,14 @@ def test_plaintext_code_and_tokens_are_not_persisted_or_audited(
     with get_session_factory()() as session:
         challenge = session.scalar(select(WebLoginChallenge))
         assert challenge is not None
-        assert code not in challenge.code_hash
+        assert verification_number not in challenge.code_hash
         assert login_cookie not in challenge.browser_token_hash
         web_session = session.scalar(select(WebSession))
         assert web_session is not None
         assert session_cookie not in web_session.token_hash
         audit = session.scalars(select(AuditEvent)).all()
         serialized = " ".join(str(item.safe_changes) for item in audit)
-        assert code not in serialized
+        assert verification_number not in serialized
         assert login_cookie not in serialized
         assert session_cookie not in serialized
 
@@ -243,11 +261,7 @@ def test_deactivated_user_is_rejected_on_next_request(
 ):
     user = create_user()
     started = _start(client)
-    assert _approve(
-        client,
-        auth_headers,
-        str(started["confirmation_code"]),
-    ).json() == {"approved": True}
+    assert _approve(client, auth_headers, started).json() == {"approved": True}
     assert _consume(client, started).json()["authenticated"] is True
 
     with get_session_factory()() as session:
@@ -310,6 +324,7 @@ def test_only_one_pending_challenge_per_browser(client, clean_database):
         assert second_row is not None
         assert first_row.status == "denied"
         assert second_row.status == "pending"
+        assert first_row.pending_scope_hash == second_row.pending_scope_hash
         pending = session.scalars(
             select(WebLoginChallenge).where(
                 WebLoginChallenge.status == "pending"
@@ -323,12 +338,23 @@ def test_web_approval_identity_failures_are_neutral(
     create_user,
     auth_headers,
 ):
-    unknown = _approve(client, auth_headers, "000000", telegram_user_id=999999999)
+    started = _start(client)
+    unknown = _approve(
+        client,
+        auth_headers,
+        started,
+        telegram_user_id=999999999,
+    )
     assert unknown.status_code == 200
     assert unknown.json() == {"approved": False}
 
     create_user(telegram_user_id=100000002, is_active=False)
-    inactive = _approve(client, auth_headers, "000000", telegram_user_id=100000002)
+    inactive = _approve(
+        client,
+        auth_headers,
+        started,
+        telegram_user_id=100000002,
+    )
     assert inactive.status_code == 200
     assert inactive.json() == {"approved": False}
 
