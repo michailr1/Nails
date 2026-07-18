@@ -37,6 +37,10 @@ class Settings(BaseSettings):
         alias="WEB_ALLOWED_HOSTS",
     )
     web_allowed_origins: str = Field(default="", alias="WEB_ALLOWED_ORIGINS")
+    web_trusted_proxy_cidrs: str = Field(
+        default="",
+        alias="WEB_TRUSTED_PROXY_CIDRS",
+    )
     web_challenge_ttl_seconds: int = Field(
         default=600,
         alias="WEB_CHALLENGE_TTL_SECONDS",
@@ -151,7 +155,11 @@ class Settings(BaseSettings):
             raise ValueError("INTERNAL_API_KEY must contain at least 32 characters")
         return value
 
-    @field_validator("web_allowed_hosts", "web_allowed_origins")
+    @field_validator(
+        "web_allowed_hosts",
+        "web_allowed_origins",
+        "web_trusted_proxy_cidrs",
+    )
     @classmethod
     def normalize_csv(cls, value: str) -> str:
         return ",".join(item.strip() for item in value.split(",") if item.strip())
@@ -177,6 +185,12 @@ class Settings(BaseSettings):
     @property
     def allowed_web_origins(self) -> frozenset[str]:
         return frozenset(item for item in self.web_allowed_origins.split(",") if item)
+
+    @property
+    def trusted_web_proxy_cidrs(self) -> tuple[str, ...]:
+        return tuple(
+            item for item in self.web_trusted_proxy_cidrs.split(",") if item
+        )
 
 
 @lru_cache(maxsize=1)
