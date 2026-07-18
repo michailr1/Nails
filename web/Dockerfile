@@ -6,8 +6,6 @@ ENV NAILS_GIT_SHA=${GIT_SHA}
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY backend/app/web_static /usr/share/nginx/html/web
 
-RUN rm -f /usr/share/nginx/html/index.html
-
 EXPOSE 8080
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=6 \
