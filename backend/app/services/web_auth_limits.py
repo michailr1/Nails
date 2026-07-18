@@ -6,12 +6,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.config import Settings, get_settings
-from app.services.web_auth import _consume_rate_bucket, _keyed_hash
+from app.services.web_auth import (
+    _consume_rate_bucket,
+    _keyed_hash,
+    _user_agent_hash,
+)
 from app.web_auth_models import WebChallengeStatus, WebLoginChallenge
 
 _LOGIN_COOKIE = "__Host-nails_login"
@@ -57,28 +61,65 @@ def _raise_challenge_not_found() -> None:
     )
 
 
+def _advisory_lock_key(scope_hash: str) -> int:
+    raw = int(scope_hash[:16], 16)
+    return raw if raw < 2**63 else raw - 2**64
+
+
 def invalidate_pending_browser_challenge(session: Session, request: Request) -> None:
-    login_token = request.cookies.get(_LOGIN_COOKIE, "")
-    if not login_token:
-        return
     settings = _settings()
-    browser_token_hash = _keyed_hash(
-        login_token,
-        purpose="login-token",
-        settings=settings,
+    login_token = request.cookies.get(_LOGIN_COOKIE, "")
+
+    if login_token:
+        browser_token_hash = _keyed_hash(
+            login_token,
+            purpose="login-token",
+            settings=settings,
+        )
+        scope_hash = _keyed_hash(
+            browser_token_hash,
+            purpose="pending-browser-lock",
+            settings=settings,
+        )
+        challenge_filter = (
+            WebLoginChallenge.browser_token_hash == browser_token_hash
+        )
+    else:
+        request_ip_hash = _keyed_hash(
+            _request_ip(request),
+            purpose="ip",
+            settings=settings,
+        )
+        user_agent_hash = _user_agent_hash(request, settings)
+        scope_hash = _keyed_hash(
+            f"{request_ip_hash}:{user_agent_hash or '-'}",
+            purpose="pending-browser-lock",
+            settings=settings,
+        )
+        if user_agent_hash is None:
+            user_agent_filter = WebLoginChallenge.user_agent_hash.is_(None)
+        else:
+            user_agent_filter = (
+                WebLoginChallenge.user_agent_hash == user_agent_hash
+            )
+        challenge_filter = (
+            WebLoginChallenge.request_ip_hash == request_ip_hash
+        ) & user_agent_filter
+
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_key)"),
+        {"lock_key": _advisory_lock_key(scope_hash)},
     )
-    challenge = session.scalar(
+    challenges = session.scalars(
         select(WebLoginChallenge)
         .where(
-            WebLoginChallenge.browser_token_hash == browser_token_hash,
+            challenge_filter,
             WebLoginChallenge.status == WebChallengeStatus.pending.value,
         )
         .with_for_update()
-    )
-    if challenge is None:
-        return
-    challenge.status = WebChallengeStatus.denied.value
-    session.commit()
+    ).all()
+    for challenge in challenges:
+        challenge.status = WebChallengeStatus.denied.value
 
 
 def enforce_status_rate_limit(
