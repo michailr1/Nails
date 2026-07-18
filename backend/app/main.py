@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -12,6 +14,8 @@ from app.api.web_auth import router as web_auth_router
 from app.api.web_read import router as web_read_router
 from app.config import get_settings
 from app.db import get_engine
+
+_WEB_STATIC_DIR = Path(__file__).resolve().parent / "web_static"
 
 
 @asynccontextmanager
@@ -35,6 +39,11 @@ app.include_router(scheduling_router)
 app.include_router(feedback_router)
 app.include_router(web_auth_router)
 app.include_router(web_read_router)
+app.mount(
+    "/web",
+    StaticFiles(directory=_WEB_STATIC_DIR, html=True),
+    name="web-master-interface",
+)
 
 
 @app.get("/health", tags=["system"])
