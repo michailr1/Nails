@@ -27,6 +27,14 @@ WEB_AUTH_CONTRACT_SPEC.loader.exec_module(web_auth_restore_contract)
 
 NOW = datetime(2026, 7, 16, 12, tzinfo=timezone.utc)
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+WEB_PROXY_PATH = REPOSITORY_ROOT / "backend" / "app" / "web_proxy.py"
+WEB_PROXY_SPEC = importlib.util.spec_from_file_location(
+    "nails_web_proxy",
+    WEB_PROXY_PATH,
+)
+assert WEB_PROXY_SPEC and WEB_PROXY_SPEC.loader
+web_proxy = importlib.util.module_from_spec(WEB_PROXY_SPEC)
+WEB_PROXY_SPEC.loader.exec_module(web_proxy)
 
 
 class RetentionTest(unittest.TestCase):
@@ -145,6 +153,42 @@ class RetentionTest(unittest.TestCase):
     def test_web_auth_tables_are_covered_by_restore_contract(self) -> None:
         web_auth_restore_contract.main()
 
+    def test_untrusted_peer_cannot_spoof_forwarded_ip(self) -> None:
+        resolved = web_proxy.resolve_client_ip(
+            peer_ip="192.0.2.10",
+            x_real_ip="192.0.2.20",
+            x_forwarded_for="192.0.2.20",
+            trusted_proxy_cidrs=("172.18.0.0/16",),
+        )
+        self.assertEqual(resolved, "192.0.2.10")
+
+    def test_trusted_peer_accepts_one_consistent_client_ip(self) -> None:
+        resolved = web_proxy.resolve_client_ip(
+            peer_ip="172.18.0.5",
+            x_real_ip="192.0.2.20",
+            x_forwarded_for="192.0.2.20",
+            trusted_proxy_cidrs=("172.18.0.0/16",),
+        )
+        self.assertEqual(resolved, "192.0.2.20")
+
+    def test_trusted_peer_rejects_forwarded_chain(self) -> None:
+        resolved = web_proxy.resolve_client_ip(
+            peer_ip="172.18.0.5",
+            x_real_ip="192.0.2.20",
+            x_forwarded_for="192.0.2.30, 192.0.2.20",
+            trusted_proxy_cidrs=("172.18.0.0/16",),
+        )
+        self.assertEqual(resolved, "172.18.0.5")
+
+    def test_trusted_peer_rejects_inconsistent_headers(self) -> None:
+        resolved = web_proxy.resolve_client_ip(
+            peer_ip="172.18.0.5",
+            x_real_ip="192.0.2.20",
+            x_forwarded_for="192.0.2.30",
+            trusted_proxy_cidrs=("172.18.0.0/16",),
+        )
+        self.assertEqual(resolved, "172.18.0.5")
+
     def test_web_edge_contract(self) -> None:
         compose = (REPOSITORY_ROOT / "compose.yaml").read_text(encoding="utf-8")
         nginx = (REPOSITORY_ROOT / "web" / "nginx.conf").read_text(
@@ -153,12 +197,19 @@ class RetentionTest(unittest.TestCase):
         dockerfile = (REPOSITORY_ROOT / "web" / "Dockerfile").read_text(
             encoding="utf-8"
         )
+        caddy_disabled = (
+            REPOSITORY_ROOT / "ops" / "edge" / "nails-web.Caddyfile"
+        ).read_text(encoding="utf-8")
+        caddy_enabled = (
+            REPOSITORY_ROOT / "ops" / "edge" / "nails-web.enabled.Caddyfile"
+        ).read_text(encoding="utf-8")
 
         for fragment in (
             '${NAILS_API_BIND:-127.0.0.1}:${NAILS_API_PORT:-8210}:8000',
             '${NAILS_WEB_BIND:-127.0.0.1}:${NAILS_WEB_PORT:-8220}:8080',
             "WEB_AUTH_ENABLED: ${WEB_AUTH_ENABLED:-false}",
             "WEB_AUTH_HMAC_KEY: ${WEB_AUTH_HMAC_KEY:-}",
+            "WEB_TRUSTED_PROXY_CIDRS: ${WEB_TRUSTED_PROXY_CIDRS:-}",
             "nails-web:",
         ):
             self.assertIn(fragment, compose)
@@ -169,7 +220,17 @@ class RetentionTest(unittest.TestCase):
         self.assertNotIn("/api/v1/", nginx)
         self.assertIn("client_max_body_size 16k;", nginx)
         self.assertIn("limit_req zone=web_auth", nginx)
+        self.assertIn("set_real_ip_from 172.18.0.1;", nginx)
+        self.assertIn("real_ip_recursive off;", nginx)
+        self.assertIn("proxy_set_header X-Forwarded-For $remote_addr;", nginx)
+        self.assertNotIn("$proxy_add_x_forwarded_for", nginx)
         self.assertIn("frame-ancestors 'none'", nginx)
+
+        self.assertIn('respond "web interface unavailable" 503', caddy_disabled)
+        self.assertNotIn("reverse_proxy", caddy_disabled)
+        self.assertIn("reverse_proxy 127.0.0.1:8220", caddy_enabled)
+        self.assertIn("header_up X-Real-IP {remote_host}", caddy_enabled)
+        self.assertIn("header_up X-Forwarded-For {remote_host}", caddy_enabled)
 
         self.assertTrue(
             dockerfile.startswith("FROM nginxinc/nginx-unprivileged:")
