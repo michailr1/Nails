@@ -2,6 +2,8 @@ from .feedback_schema import SAVE_FEEDBACK
 from .feedback_tool import save_feedback
 from .schemas import NAILS_SCHEDULING
 from .tools import nails_scheduling
+from .web_login_schema import WEB_LOGIN
+from .web_login_tool import web_login
 
 
 def register(ctx):
@@ -16,4 +18,10 @@ def register(ctx):
         toolset="nails_scheduling",
         schema=SAVE_FEEDBACK,
         handler=save_feedback,
+    )
+    ctx.register_tool(
+        name="web_login",
+        toolset="nails_scheduling",
+        schema=WEB_LOGIN,
+        handler=web_login,
     )
