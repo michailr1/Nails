@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from ipaddress import ip_address, ip_network
-from typing import Iterable
 
 
 def _valid_ip(value: str | None) -> str | None:
