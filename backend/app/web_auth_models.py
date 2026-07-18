@@ -15,7 +15,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 from app.db import Base
 
@@ -52,6 +52,7 @@ class WebLoginChallenge(Base):
         nullable=False,
         unique=True,
     )
+    code_hash = synonym("verification_number_hash")
     browser_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     pending_scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
