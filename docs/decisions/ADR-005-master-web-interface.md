@@ -2,130 +2,81 @@
 
 - Статус: принято
 - Дата: 2026-07-17
-
-## Контекст
-
-Telegram остаётся удобным интерфейсом для быстрых действий, но мастеру нужен визуальный обзор календаря, услуг и клиентских карточек. Web-интерфейс появляется после завершения NAILS-003 и до клиентского контура ADR-004.
-
-Это первая публичная web-поверхность проекта с правом чтения и изменения реальных данных. Внутренний Booking API сейчас доступен только на loopback и доверяет server-side identity context. Публиковать его напрямую нельзя.
+- Обновлено: 2026-07-18
 
 ## Решение
 
-1. **Первый web-slice предназначен только для мастера.** Он включает auth, server-side session и read-only календарь. Мутации, admin/multi-master и экспорт добавляются только отдельными gated slices после production acceptance предыдущего этапа.
-2. **Web является тонким интерфейсом над существующей доменной логикой.** Календарь, availability, услуги, клиентские карточки и записи используют те же service functions и server-side инварианты, что Telegram-контур. Web не обращается к PostgreSQL напрямую и не создаёт параллельные правила.
-3. **Внутренний API остаётся loopback-only.** `127.0.0.1:8210` не публикуется в интернет и не начинает доверять identity-заголовкам от браузера. Публичные запросы проходят через отдельную web/BFF-границу, которая сама устанавливает аутентифицированную server-side identity.
-4. **Публичная поверхность публикуется на выделенном высоком нестандартном HTTPS-порту через reverse proxy.** TLS, auth, session security, CSRF, rate limiting и owner scoping остаются настоящими контролями безопасности. Нестандартный порт используется только как дополнительный defense-in-depth и уменьшение фонового шума, но не считается самостоятельной защитой.
-5. **Вход подтверждается через уже доверенный Telegram-аккаунт мастера.** Web создаёт короткоживущий одноразовый login challenge; подтверждение или код доставляется только активному `master` через закрытого бота. Ответ web одинаков для существующего и неизвестного идентификатора, чтобы не раскрывать allowlist.
-6. **Login challenge хранится только в безопасной форме.** Он одноразовый, имеет короткий TTL, ограничение числа попыток, rate limit по IP и аккаунту и не пишется в логи в открытом виде.
-7. **После входа используется серверная сессия.** Cookie обязательны `Secure`, `HttpOnly`, `SameSite=Lax` или строже; session id ротируется после входа; есть абсолютный и idle TTL, явный logout и отзыв активных сессий.
-8. **Все мутирующие web-запросы защищены от CSRF.** Дополнительно проверяются `Origin`/`Host`; CORS по умолчанию закрыт для сторонних origins.
-9. **Каждая мутация остаётся явной.** Перед сохранением web показывает итоговое состояние; кнопка подтверждения является эквивалентом явного подтверждения в Telegram. Backend повторно валидирует состояние непосредственно перед write.
-10. **Owner scoping, audit, idempotency и fresh readback обязательны.** Доверять скрытым form fields, URL-параметрам owner id или данным клиента нельзя.
-11. **Приватные поля клиентской карточки остаются master-only.** `private_alias`, notes и другие private fields никогда не попадают в будущий клиентский контур.
-12. **ADR-006 применяется без изменений.** Положительные availability-интервалы формируют подсказки; явно названное мастером время разрешено вне сетки и окна, если день не является выходным и нет overlap.
-13. **Web разворачивается тем же release flow.** Изменения Compose, reverse proxy и web runtime входят в постоянный `ops/deploy/deploy.sh`; одноразовые deploy-скрипты не создаются.
+Первый web-slice предназначен только для мастера и остаётся read-only. Он включает:
+
+- Telegram tap-approve со сверкой шестизначного числа без ручного ввода кода;
+- server-side session, logout и revoke;
+- read-only календарь дня и недели;
+- read-only список и карточки клиенток;
+- owner-scoped CSV/Excel export календаря и клиенток;
+- Host, Origin, session и BFF boundary;
+- rate limits и kill-switch.
+
+Mutation-CSRF переносится в write-slice. Write, admin/multi-master и revenue остаются в плане как отдельные gated slices.
+
+## Login challenge
+
+Web показывает verification number. Закрытый Telegram-бот показывает то же число и кнопку подтверждения. Мастер сверяет число и нажимает кнопку; вводить код в Telegram не требуется.
+
+Challenge одноразовый, имеет короткий TTL и лимит попыток. Один pending challenge на browser scope обеспечивается `pending_scope_hash` и partial unique index только для `status = pending`.
+
+Второй start имеет replace-семантику: предыдущий pending переводится в denied, затем создаётся новый. Advisory transaction lock упорядочивает замену, но инвариант обеспечивается базой данных.
 
 ## Gated slices
 
-### Slice 1 — auth, session и read-only календарь
+### Slice 1 — read-only, export и tap-approve
 
-Первый implementation slice остаётся узким:
+- auth challenge и server-side session;
+- календарь дня и недели;
+- клиентские карточки только для чтения;
+- CSV/Excel export с owner scoping, лимитами, audit и защитой от formula injection;
+- отсутствие web-мутаций предметных данных.
 
-- запрос и подтверждение входа через доверенный Telegram-аккаунт;
-- безопасный одноразовый challenge;
-- server-side session, logout и отзыв сессии;
-- CSRF/Origin/Host boundary, даже если первый UI пока read-only;
-- read-only календарь одного дня и недели;
-- просмотр scheduled bookings без возможности изменения;
-- owner isolation и отсутствие доверия данным браузера;
-- deployment через HTTPS reverse proxy на выделенном высоком порту.
-
-Этот slice должен пройти отдельную production acceptance до появления web-мутаций.
-
-### Slice 2 — рабочие мутации мастера
-
-Открывается только после принятия Slice 1:
+### Slice 2 — write
 
 - создание, перенос и мягкая отмена записи;
-- изменение availability с preview «сейчас → будет»;
-- просмотр и изменение услуг;
-- список, поиск и изменение клиентских карточек;
-- fresh readback, audit, idempotency и повторная server-side validation;
-- понятные состояния конфликта, устаревшего preview и повторного подтверждения.
+- изменения availability, услуг и клиентских карточек;
+- mutation-CSRF, idempotency, preview, fresh readback и повторная server-side validation.
 
 ### Slice 3 — admin/multi-master
 
-Admin/multi-master не отклоняется и не входит в первый slice. Это отдельный запланированный gated этап после доказанной безопасности master-only web.
+Admin/multi-master остаётся отдельным gated slice. До него обязательны выделенные admin contracts, согласованная синхронизация мастеров и regression-тест изоляции по issue #88.
 
-До его открытия обязательны:
+### Slice 4 — revenue
 
-- выделенные backend admin-функции, а не переиспользование обычных owner-scoped endpoints с подменой owner id;
-- управление существованием, активностью и ролями мастеров через отдельный admin contract;
-- запрет чтения клиентских карточек другого мастера по умолчанию;
-- согласованный механизм изменения Telegram allowlist и записи `users`, без частично применённого состояния;
-- regression-тест изоляции по issue #88: мастер не видит и не изменяет данные другого мастера;
-- отдельный threat model и production acceptance admin-поверхности.
-
-Полноценный публичный SaaS, self-service tenant onboarding и биллинг по-прежнему остаются после MVP.
-
-### Slice 4 — экспорт CSV/Excel
-
-Экспорт добавляется поздним отдельным slice после стабилизации чтения и мутаций:
-
-- CSV как базовый машиночитаемый формат;
-- Excel (`.xlsx`) как удобный пользовательский формат;
-- экспорт только owner-scoped данных текущего мастера;
-- явный выбор диапазона и типа данных;
-- отсутствие секретов и технических идентификаторов;
-- private fields включаются только в явно предназначенный master-only экспорт;
-- защита от CSV/Excel formula injection;
-- streaming/лимиты для предотвращения чрезмерной нагрузки;
-- audit события экспорта без записи содержимого файла в логи.
-
-Экспорт не является публичным клиентским отчётом и не открывает доступ к данным других мастеров.
+Выручка остаётся поздним gated slice после доказанной owner isolation и корректности read/write данных.
 
 ## Архитектурная граница
 
 ```text
 Browser
   → HTTPS reverse proxy :<high-port>
-  → web/BFF session + CSRF boundary
-  → existing owner-scoped domain services / Booking API
+  → web/BFF session boundary
+  → owner-scoped domain services
   → PostgreSQL
 ```
 
-Browser никогда не получает internal API key и не может самостоятельно задавать trusted Telegram identity или owner id.
+Внутренний API остаётся loopback-only. ADR-006 применяется без изменений. Высокий нестандартный порт является только defense-in-depth; настоящими контролями остаются TLS, auth, sessions, owner scoping и rate limits.
 
 ## Security acceptance
 
-До production должны быть тесты и проверки:
+До production должны быть подтверждены:
 
 - неизвестный или неактивный пользователь не получает сессию;
 - challenge нельзя использовать дважды или после TTL;
-- rate limiting и ограничение попыток работают;
-- session fixation исключён ротацией session id;
-- CSRF-запрос без валидного token/origin отклоняется;
-- мастер не может читать или менять данные другого owner;
-- browser не может подменить identity/owner;
-- private fields не попадают в неподходящие ответы;
-- logout и отзыв сессии прекращают доступ;
-- внутренний API по-прежнему слушает только loopback;
-- reverse proxy публикует только web/BFF на утверждённом высоком HTTPS-порту;
-- высокий порт не используется как замена TLS/auth/rate-limit;
-- логи не содержат OTP/challenge, cookie, internal API key или private card content.
+- один pending на scope гарантируется partial unique index;
+- concurrent second start оставляет один pending и один denied;
+- browser не может подменить identity или owner;
+- logout и revoke прекращают доступ;
+- export owner-scoped и защищён от formula injection;
+- внутренний API остаётся loopback-only;
+- публичная поверхность доступна только через утверждённый HTTPS reverse proxy;
+- логи не содержат verification number, cookie или private content.
 
 ## Последствия
 
-- Telegram и web становятся двумя интерфейсами к одной авторитетной доменной логике.
-- Появляется дополнительный публичный attack surface, поэтому auth/session/CSRF/reverse-proxy проверки являются release blockers.
-- Первый slice остаётся узким, но ADR заранее фиксирует последовательность master mutations → admin/multi-master → export.
-- Каждый следующий slice открывается только после production acceptance предыдущего и отдельного implementation issue.
-
-## Отклонённые варианты
-
-- **Выставить `127.0.0.1:8210` наружу** — нарушает trust boundary внутреннего API.
-- **Передавать Telegram ID или owner id из браузера как доверенные** — позволяет подмену identity.
-- **Прямой доступ web к PostgreSQL** — дублирует доменную логику и обходится без единых инвариантов.
-- **Считать нестандартный порт самостоятельной защитой** — security through obscurity; он допустим только как defense-in-depth поверх настоящих контролей.
-- **Добавить admin/multi-master в первый slice** — порядок неверен; функция запланирована отдельным gated slice.
-- **Начать клиентскую запись через этот интерфейс** — клиентский контур отдельно определяется ADR-004.
+Первый slice даёт полезный read-only web без преждевременного write attack surface. Export входит в Slice 1. Mutation-CSRF становится release blocker для Slice 2. Поздние slices не удаляются из roadmap.
