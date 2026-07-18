@@ -5,10 +5,16 @@ on:
     branches: [main]
     paths:
       - "ops/backup/**"
+      - "ops/edge/**"
+      - "web/**"
+      - "compose.yaml"
       - ".github/workflows/backup-restore.yml"
   pull_request:
     paths:
       - "ops/backup/**"
+      - "ops/edge/**"
+      - "web/**"
+      - "compose.yaml"
       - ".github/workflows/backup-restore.yml"
 
 permissions:
@@ -83,4 +89,45 @@ jobs:
               "generic backup rotation must never target hermes-local-patches"
           )
           print("BACKUP_SCRIPT_CONTRACT_OK=true")
+          PY
+
+      - name: Enforce WEB edge isolation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          compose = Path("compose.yaml").read_text(encoding="utf-8")
+          nginx = Path("web/nginx.conf").read_text(encoding="utf-8")
+          disabled = Path("ops/edge/nails-web.Caddyfile").read_text(encoding="utf-8")
+          enabled = Path("ops/edge/nails-web.enabled.Caddyfile").read_text(encoding="utf-8")
+
+          required_compose = (
+              '${NAILS_API_BIND:-127.0.0.1}:${NAILS_API_PORT:-8210}:8000',
+              '${NAILS_WEB_BIND:-127.0.0.1}:${NAILS_WEB_PORT:-8220}:8080',
+              'WEB_AUTH_ENABLED: ${WEB_AUTH_ENABLED:-false}',
+              'WEB_TRUSTED_PROXY_CIDRS: ${WEB_TRUSTED_PROXY_CIDRS:-}',
+          )
+          for marker in required_compose:
+              assert marker in compose, f"compose lost WEB isolation marker: {marker}"
+
+          for marker in (
+              "set_real_ip_from 172.18.0.1;",
+              "real_ip_recursive off;",
+              "limit_req zone=web_auth",
+              "proxy_set_header X-Real-IP $remote_addr;",
+              "proxy_set_header X-Forwarded-For $remote_addr;",
+          ):
+              assert marker in nginx, f"nginx lost edge marker: {marker}"
+          assert "$proxy_add_x_forwarded_for" not in nginx
+          assert "/api/v1/" not in nginx
+
+          assert 'respond "web interface unavailable" 503' in disabled
+          assert "reverse_proxy" not in disabled
+          assert "@private_status path /web-health" in enabled
+          assert "respond @private_status 404" in enabled
+          assert "reverse_proxy 127.0.0.1:8220" in enabled
+          assert "header_up X-Real-IP {remote_host}" in enabled
+          assert "header_up X-Forwarded-For {remote_host}" in enabled
+
+          print("WEB_EDGE_ISOLATION_CONTRACT_OK=true")
           PY
