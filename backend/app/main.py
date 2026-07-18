@@ -14,6 +14,7 @@ from app.api.web_auth import router as web_auth_router
 from app.api.web_read import router as web_read_router
 from app.config import get_settings
 from app.db import get_engine
+from app.web_proxy import resolve_client_ip
 
 _WEB_STATIC_DIR = Path(__file__).resolve().parent / "web_static"
 _WEB_CONTENT_SECURITY_POLICY = "; ".join(
@@ -46,6 +47,20 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def normalize_web_client_ip(request: Request, call_next):
+    if request.url.path.startswith("/web") and request.client is not None:
+        settings = get_settings()
+        client_ip = resolve_client_ip(
+            peer_ip=request.client.host,
+            x_real_ip=request.headers.get("x-real-ip"),
+            x_forwarded_for=request.headers.get("x-forwarded-for"),
+            trusted_proxy_cidrs=settings.trusted_web_proxy_cidrs,
+        )
+        request.scope["client"] = (client_ip, request.client.port)
+    return await call_next(request)
 
 
 @app.middleware("http")
