@@ -1,0 +1,24 @@
+# WEB-001D enabled production edge state.
+# Install only after candidate health, trusted-proxy and rate-limit checks pass.
+
+de.funti.cc:8446 {
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Cache-Control "no-store"
+        -Server
+    }
+
+    reverse_proxy 127.0.0.1:8220 {
+        header_up Host {host}
+        header_up X-Forwarded-Host {host}
+        header_up X-Forwarded-Proto https
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+    }
+}
