@@ -29,6 +29,24 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       APP_TIMEZONE: ${APP_TIMEZONE:?APP_TIMEZONE is required}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
+      WEB_AUTH_ENABLED: ${WEB_AUTH_ENABLED:-false}
+      WEB_AUTH_HMAC_KEY: ${WEB_AUTH_HMAC_KEY:-}
+      WEB_ALLOWED_HOSTS: ${WEB_ALLOWED_HOSTS:-localhost,127.0.0.1,testserver}
+      WEB_ALLOWED_ORIGINS: ${WEB_ALLOWED_ORIGINS:-}
+      WEB_CHALLENGE_TTL_SECONDS: ${WEB_CHALLENGE_TTL_SECONDS:-600}
+      WEB_CHALLENGE_MAX_ATTEMPTS: ${WEB_CHALLENGE_MAX_ATTEMPTS:-5}
+      WEB_SESSION_IDLE_TTL_SECONDS: ${WEB_SESSION_IDLE_TTL_SECONDS:-43200}
+      WEB_SESSION_ABSOLUTE_TTL_SECONDS: ${WEB_SESSION_ABSOLUTE_TTL_SECONDS:-604800}
+      WEB_SESSION_TOUCH_INTERVAL_SECONDS: ${WEB_SESSION_TOUCH_INTERVAL_SECONDS:-300}
+      WEB_RATE_START_LIMIT: ${WEB_RATE_START_LIMIT:-5}
+      WEB_RATE_START_WINDOW_SECONDS: ${WEB_RATE_START_WINDOW_SECONDS:-900}
+      WEB_RATE_APPROVE_LIMIT: ${WEB_RATE_APPROVE_LIMIT:-10}
+      WEB_RATE_APPROVE_WINDOW_SECONDS: ${WEB_RATE_APPROVE_WINDOW_SECONDS:-600}
+      WEB_RATE_APPROVE_SERVER_LIMIT: ${WEB_RATE_APPROVE_SERVER_LIMIT:-100}
+      WEB_RATE_STATUS_LIMIT: ${WEB_RATE_STATUS_LIMIT:-30}
+      WEB_RATE_STATUS_WINDOW_SECONDS: ${WEB_RATE_STATUS_WINDOW_SECONDS:-600}
+      WEB_RATE_CONSUME_LIMIT: ${WEB_RATE_CONSUME_LIMIT:-10}
+      WEB_RATE_CONSUME_WINDOW_SECONDS: ${WEB_RATE_CONSUME_WINDOW_SECONDS:-600}
     command: >-
       sh -c "alembic upgrade head &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000"
@@ -53,6 +71,28 @@ services:
     networks:
       - nails-edge
       - nails-internal
+
+  nails-web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${NAILS_WEB_BIND:-127.0.0.1}:${NAILS_WEB_PORT:-8220}:8080"
+    depends_on:
+      nails-api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m,mode=0755,uid=101,gid=101
+      - /var/run:size=1m,mode=0755,uid=101,gid=101
+      - /tmp:size=8m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - nails-edge
 
 volumes:
   nails-postgres-data:
