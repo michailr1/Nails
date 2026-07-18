@@ -22,7 +22,11 @@ def upgrade() -> None:
     op.create_table(
         "web_login_challenges",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("code_hash", sa.String(length=64), nullable=False),
+        sa.Column(
+            "verification_number_hash",
+            sa.String(length=64),
+            nullable=False,
+        ),
         sa.Column("browser_token_hash", sa.String(length=64), nullable=False),
         sa.Column("pending_scope_hash", sa.String(length=64), nullable=False),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -47,7 +51,7 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("code_hash"),
+        sa.UniqueConstraint("verification_number_hash"),
     )
     op.create_index(
         "ix_web_login_challenges_status_expires",
