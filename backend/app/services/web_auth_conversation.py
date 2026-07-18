@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity
 from app.config import get_settings
 from app.models import UserRole
+from app.services.web_auth import _consume_rate_bucket, _raise_rate_limited
 from app.web_auth_models import WebChallengeStatus, WebLoginChallenge
 
 
@@ -33,6 +34,30 @@ def _number_hash(verification_number: str) -> str:
     return hmac.new(key, message, hashlib.sha256).hexdigest()
 
 
+def _identity_scope(identity: RequestIdentity) -> str:
+    return hashlib.sha256(str(identity.user_id).encode()).hexdigest()
+
+
+def _enforce_rate_limit(
+    session: Session,
+    *,
+    identity: RequestIdentity,
+    action: str,
+    limit: int,
+    now: datetime,
+) -> None:
+    allowed = _consume_rate_bucket(
+        session,
+        action=action,
+        scope_hash=_identity_scope(identity),
+        limit=limit,
+        window_seconds=60,
+        now=now,
+    )
+    if not allowed:
+        _raise_rate_limited(session)
+
+
 def _view(challenge: WebLoginChallenge | None, now: datetime) -> ConversationalChallenge:
     if challenge is None:
         return ConversationalChallenge("not_found", None, 0)
@@ -50,6 +75,13 @@ def inspect_conversational_challenge(
         return ConversationalChallenge("not_found", None, 0)
 
     now = _now()
+    _enforce_rate_limit(
+        session,
+        identity=identity,
+        action="conversation_read",
+        limit=12,
+        now=now,
+    )
     challenge = session.scalar(
         select(WebLoginChallenge)
         .where(WebLoginChallenge.code_hash == _number_hash(verification_number))
@@ -73,6 +105,9 @@ def inspect_conversational_challenge(
         return _view(None, now)
 
     if challenge.user_id is None:
+        if challenge.status == WebChallengeStatus.expired.value:
+            session.commit()
+            return _view(challenge, now)
         if challenge.status != WebChallengeStatus.pending.value:
             session.commit()
             return _view(None, now)
@@ -93,12 +128,26 @@ def decide_conversational_challenge(
         return ConversationalChallenge("not_found", None, 0)
 
     now = _now()
+    _enforce_rate_limit(
+        session,
+        identity=identity,
+        action="conversation_decision",
+        limit=6,
+        now=now,
+    )
     challenge = session.scalar(
         select(WebLoginChallenge)
         .where(WebLoginChallenge.code_hash == _number_hash(verification_number))
         .with_for_update()
     )
-    if challenge is None or challenge.user_id != identity.user_id:
+    if challenge is None:
+        session.commit()
+        return _view(None, now)
+    if challenge.user_id is None and now >= challenge.expires_at:
+        challenge.status = WebChallengeStatus.expired.value
+        session.commit()
+        return _view(challenge, now)
+    if challenge.user_id != identity.user_id:
         session.commit()
         return _view(None, now)
 
