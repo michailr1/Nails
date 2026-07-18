@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Iterable
 
@@ -27,6 +27,8 @@ class ExportedFile:
 def _safe_cell(value: object) -> object:
     if value is None:
         return ""
+    if isinstance(value, datetime):
+        return value.isoformat()
     if isinstance(value, (int, float, Decimal, date)):
         return value
     text = str(value)
