@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -24,15 +25,20 @@ from app.web_auth_models import (
 
 _SESSION_COOKIE = "__Host-nails_session"
 _LOGIN_COOKIE = "__Host-nails_login"
-_CSRF_COOKIE = "__Host-nails_csrf"
 
 
 @dataclass(frozen=True, slots=True)
 class StartedChallenge:
     challenge: WebLoginChallenge
-    confirmation_code: str
+    verification_number: str
     browser_token: str
-    csrf_token: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChallengeStatusView:
+    challenge_id: uuid.UUID
+    status: str
+    expires_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +93,19 @@ def _user_agent_hash(request: Request, settings: Settings) -> str | None:
     )
 
 
+def _pending_scope_hash(
+    request_ip_hash: str,
+    user_agent_hash: str | None,
+) -> str:
+    fingerprint = f"{request_ip_hash}:{user_agent_hash or '-'}"
+    return hashlib.sha256(fingerprint.encode()).hexdigest()
+
+
+def _advisory_lock_key(scope_hash: str) -> int:
+    raw = int(scope_hash[:16], 16)
+    return raw if raw < 2**63 else raw - 2**64
+
+
 def validate_web_boundary(request: Request) -> None:
     settings = _settings()
     host = request.headers.get("host", "").split(":", 1)[0].strip().lower()
@@ -106,17 +125,6 @@ def validate_web_boundary(request: Request) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "origin_required"},
-        )
-
-
-def validate_csrf(request: Request) -> None:
-    validate_web_boundary(request)
-    cookie = request.cookies.get(_CSRF_COOKIE, "")
-    header = request.headers.get("x-csrf-token", "")
-    if not cookie or not header or not hmac.compare_digest(cookie, header):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "csrf_failed"},
         )
 
 
@@ -144,6 +152,27 @@ def _audit(
     )
 
 
+def _ensure_rate_bucket(
+    session: Session,
+    *,
+    action: str,
+    scope_hash: str,
+    now: datetime,
+) -> None:
+    session.execute(
+        pg_insert(WebAuthRateBucket)
+        .values(
+            action=action,
+            scope_hash=scope_hash,
+            window_started_at=now,
+            count=0,
+        )
+        .on_conflict_do_nothing(
+            constraint="uq_web_auth_rate_bucket_scope",
+        )
+    )
+
+
 def _consume_rate_bucket(
     session: Session,
     *,
@@ -153,6 +182,12 @@ def _consume_rate_bucket(
     window_seconds: int,
     now: datetime,
 ) -> bool:
+    _ensure_rate_bucket(
+        session,
+        action=action,
+        scope_hash=scope_hash,
+        now=now,
+    )
     bucket = session.scalar(
         select(WebAuthRateBucket)
         .where(
@@ -162,15 +197,7 @@ def _consume_rate_bucket(
         .with_for_update()
     )
     if bucket is None:
-        session.add(
-            WebAuthRateBucket(
-                action=action,
-                scope_hash=scope_hash,
-                window_started_at=now,
-                count=1,
-            )
-        )
-        return True
+        raise RuntimeError("rate bucket upsert did not produce a row")
 
     if now >= bucket.window_started_at + timedelta(seconds=window_seconds):
         bucket.window_started_at = now
@@ -183,25 +210,61 @@ def _consume_rate_bucket(
     return True
 
 
+def _raise_rate_limited(session: Session) -> None:
+    session.commit()
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={"code": "rate_limited"},
+    )
+
+
+def _replace_pending_challenge(
+    session: Session,
+    *,
+    pending_scope_hash: str,
+) -> None:
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_key)"),
+        {"lock_key": _advisory_lock_key(pending_scope_hash)},
+    )
+    challenges = session.scalars(
+        select(WebLoginChallenge)
+        .where(
+            WebLoginChallenge.pending_scope_hash == pending_scope_hash,
+            WebLoginChallenge.status == WebChallengeStatus.pending.value,
+        )
+        .with_for_update()
+    ).all()
+    for challenge in challenges:
+        challenge.status = WebChallengeStatus.denied.value
+    if challenges:
+        session.flush()
+
+
 def start_challenge(session: Session, request: Request) -> StartedChallenge:
     validate_web_boundary(request)
     settings = _settings()
     now = _now()
     request_id = _request_id()
-    ip_hash = _keyed_hash(
+    request_ip_hash = _keyed_hash(
         _request_ip(request),
         purpose="ip",
         settings=settings,
     )
-    allowed = _consume_rate_bucket(
+    user_agent_hash = _user_agent_hash(request, settings)
+    pending_scope_hash = _pending_scope_hash(
+        request_ip_hash,
+        user_agent_hash,
+    )
+
+    if not _consume_rate_bucket(
         session,
         action="challenge_start",
-        scope_hash=ip_hash,
+        scope_hash=request_ip_hash,
         limit=settings.web_rate_start_limit,
         window_seconds=settings.web_rate_start_window_seconds,
         now=now,
-    )
-    if not allowed:
+    ):
         _audit(
             session,
             action="web_login_rate_limited",
@@ -209,23 +272,23 @@ def start_challenge(session: Session, request: Request) -> StartedChallenge:
             object_type="web_login_challenge",
             safe_changes={"scope": "ip", "operation": "start"},
         )
-        session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={"code": "rate_limited"},
-        )
+        _raise_rate_limited(session)
+
+    _replace_pending_challenge(
+        session,
+        pending_scope_hash=pending_scope_hash,
+    )
 
     browser_token = secrets.token_urlsafe(32)
-    csrf_token = secrets.token_urlsafe(32)
     challenge: WebLoginChallenge | None = None
-    confirmation_code = ""
+    verification_number = ""
 
     for _ in range(8):
-        confirmation_code = f"{secrets.randbelow(1_000_000):06d}"
-        challenge = WebLoginChallenge(
+        verification_number = f"{secrets.randbelow(1_000_000):06d}"
+        candidate = WebLoginChallenge(
             code_hash=_keyed_hash(
-                confirmation_code,
-                purpose="challenge-code",
+                verification_number,
+                purpose="challenge-number",
                 settings=settings,
             ),
             browser_token_hash=_keyed_hash(
@@ -233,24 +296,28 @@ def start_challenge(session: Session, request: Request) -> StartedChallenge:
                 purpose="login-token",
                 settings=settings,
             ),
+            pending_scope_hash=pending_scope_hash,
             status=WebChallengeStatus.pending.value,
             attempt_count=0,
             max_attempts=settings.web_challenge_max_attempts,
-            request_ip_hash=ip_hash,
-            user_agent_hash=_user_agent_hash(request, settings),
+            request_ip_hash=request_ip_hash,
+            user_agent_hash=user_agent_hash,
             request_id=request_id,
             expires_at=now
             + timedelta(seconds=settings.web_challenge_ttl_seconds),
         )
-        session.add(challenge)
+        nested = session.begin_nested()
+        session.add(candidate)
         try:
             session.flush()
+            nested.commit()
+            challenge = candidate
             break
         except IntegrityError:
-            session.rollback()
-            challenge = None
+            nested.rollback()
 
     if challenge is None:
+        session.rollback()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "challenge_unavailable"},
@@ -266,10 +333,9 @@ def start_challenge(session: Session, request: Request) -> StartedChallenge:
     session.commit()
     session.refresh(challenge)
     return StartedChallenge(
-        challenge,
-        confirmation_code,
-        browser_token,
-        csrf_token,
+        challenge=challenge,
+        verification_number=verification_number,
+        browser_token=browser_token,
     )
 
 
@@ -283,46 +349,75 @@ def set_start_cookies(response: Response, started: StartedChallenge) -> None:
         path="/",
         max_age=600,
     )
-    response.set_cookie(
-        _CSRF_COOKIE,
-        started.csrf_token,
-        secure=True,
-        httponly=False,
-        samesite="strict",
-        path="/",
-        max_age=604800,
-    )
 
 
 def challenge_status(
     session: Session,
     request: Request,
     challenge_id: uuid.UUID,
-) -> WebLoginChallenge:
+) -> ChallengeStatusView:
     validate_web_boundary(request)
+    settings = _settings()
+    now = _now()
+    rate_scope = _keyed_hash(
+        f"{challenge_id}:{_request_ip(request)}",
+        purpose="status-scope",
+        settings=settings,
+    )
+    if not _consume_rate_bucket(
+        session,
+        action="challenge_status",
+        scope_hash=rate_scope,
+        limit=settings.web_rate_status_limit,
+        window_seconds=settings.web_rate_status_window_seconds,
+        now=now,
+    ):
+        _raise_rate_limited(session)
+
     challenge = session.get(WebLoginChallenge, challenge_id)
-    if challenge is None:
+    login_token = request.cookies.get(_LOGIN_COOKIE, "")
+    if challenge is None or not login_token:
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "challenge_not_found"},
+        )
+    supplied_hash = _keyed_hash(
+        login_token,
+        purpose="login-token",
+        settings=settings,
+    )
+    if not hmac.compare_digest(supplied_hash, challenge.browser_token_hash):
+        session.commit()
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "challenge_not_found"},
         )
 
-    now = _now()
-    open_statuses = {
-        WebChallengeStatus.pending.value,
-        WebChallengeStatus.approved.value,
-    }
-    if challenge.status in open_statuses and now >= challenge.expires_at:
-        challenge.status = WebChallengeStatus.expired.value
-        session.commit()
-    return challenge
+    effective_status = challenge.status
+    if (
+        challenge.status
+        in {
+            WebChallengeStatus.pending.value,
+            WebChallengeStatus.approved.value,
+        }
+        and now >= challenge.expires_at
+    ):
+        effective_status = WebChallengeStatus.expired.value
+    session.commit()
+    return ChallengeStatusView(
+        challenge_id=challenge.id,
+        status=effective_status,
+        expires_at=challenge.expires_at,
+    )
 
 
 def approve_challenge(
     session: Session,
     *,
     identity: RequestIdentity,
-    confirmation_code: str,
+    challenge_id: uuid.UUID,
+    verification_number: str,
 ) -> bool:
     settings = _settings()
     if identity.role != UserRole.master:
@@ -334,14 +429,28 @@ def approve_challenge(
         purpose="approve-account",
         settings=settings,
     )
-    if not _consume_rate_bucket(
+    server_scope = _keyed_hash(
+        "internal-api",
+        purpose="approve-server",
+        settings=settings,
+    )
+    account_allowed = _consume_rate_bucket(
         session,
         action="challenge_approve",
         scope_hash=account_scope,
         limit=settings.web_rate_approve_limit,
         window_seconds=settings.web_rate_approve_window_seconds,
         now=now,
-    ):
+    )
+    server_allowed = _consume_rate_bucket(
+        session,
+        action="challenge_approve_server",
+        scope_hash=server_scope,
+        limit=settings.web_rate_approve_server_limit,
+        window_seconds=settings.web_rate_approve_window_seconds,
+        now=now,
+    )
+    if not account_allowed or not server_allowed:
         _audit(
             session,
             action="web_login_rate_limited",
@@ -349,19 +458,14 @@ def approve_challenge(
             object_type="web_login_challenge",
             owner_user_id=identity.user_id,
             actor_user_id=identity.user_id,
-            safe_changes={"scope": "account", "operation": "approve"},
+            safe_changes={"scope": "approval", "operation": "tap-approve"},
         )
         session.commit()
         return False
 
-    code_hash = _keyed_hash(
-        confirmation_code,
-        purpose="challenge-code",
-        settings=settings,
-    )
     challenge = session.scalar(
         select(WebLoginChallenge)
-        .where(WebLoginChallenge.code_hash == code_hash)
+        .where(WebLoginChallenge.id == challenge_id)
         .with_for_update()
     )
     if challenge is None:
@@ -377,6 +481,18 @@ def approve_challenge(
         session.commit()
         return False
 
+    supplied_hash = _keyed_hash(
+        verification_number,
+        purpose="challenge-number",
+        settings=settings,
+    )
+    if not hmac.compare_digest(supplied_hash, challenge.code_hash):
+        challenge.attempt_count += 1
+        if challenge.attempt_count >= challenge.max_attempts:
+            challenge.status = WebChallengeStatus.locked.value
+        session.commit()
+        return False
+
     challenge.user_id = identity.user_id
     challenge.status = WebChallengeStatus.approved.value
     challenge.approved_at = now
@@ -388,6 +504,7 @@ def approve_challenge(
         owner_user_id=identity.user_id,
         actor_user_id=identity.user_id,
         object_id=challenge.id,
+        safe_changes={"method": "telegram_tap_approve"},
     )
     session.commit()
     return True
@@ -398,16 +515,32 @@ def consume_challenge(
     request: Request,
     challenge_id: uuid.UUID,
 ) -> ConsumedChallenge:
-    validate_csrf(request)
+    validate_web_boundary(request)
     settings = _settings()
     now = _now()
     request_id = _request_id()
+    rate_scope = _keyed_hash(
+        f"{challenge_id}:{_request_ip(request)}",
+        purpose="consume-scope",
+        settings=settings,
+    )
+    if not _consume_rate_bucket(
+        session,
+        action="challenge_consume",
+        scope_hash=rate_scope,
+        limit=settings.web_rate_consume_limit,
+        window_seconds=settings.web_rate_consume_window_seconds,
+        now=now,
+    ):
+        _raise_rate_limited(session)
+
     challenge = session.scalar(
         select(WebLoginChallenge)
         .where(WebLoginChallenge.id == challenge_id)
         .with_for_update()
     )
     if challenge is None:
+        session.commit()
         return ConsumedChallenge(False, "invalid")
 
     open_statuses = {
@@ -454,7 +587,7 @@ def consume_challenge(
         return ConsumedChallenge(False, challenge.status)
 
     session_token = secrets.token_urlsafe(32)
-    ip_hash = _keyed_hash(
+    request_ip_hash = _keyed_hash(
         _request_ip(request),
         purpose="ip",
         settings=settings,
@@ -472,8 +605,8 @@ def consume_challenge(
         absolute_expires_at=now
         + timedelta(seconds=settings.web_session_absolute_ttl_seconds),
         rotation_counter=1,
-        created_ip_hash=ip_hash,
-        last_ip_hash=ip_hash,
+        created_ip_hash=request_ip_hash,
+        last_ip_hash=request_ip_hash,
         user_agent_hash=_user_agent_hash(request, settings),
         request_id=request_id,
     )
@@ -609,7 +742,7 @@ def require_web_session_identity(
 
 
 def logout_web_session(session: Session, request: Request) -> bool:
-    validate_csrf(request)
+    validate_web_boundary(request)
     settings = _settings()
     token = request.cookies.get(_SESSION_COOKIE, "")
     if not token:
