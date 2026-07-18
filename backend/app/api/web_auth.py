@@ -34,12 +34,10 @@ from app.services.web_auth_limits import (
     enforce_approval_server_rate_limit,
     enforce_consume_rate_limit,
     enforce_status_rate_limit,
-    invalidate_pending_browser_challenge,
-    read_bound_challenge_status,
-)
-from app.services.web_auth_rate_bucket import (
     ensure_approval_bucket,
     ensure_start_bucket,
+    read_bound_challenge_status,
+    replace_pending_browser_challenge,
 )
 from app.web_auth_identity import require_web_approval_identity
 
@@ -63,7 +61,7 @@ def create_challenge(
     session: SessionDependency,
 ) -> ChallengeStartResponse:
     ensure_start_bucket(session, request, datetime.now(UTC))
-    invalidate_pending_browser_challenge(session, request)
+    replace_pending_browser_challenge(session, request)
     started = start_challenge(session, request)
     set_start_cookies(response, started)
     return ChallengeStartResponse(
