@@ -5,9 +5,6 @@ requires_env:
   - name: NAILS_INTERNAL_API_KEY
     description: Internal API configuration
     secret: true
-  - name: NAILS_WEB_LOGIN_TOOL_ENABLED
-    description: Enable conversational web login confirmation
-    secret: false
 provides_tools:
   - nails_scheduling
   - save_feedback
