@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import uuid
 from datetime import datetime
 from enum import StrEnum
@@ -12,7 +11,6 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
-    event,
     func,
     text,
 )
@@ -49,7 +47,11 @@ class WebLoginChallenge(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    code_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    verification_number_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        unique=True,
+    )
     browser_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     pending_scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -73,14 +75,6 @@ class WebLoginChallenge(Base):
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-@event.listens_for(WebLoginChallenge, "before_insert")
-def _set_pending_scope_hash(_mapper, _connection, target: WebLoginChallenge) -> None:
-    if target.pending_scope_hash:
-        return
-    fingerprint = f"{target.request_ip_hash}:{target.user_agent_hash or '-'}"
-    target.pending_scope_hash = hashlib.sha256(fingerprint.encode()).hexdigest()
 
 
 class WebSession(Base):
