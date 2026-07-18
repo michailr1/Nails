@@ -1,22 +1,18 @@
-# WEB-001D production edge for de.funti.cc.
-# Installed into /etc/caddy/Caddyfile by the reviewed deployment flow.
-# The application container remains loopback-only on 127.0.0.1:8220.
+# WEB-001D production edge kill-switch: disabled by default.
+# This file is safe to install before the application is published.
+# Enabling the route is a separate reviewed Caddy reload using
+# ops/edge/nails-web.enabled.Caddyfile.
 
 de.funti.cc:8446 {
-    encode zstd gzip
-
     header {
         Strict-Transport-Security "max-age=31536000"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "no-referrer"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Cache-Control "no-store"
         -Server
     }
 
-    reverse_proxy 127.0.0.1:8220 {
-        header_up Host {host}
-        header_up X-Forwarded-Host {host}
-        header_up X-Forwarded-Proto https
-    }
+    respond "web interface unavailable" 503
 }
