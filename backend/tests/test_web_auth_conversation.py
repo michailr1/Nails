@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from conftest import WEB_ORIGIN_HEADERS
 from sqlalchemy import select
 
 from app.db import get_session_factory
 from app.web_auth_models import WebLoginChallenge
-from conftest import WEB_ORIGIN_HEADERS
 
 
 def _start(client):
@@ -86,9 +86,9 @@ def test_expired_challenge_cannot_be_approved(client, create_user, auth_headers)
         challenge.expires_at = datetime.now(UTC) - timedelta(seconds=1)
         session.commit()
 
-    assert _read(client, auth_headers, number).json()["status"] == "not_found"
+    assert _read(client, auth_headers, number).json()["status"] == "expired"
     decided = _decide(client, auth_headers, number, "approve")
-    assert decided.json()["status"] == "not_found"
+    assert decided.json()["status"] == "expired"
 
 
 def test_repeated_approve_is_idempotent(client, create_user, auth_headers):
