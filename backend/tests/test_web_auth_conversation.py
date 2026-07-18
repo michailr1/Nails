@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from conftest import WEB_ORIGIN_HEADERS
 from sqlalchemy import select
 
 from app.db import get_session_factory
 from app.web_auth_models import WebLoginChallenge
+from conftest import WEB_ORIGIN_HEADERS
 
 
 def _start(client):
@@ -67,9 +67,12 @@ def test_other_master_cannot_read_or_decide_claimed_challenge(
     started = _start(client)
     number = str(started["verification_number"])
 
-    assert _read(client, auth_headers, number, 100000001).json()["status"] == "pending"
-    assert _read(client, auth_headers, number, 100000002).json()["status"] == "not_found"
-    assert _decide(client, auth_headers, number, "approve", 100000002).json()["status"] == "not_found"
+    first = _read(client, auth_headers, number, 100000001)
+    assert first.json()["status"] == "pending"
+    second = _read(client, auth_headers, number, 100000002)
+    assert second.json()["status"] == "not_found"
+    denied = _decide(client, auth_headers, number, "approve", 100000002)
+    assert denied.json()["status"] == "not_found"
 
 
 def test_expired_challenge_cannot_be_approved(client, create_user, auth_headers):
@@ -84,7 +87,8 @@ def test_expired_challenge_cannot_be_approved(client, create_user, auth_headers)
         session.commit()
 
     assert _read(client, auth_headers, number).json()["status"] == "not_found"
-    assert _decide(client, auth_headers, number, "approve").json()["status"] == "not_found"
+    decided = _decide(client, auth_headers, number, "approve")
+    assert decided.json()["status"] == "not_found"
 
 
 def test_repeated_approve_is_idempotent(client, create_user, auth_headers):
@@ -93,8 +97,10 @@ def test_repeated_approve_is_idempotent(client, create_user, auth_headers):
     number = str(started["verification_number"])
 
     assert _read(client, auth_headers, number).json()["status"] == "pending"
-    assert _decide(client, auth_headers, number, "approve").json()["status"] == "approved"
-    assert _decide(client, auth_headers, number, "approve").json()["status"] == "approved"
+    first = _decide(client, auth_headers, number, "approve")
+    assert first.json()["status"] == "approved"
+    second = _decide(client, auth_headers, number, "approve")
+    assert second.json()["status"] == "approved"
 
 
 def test_deny_is_idempotent_and_invalid_number_is_not_found(
@@ -108,5 +114,7 @@ def test_deny_is_idempotent_and_invalid_number_is_not_found(
 
     assert _read(client, auth_headers, "000000").json()["status"] == "not_found"
     assert _read(client, auth_headers, number).json()["status"] == "pending"
-    assert _decide(client, auth_headers, number, "deny").json()["status"] == "denied"
-    assert _decide(client, auth_headers, number, "deny").json()["status"] == "denied"
+    first = _decide(client, auth_headers, number, "deny")
+    assert first.json()["status"] == "denied"
+    second = _decide(client, auth_headers, number, "deny")
+    assert second.json()["status"] == "denied"
