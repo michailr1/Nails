@@ -1,3 +1,5 @@
+import os
+
 from .feedback_schema import SAVE_FEEDBACK
 from .feedback_tool import save_feedback
 from .schemas import NAILS_SCHEDULING
@@ -19,9 +21,10 @@ def register(ctx):
         schema=SAVE_FEEDBACK,
         handler=save_feedback,
     )
-    ctx.register_tool(
-        name="web_login",
-        toolset="nails_scheduling",
-        schema=WEB_LOGIN,
-        handler=web_login,
-    )
+    if os.getenv("NAILS_WEB_LOGIN_TOOL_ENABLED", "").strip().lower() == "true":
+        ctx.register_tool(
+            name="web_login",
+            toolset="nails_scheduling",
+            schema=WEB_LOGIN,
+            handler=web_login,
+        )
