@@ -6,11 +6,15 @@ on:
     paths:
       - "ops/deploy/**"
       - "backend/Dockerfile"
+      - "web/**"
+      - "compose.yaml"
       - ".github/workflows/deploy-script.yml"
   pull_request:
     paths:
       - "ops/deploy/**"
       - "backend/Dockerfile"
+      - "web/**"
+      - "compose.yaml"
       - ".github/workflows/deploy-script.yml"
 
 permissions:
@@ -64,11 +68,19 @@ jobs:
               "from app.api.scheduling import router as scheduling_router",
               'path.startswith("/api/v1/onboarding")',
               'path.startswith("/api/v1/scheduling")',
-              "BUILT_IMAGE_OK=true",
+              "BUILT_API_IMAGE_OK=true",
+              "BUILT_WEB_IMAGE_OK=true",
               "pg_dump",
               "gzip -t",
-              'IMAGE_RETAGGED="true"',
-              'docker image tag "$ROLLBACK_IMAGE" "$API_IMAGE"',
+              'API_IMAGE_RETAGGED="true"',
+              'WEB_IMAGE_RETAGGED="true"',
+              'docker image tag "$ROLLBACK_API_IMAGE" "$API_IMAGE"',
+              'docker image tag "$ROLLBACK_WEB_IMAGE" "$WEB_IMAGE"',
+              'compose build --build-arg GIT_SHA="$RELEASE_SHA" nails-api nails-web',
+              'compose up -d --no-deps --force-recreate --no-build nails-api nails-web',
+              'compose rm -sf nails-web',
+              'wait_api_ready',
+              'wait_web_ready',
               'reset --hard "$RELEASE_SHA"',
               '-e APP_TIMEZONE=UTC',
               '-e DATABASE_URL=postgresql+psycopg://smoke:smoke@127.0.0.1:5432/smoke',
@@ -76,22 +88,33 @@ jobs:
           ):
               assert phrase in deploy, f"deploy.sh lost mandatory safeguard: {phrase}"
 
-          assert deploy.count("< /dev/null") == 2, (
+          assert deploy.count("docker compose") == 1, (
+              "all compose operations must use the permanent worktree wrapper"
+          )
+          assert deploy.count("< /dev/null") == 3, (
               "every compose exec in deploy.sh must have isolated stdin"
           )
           assert deploy.count('git -C "$REPO" merge --ff-only') == 1, (
               "candidate flow must not add another checkout mutation"
           )
-          assert deploy.index('compose build --build-arg GIT_SHA="$RELEASE_SHA"') < deploy.index(
-              'IMAGE_RETAGGED="true"'
+          assert deploy.index('docker image tag "$API_IMAGE" "$ROLLBACK_API_IMAGE"') < (
+              deploy.index('compose build --build-arg GIT_SHA="$RELEASE_SHA"')
           )
-          assert deploy.index('IMAGE_RETAGGED="true"') < deploy.index(
-              'docker run --rm -i --network none'
+          assert deploy.index('compose build --build-arg GIT_SHA="$RELEASE_SHA"') < (
+              deploy.index("docker run --rm -i --network none")
+          )
+          assert deploy.index("docker run --rm -i --network none") < deploy.index(
+              'compose up -d --no-deps --force-recreate --no-build nails-api nails-web'
           )
 
-          dockerfile = Path("backend/Dockerfile").read_text(encoding="utf-8")
-          assert "ARG GIT_SHA" in dockerfile
-          assert "NAILS_GIT_SHA" in dockerfile
+          api_dockerfile = Path("backend/Dockerfile").read_text(encoding="utf-8")
+          assert "ARG GIT_SHA" in api_dockerfile
+          assert "NAILS_GIT_SHA" in api_dockerfile
+
+          web_dockerfile = Path("web/Dockerfile").read_text(encoding="utf-8")
+          assert "ARG GIT_SHA" in web_dockerfile
+          assert "NAILS_GIT_SHA" in web_dockerfile
+          assert "/web-health" in web_dockerfile
 
           principles = Path("docs/operations/engineering-principles.md")
           assert principles.is_file(), "engineering principles are mandatory"
