@@ -2,7 +2,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
 from nails_scheduling import register, web_login_tool
 
 
@@ -69,9 +68,10 @@ def test_decision_uses_separate_mutation_action(monkeypatch, action):
 
     def fake_call_backend(**kwargs):
         calls.append(kwargs)
+        status = "approved" if action == "approve" else "denied"
         return {
             "ok": True,
-            "result": {"status": "approved" if action == "approve" else "denied", "remaining_seconds": 45},
+            "result": {"status": status, "remaining_seconds": 45},
         }
 
     monkeypatch.setattr(web_login_tool, "_call_backend", fake_call_backend)
