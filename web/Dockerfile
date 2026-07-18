@@ -3,8 +3,8 @@ FROM nginxinc/nginx-unprivileged:1.27-alpine
 ARG GIT_SHA=unknown
 ENV NAILS_GIT_SHA=${GIT_SHA}
 
-COPY web/nginx.conf /etc/nginx/conf.d/default.conf
-COPY backend/app/web_static /usr/share/nginx/html/web
+COPY --chown=101:101 web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chown=101:101 backend/app/web_static /usr/share/nginx/html/web
 
 EXPOSE 8080
 
