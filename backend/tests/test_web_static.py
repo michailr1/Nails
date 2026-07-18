@@ -6,6 +6,12 @@ def test_web_master_interface_is_served(client, clean_database):
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["cache-control"] == "no-store"
+    assert "default-src 'self'" in response.headers["content-security-policy"]
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     assert "Нэйли — кабинет мастера" in response.text
     assert "/web/app.js" in response.text
     assert "prototype" not in response.text.lower()
@@ -29,4 +35,5 @@ def test_web_api_routes_take_precedence_over_static_mount(client, clean_database
 
     assert response.status_code == 401
     assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["content-security-policy"].startswith("default-src")
     assert response.json() == {"detail": {"code": "unauthorized"}}
