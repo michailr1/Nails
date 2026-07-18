@@ -7,8 +7,7 @@ from threading import Barrier
 from sqlalchemy import select
 
 from app.db import get_session_factory
-from app.services.web_auth import _consume_rate_bucket
-from app.services.web_auth_limits import _ensure_bucket
+from app.services.web_auth import _consume_rate_bucket, _ensure_rate_bucket
 from app.web_auth_models import WebAuthRateBucket
 
 
@@ -19,7 +18,7 @@ def test_first_rate_bucket_insert_is_concurrency_safe(clean_database):
     def consume_once() -> bool:
         with get_session_factory()() as session:
             barrier.wait(timeout=5)
-            _ensure_bucket(
+            _ensure_rate_bucket(
                 session,
                 action="concurrent_test",
                 scope_hash="same-scope",
