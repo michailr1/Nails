@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -22,6 +21,7 @@ from app.schemas.web_auth import (
 )
 from app.services.web_auth import (
     approve_challenge,
+    challenge_status,
     clear_auth_cookies,
     consume_challenge,
     logout_web_session,
@@ -29,15 +29,6 @@ from app.services.web_auth import (
     set_session_cookie,
     set_start_cookies,
     start_challenge,
-)
-from app.services.web_auth_limits import (
-    enforce_approval_server_rate_limit,
-    enforce_consume_rate_limit,
-    enforce_status_rate_limit,
-    ensure_approval_bucket,
-    ensure_start_bucket,
-    read_bound_challenge_status,
-    replace_pending_browser_challenge,
 )
 from app.web_auth_identity import require_web_approval_identity
 
@@ -60,15 +51,12 @@ def create_challenge(
     response: Response,
     session: SessionDependency,
 ) -> ChallengeStartResponse:
-    ensure_start_bucket(session, request, datetime.now(UTC))
-    replace_pending_browser_challenge(session, request)
     started = start_challenge(session, request)
     set_start_cookies(response, started)
     return ChallengeStartResponse(
         challenge_id=started.challenge.id,
-        confirmation_code=started.confirmation_code,
+        verification_number=started.verification_number,
         expires_at=started.challenge.expires_at,
-        csrf_token=started.csrf_token,
     )
 
 
@@ -81,8 +69,7 @@ def get_challenge_status(
     request: Request,
     session: SessionDependency,
 ) -> ChallengeStatusResponse:
-    enforce_status_rate_limit(session, request, challenge_id)
-    challenge = read_bound_challenge_status(session, request, challenge_id)
+    challenge = challenge_status(session, request, challenge_id)
     return ChallengeStatusResponse(
         challenge_id=challenge.challenge_id,
         status=challenge.status,
@@ -100,7 +87,6 @@ def consume(
     response: Response,
     session: SessionDependency,
 ) -> ChallengeConsumeResponse:
-    enforce_consume_rate_limit(session, request, body.challenge_id)
     result = consume_challenge(session, request, body.challenge_id)
     if result.authenticated and result.session_token is not None:
         set_session_cookie(response, result.session_token)
@@ -121,14 +107,12 @@ def approve_from_telegram(
 ) -> TelegramChallengeApproveResponse:
     if identity is None:
         return TelegramChallengeApproveResponse(approved=False)
-    ensure_approval_bucket(session, identity, datetime.now(UTC))
-    if not enforce_approval_server_rate_limit(session, identity):
-        return TelegramChallengeApproveResponse(approved=False)
     return TelegramChallengeApproveResponse(
         approved=approve_challenge(
             session,
             identity=identity,
-            confirmation_code=body.confirmation_code,
+            challenge_id=body.challenge_id,
+            verification_number=body.verification_number,
         )
     )
 
