@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import datetime
 from enum import StrEnum
@@ -11,7 +12,9 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    event,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -33,6 +36,12 @@ class WebLoginChallenge(Base):
     __table_args__ = (
         Index("ix_web_login_challenges_status_expires", "status", "expires_at"),
         Index("ix_web_login_challenges_ip_created", "request_ip_hash", "created_at"),
+        Index(
+            "uq_web_login_challenges_pending_scope",
+            "pending_scope_hash",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -42,6 +51,7 @@ class WebLoginChallenge(Base):
     )
     code_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     browser_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    pending_scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -63,6 +73,14 @@ class WebLoginChallenge(Base):
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+@event.listens_for(WebLoginChallenge, "before_insert")
+def _set_pending_scope_hash(_mapper, _connection, target: WebLoginChallenge) -> None:
+    if target.pending_scope_hash:
+        return
+    fingerprint = f"{target.request_ip_hash}:{target.user_agent_hash or '-'}"
+    target.pending_scope_hash = hashlib.sha256(fingerprint.encode()).hexdigest()
 
 
 class WebSession(Base):
