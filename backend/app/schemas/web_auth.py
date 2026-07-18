@@ -3,14 +3,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChallengeStartResponse(BaseModel):
     challenge_id: uuid.UUID
-    confirmation_code: str
+    verification_number: str
     expires_at: datetime
-    csrf_token: str
 
 
 class ChallengeStatusResponse(BaseModel):
@@ -33,15 +32,12 @@ class ChallengeConsumeResponse(BaseModel):
 class TelegramChallengeApproveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    confirmation_code: str = Field(min_length=6, max_length=12)
-
-    @field_validator("confirmation_code")
-    @classmethod
-    def normalize_code(cls, value: str) -> str:
-        candidate = "".join(value.split())
-        if not candidate.isdigit():
-            raise ValueError("confirmation_code must contain only digits")
-        return candidate
+    challenge_id: uuid.UUID
+    verification_number: str = Field(
+        min_length=6,
+        max_length=6,
+        pattern=r"^[0-9]{6}$",
+    )
 
 
 class TelegramChallengeApproveResponse(BaseModel):
