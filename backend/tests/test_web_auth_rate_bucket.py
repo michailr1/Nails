@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.db import get_session_factory
 from app.services.web_auth import _consume_rate_bucket
-from app.services.web_auth_rate_bucket import _ensure_bucket
+from app.services.web_auth_limits import _ensure_bucket
 from app.web_auth_models import WebAuthRateBucket
 
 
