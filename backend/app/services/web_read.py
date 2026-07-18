@@ -19,7 +19,10 @@ from app.schemas.web_read import (
 _MAX_CALENDAR_DAYS = 31
 
 
-def _utc_bounds(date_from: date, date_to: date) -> tuple[datetime, datetime, str]:
+def _calendar_window(
+    date_from: date,
+    date_to: date,
+) -> tuple[datetime, datetime, str, ZoneInfo]:
     if date_to < date_from:
         raise ValueError("date_to_before_date_from")
     if (date_to - date_from).days + 1 > _MAX_CALENDAR_DAYS:
@@ -28,7 +31,12 @@ def _utc_bounds(date_from: date, date_to: date) -> tuple[datetime, datetime, str
     timezone = ZoneInfo(timezone_name)
     local_start = datetime.combine(date_from, time.min, timezone)
     local_end = datetime.combine(date_to + timedelta(days=1), time.min, timezone)
-    return local_start.astimezone(UTC), local_end.astimezone(UTC), timezone_name
+    return (
+        local_start.astimezone(UTC),
+        local_end.astimezone(UTC),
+        timezone_name,
+        timezone,
+    )
 
 
 def list_calendar(
@@ -38,7 +46,10 @@ def list_calendar(
     date_from: date,
     date_to: date,
 ) -> WebCalendarResponse:
-    starts_at, ends_at, timezone_name = _utc_bounds(date_from, date_to)
+    starts_at, ends_at, timezone_name, timezone = _calendar_window(
+        date_from,
+        date_to,
+    )
     rows = session.execute(
         select(Booking, Client.public_name, Service.public_name)
         .join(Client, Client.id == Booking.client_id)
@@ -62,8 +73,8 @@ def list_calendar(
                 client_id=booking.client_id,
                 client_name=client_name,
                 service_name=service_name,
-                starts_at=booking.starts_at,
-                ends_at=booking.ends_at,
+                starts_at=booking.starts_at.astimezone(timezone),
+                ends_at=booking.ends_at.astimezone(timezone),
                 status=booking.status.value,
                 price_amount=booking.price_amount,
                 currency=booking.currency,
