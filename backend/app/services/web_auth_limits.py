@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import hmac
 import uuid
 from dataclasses import dataclass
@@ -7,16 +8,17 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.config import Settings, get_settings
-from app.services.web_auth import (
-    _consume_rate_bucket,
-    _keyed_hash,
-    _user_agent_hash,
+from app.services.web_auth import _consume_rate_bucket, _keyed_hash, _user_agent_hash
+from app.web_auth_models import (
+    WebAuthRateBucket,
+    WebChallengeStatus,
+    WebLoginChallenge,
 )
-from app.web_auth_models import WebChallengeStatus, WebLoginChallenge
 
 _LOGIN_COOKIE = "__Host-nails_login"
 
@@ -66,60 +68,95 @@ def _advisory_lock_key(scope_hash: str) -> int:
     return raw if raw < 2**63 else raw - 2**64
 
 
-def invalidate_pending_browser_challenge(session: Session, request: Request) -> None:
-    settings = _settings()
-    login_token = request.cookies.get(_LOGIN_COOKIE, "")
+def _pending_scope(
+    request: Request,
+    settings: Settings,
+) -> tuple[str, str, str | None]:
+    request_ip_hash = _keyed_hash(
+        _request_ip(request),
+        purpose="ip",
+        settings=settings,
+    )
+    user_agent_hash = _user_agent_hash(request, settings)
+    fingerprint = f"{request_ip_hash}:{user_agent_hash or '-'}"
+    pending_scope_hash = hashlib.sha256(fingerprint.encode()).hexdigest()
+    return pending_scope_hash, request_ip_hash, user_agent_hash
 
-    if login_token:
-        browser_token_hash = _keyed_hash(
-            login_token,
-            purpose="login-token",
-            settings=settings,
+
+def _ensure_bucket(
+    session: Session,
+    *,
+    action: str,
+    scope_hash: str,
+    now: datetime,
+) -> None:
+    session.execute(
+        pg_insert(WebAuthRateBucket)
+        .values(
+            action=action,
+            scope_hash=scope_hash,
+            window_started_at=now,
+            count=0,
         )
-        scope_hash = _keyed_hash(
-            browser_token_hash,
-            purpose="pending-browser-lock",
-            settings=settings,
+        .on_conflict_do_nothing(
+            constraint="uq_web_auth_rate_bucket_scope",
         )
-        challenge_filter = (
-            WebLoginChallenge.browser_token_hash == browser_token_hash
-        )
-    else:
-        request_ip_hash = _keyed_hash(
+    )
+
+
+def ensure_start_bucket(session: Session, request: Request, now: datetime) -> None:
+    settings = _settings()
+    _ensure_bucket(
+        session,
+        action="challenge_start",
+        scope_hash=_keyed_hash(
             _request_ip(request),
             purpose="ip",
             settings=settings,
-        )
-        user_agent_hash = _user_agent_hash(request, settings)
-        scope_hash = _keyed_hash(
-            f"{request_ip_hash}:{user_agent_hash or '-'}",
-            purpose="pending-browser-lock",
-            settings=settings,
-        )
-        if user_agent_hash is None:
-            user_agent_filter = WebLoginChallenge.user_agent_hash.is_(None)
-        else:
-            user_agent_filter = (
-                WebLoginChallenge.user_agent_hash == user_agent_hash
-            )
-        challenge_filter = (
-            WebLoginChallenge.request_ip_hash == request_ip_hash
-        ) & user_agent_filter
+        ),
+        now=now,
+    )
 
+
+def ensure_approval_bucket(
+    session: Session,
+    identity: RequestIdentity,
+    now: datetime,
+) -> None:
+    settings = _settings()
+    _ensure_bucket(
+        session,
+        action="challenge_approve",
+        scope_hash=_keyed_hash(
+            str(identity.user_id),
+            purpose="approve-account",
+            settings=settings,
+        ),
+        now=now,
+    )
+
+
+def replace_pending_browser_challenge(session: Session, request: Request) -> str:
+    settings = _settings()
+    pending_scope_hash, _request_ip_hash, _user_agent_hash_value = _pending_scope(
+        request,
+        settings,
+    )
     session.execute(
         text("SELECT pg_advisory_xact_lock(:lock_key)"),
-        {"lock_key": _advisory_lock_key(scope_hash)},
+        {"lock_key": _advisory_lock_key(pending_scope_hash)},
     )
     challenges = session.scalars(
         select(WebLoginChallenge)
         .where(
-            challenge_filter,
+            WebLoginChallenge.pending_scope_hash == pending_scope_hash,
             WebLoginChallenge.status == WebChallengeStatus.pending.value,
         )
         .with_for_update()
     ).all()
     for challenge in challenges:
         challenge.status = WebChallengeStatus.denied.value
+    return pending_scope_hash
 
 
 def enforce_status_rate_limit(
@@ -132,6 +169,12 @@ def enforce_status_rate_limit(
         f"{challenge_id}:{_request_ip(request)}",
         purpose="status-scope",
         settings=settings,
+    )
+    _ensure_bucket(
+        session,
+        action="challenge_status",
+        scope_hash=scope_hash,
+        now=_now(),
     )
     allowed = _consume_rate_bucket(
         session,
@@ -192,6 +235,12 @@ def enforce_consume_rate_limit(
         purpose="consume-scope",
         settings=settings,
     )
+    _ensure_bucket(
+        session,
+        action="challenge_consume",
+        scope_hash=scope_hash,
+        now=_now(),
+    )
     allowed = _consume_rate_bucket(
         session,
         action="challenge_consume",
@@ -214,6 +263,12 @@ def enforce_approval_server_rate_limit(
         "internal-api",
         purpose="approve-server",
         settings=settings,
+    )
+    _ensure_bucket(
+        session,
+        action="challenge_approve_server",
+        scope_hash=scope_hash,
+        now=_now(),
     )
     allowed = _consume_rate_bucket(
         session,
