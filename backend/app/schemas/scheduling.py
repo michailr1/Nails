@@ -103,7 +103,14 @@ class ServiceDefinition(BaseModel):
         if self.price_type == "fixed":
             if self.price_amount is None:
                 raise ValueError("fixed price requires price_amount")
-            if any(value is not None for value in (self.price_min_amount, self.price_max_amount, self.price_unit)):
+            if any(
+                value is not None
+                for value in (
+                    self.price_min_amount,
+                    self.price_max_amount,
+                    self.price_unit,
+                )
+            ):
                 raise ValueError("fixed price cannot contain range or unit fields")
         elif self.price_type == "range":
             if self.price_min_amount is None or self.price_max_amount is None:
