@@ -223,6 +223,23 @@ class Booking(TimestampMixin, Base):
             "reserved_starts_at <= starts_at AND reserved_ends_at >= ends_at",
             name="reserved_contains_service_interval",
         ),
+        CheckConstraint(
+            "catalog_price_type_snapshot IN ('fixed', 'range', 'per_unit', 'on_request')",
+            name="booking_catalog_price_type_valid",
+        ),
+        CheckConstraint(
+            "catalog_price_min_snapshot IS NULL OR catalog_price_min_snapshot >= 0",
+            name="booking_catalog_price_min_non_negative",
+        ),
+        CheckConstraint(
+            "catalog_price_max_snapshot IS NULL OR catalog_price_max_snapshot >= 0",
+            name="booking_catalog_price_max_non_negative",
+        ),
+        CheckConstraint(
+            "catalog_price_min_snapshot IS NULL OR catalog_price_max_snapshot IS NULL "
+            "OR catalog_price_max_snapshot >= catalog_price_min_snapshot",
+            name="booking_catalog_price_range_ordered",
+        ),
         Index("ix_bookings_starts_at", "starts_at"),
         Index("ix_bookings_owner_starts_at", "owner_user_id", "starts_at"),
         Index("ix_bookings_client_id_starts_at", "client_id", "starts_at"),
@@ -268,6 +285,18 @@ class Booking(TimestampMixin, Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     price_source: Mapped[str] = mapped_column(String(64), nullable=False)
     price_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    catalog_items_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    catalog_price_type_snapshot: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=ServicePriceType.fixed
+    )
+    catalog_price_min_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    catalog_price_max_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    catalog_price_unit_snapshot: Mapped[str | None] = mapped_column(String(80))
+    duration_source: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="catalog_snapshot"
+    )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
