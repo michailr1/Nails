@@ -1,0 +1,56 @@
+name: Diagnostic digest migration
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: nails_test
+          POSTGRES_USER: nails_app
+          POSTGRES_PASSWORD: nails_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U nails_app -d nails_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      APP_TIMEZONE: Europe/Berlin
+      INTERNAL_API_KEY: test-only-internal-api-key-0000000000000000
+      DATABASE_URL: postgresql+psycopg://nails_app:nails_test@127.0.0.1:55432/nails_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        working-directory: backend
+        run: python -m pip install --upgrade pip && pip install -e '.[dev]'
+      - name: Capture migration
+        working-directory: backend
+        run: |
+          set +e
+          alembic upgrade head > ../digest-migration.txt 2>&1
+          status=$?
+          printf '%s\n' "$status" > ../digest-migration.status
+          exit 0
+      - name: Upload diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-migration
+          path: |
+            digest-migration.txt
+            digest-migration.status
+          retention-days: 1
+          if-no-files-found: error
+      - name: Fail when migration failed
+        run: test "$(cat digest-migration.status)" = "0"
