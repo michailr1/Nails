@@ -6,7 +6,11 @@ import os
 from typing import Any
 
 from .booking_catalog import validate_catalog_booking_args
-from .catalog_batch import replace_catalog_request_body, validate_replace_catalog_args
+from .catalog_batch import (
+    replace_catalog_request_body,
+    sanitize_replace_catalog_result,
+    validate_replace_catalog_args,
+)
 from .client_cards import (
     create_client_card,
     update_client_card,
@@ -225,6 +229,8 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 raise ValueError("invalid client update result")
             if action == "preview_availability":
                 safe_result = _sanitize_preview_result(raw_result)
+            elif action == "replace_catalog":
+                safe_result = sanitize_replace_catalog_result(raw_result)
             elif action == "finalize_booking":
                 safe_result = _sanitize_success("cancel_booking", raw_result)
             else:
