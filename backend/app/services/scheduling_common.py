@@ -56,9 +56,20 @@ def lock_owner_schedule(session: Session, owner_user_id: uuid.UUID) -> None:
     )
 
 
-def calculate_reservation(service: Service, starts_at: datetime) -> ReservationTimes:
+def calculate_reservation(
+    service: Service,
+    starts_at: datetime,
+    *,
+    duration_minutes: int | None = None,
+) -> ReservationTimes:
+    effective_duration = (
+        service.duration_minutes if duration_minutes is None else duration_minutes
+    )
+    if effective_duration < 1 or effective_duration > 1440:
+        raise SchedulingDomainError("duration_out_of_range")
+
     starts_at_utc = starts_at.astimezone(UTC)
-    ends_at = starts_at_utc + timedelta(minutes=service.duration_minutes)
+    ends_at = starts_at_utc + timedelta(minutes=effective_duration)
     reserved_starts_at = starts_at_utc - timedelta(minutes=service.buffer_before_minutes)
     reserved_ends_at = ends_at + timedelta(minutes=service.buffer_after_minutes)
     return ReservationTimes(
@@ -66,7 +77,7 @@ def calculate_reservation(service: Service, starts_at: datetime) -> ReservationT
         ends_at=ends_at,
         reserved_starts_at=reserved_starts_at,
         reserved_ends_at=reserved_ends_at,
-        duration_minutes=service.duration_minutes,
+        duration_minutes=effective_duration,
         buffer_before_minutes=service.buffer_before_minutes,
         buffer_after_minutes=service.buffer_after_minutes,
     )
