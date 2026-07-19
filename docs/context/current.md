@@ -1,6 +1,6 @@
 # Nails — текущий контекст
 
-Дата фиксации: **19 июля 2026 года**.
+Дата фиксации: **20 июля 2026 года**.
 
 Перед работой прочитать `AGENTS.md`, `docs/context/current.md`, `docs/operations/engineering-principles.md`, остальные operational-документы и принятые ADR. GitHub проверять по API, production — фактическим preflight. **Production state не предполагать**.
 
@@ -8,11 +8,11 @@
 
 ```text
 repository: michailr1/Nails
-GitHub main: fea7f3598b987842e86dba57bb7c2d4db574e410
+GitHub main: 74346e902f2ff87e30cf967b52a26c16cc556f88
 production host: de.funti.cc
 production repo: /opt/nails/repo
 production branch: main
-production SHA: fea7f3598b987842e86dba57bb7c2d4db574e410
+production SHA: 74346e902f2ff87e30cf967b52a26c16cc556f88
 backend env: /opt/nails/.env
 internal API: http://127.0.0.1:8210
 health: /health
@@ -35,38 +35,25 @@ Hermes plugins: nails-onboarding, nails-scheduling
 
 ## Завершённый этап
 
-ADR-007 Slice D развернут на production. Работают финализация визитов, no-show, поздние корректировки и ежедневный дайджест в 23:30 по Москве. Живая проверка подтвердила одну отправку и отсутствие дубля при повторном запуске.
+ADR-007 Slice E развернут на production. Работает импорт полного каталога услуг по одному или нескольким фото прайса через существующий vision-инструмент: Нэйли показывает единую редактируемую таблицу, отдельно помечает предложенные длительности как свою оценку и применяет каталог одной подтверждённой owner-scoped batch-мутацией. Живая Telegram-проверка успешна. По обратной связи оценка длительности может быть слегка завышена, но мастер корректирует её до подтверждения.
 
-## Текущая задача
+## Следующий приоритет
 
-```text
-issue=143
-PR=144
-branch=feat/adr007-slice-e-photo-price-import
-baseline=fea7f3598b987842e86dba57bb7c2d4db574e410
-```
+Вернуться к WEB-контуру. Безопасная последовательность остаётся:
 
-Slice E добавляет занесение прайса по фото:
+1. завершить web auth/session/CSRF и browser security gate;
+2. выпустить read-only календарь и просмотр записей;
+3. сразу после этого добавить первый write-slice для мастера: редактирование каталога услуг в веб-интерфейсе;
+4. затем редактирование графика и записей.
 
-- изображения разбираются существующим vision-инструментом;
-- backend не распознаёт и не хранит изображения;
-- Нэйли показывает одну редактируемую таблицу;
-- длительности явно помечаются как предложение Нэйли;
-- одна confirmation применяет весь каталог одной owner-scoped транзакцией;
-- новые позиции создаются, совпавшие по имени обновляются, отсутствующие активные позиции архивируются;
-- некорректная строка отклоняет весь batch;
-- повтор одинакового batch идемпотентен;
-- существующие booking snapshots не изменяются;
-- readback не содержит внутренних ID.
+Редактирование услуг в вебе поднято в приоритете: оно не должно ждать полного web-кабинета или клиентского контура. Первый write-slice должен переиспользовать существующую backend-валидацию и подтверждённую batch-модель каталога, без отдельной логики данных во frontend.
 
 ## Точка продолжения
 
 ```text
-1. получить green CI на exact PR head
-2. провести self-review
-3. перевести PR #144 в Ready for review
-4. candidate deployment
-5. fast-forward exact SHA
-6. finalize production
-7. одна живая Telegram-проверка по фото прайса
+1. закрыть issue #143 после фиксации live acceptance
+2. восстановить фактический статус WEB-001 на main
+3. завершить auth/session/CSRF blockers
+4. read-only calendar
+5. web service catalog editor as first write slice
 ```
