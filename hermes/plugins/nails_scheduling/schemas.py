@@ -55,8 +55,10 @@ NAILS_SCHEDULING = {
         "Create a booking from exactly one base service and zero or more addon_names. Preserve "
         "range, per-unit and on-request pricing as estimates unless the master explicitly confirms "
         "price_override_amount. Use duration_override_minutes only when the master explicitly "
-        "changes the composed duration. Create, reschedule, or cancel a booking only after showing "
-        "a complete human-readable current-to-future summary and receiving explicit confirmation. "
+        "changes the composed duration. Create, reschedule, cancel, or finalize a booking only "
+        "after showing a complete human-readable current-to-future summary and receiving explicit "
+        "confirmation. finalize_booking records completed or no_show; omit price_amount to preserve "
+        "the booking estimate, or provide it only when the master states the final total. "
         "Rescheduling must use an exact backend free slot. Cancellation is soft and preserves "
         "history. Do not promise an operation before a successful tool result. Send at most one "
         "brief progress message before the final result."
@@ -85,6 +87,7 @@ NAILS_SCHEDULING = {
                     "create_booking",
                     "reschedule_booking",
                     "cancel_booking",
+                    "finalize_booking",
                 ],
             },
             "date_kind": {
@@ -137,7 +140,14 @@ NAILS_SCHEDULING = {
                 "type": "string",
                 "enum": ["fixed", "range", "per_unit", "on_request"],
             },
-            "price_amount": {"type": ["number", "null"], "minimum": 0},
+            "price_amount": {
+                "type": ["number", "null"],
+                "minimum": 0,
+                "description": (
+                    "Catalog amount for service actions, or the explicitly stated final total "
+                    "for finalize_booking. Omit for no_show or when preserving the estimate."
+                ),
+            },
             "price_min_amount": {"type": ["number", "null"], "minimum": 0},
             "price_max_amount": {"type": ["number", "null"], "minimum": 0},
             "price_unit": {"type": ["string", "null"]},
@@ -204,6 +214,11 @@ NAILS_SCHEDULING = {
             "new_start_time": {
                 "type": "string",
                 "description": "New local HH:MM start for reschedule_booking.",
+            },
+            "outcome": {
+                "type": "string",
+                "enum": ["completed", "no_show"],
+                "description": "Final visit outcome for finalize_booking.",
             },
             "confirmed": {
                 "type": "boolean",
