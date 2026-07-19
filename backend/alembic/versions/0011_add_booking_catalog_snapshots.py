@@ -17,6 +17,9 @@ down_revision: str | None = "0010"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+_LEGACY_INSERT_FUNCTION = "nails_fill_legacy_booking_catalog_snapshot"
+_LEGACY_INSERT_TRIGGER = "trg_bookings_fill_legacy_catalog_snapshot"
+
 
 def upgrade() -> None:
     op.add_column(
@@ -88,6 +91,66 @@ def upgrade() -> None:
         )
     )
 
+    # The previous application release does not know these columns. During the
+    # one-release rollback window it can still insert bookings, so the database
+    # must populate the same fixed/base snapshot instead of accepting the [] default.
+    op.execute(
+        sa.text(
+            f"""
+            CREATE FUNCTION {_LEGACY_INSERT_FUNCTION}()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$
+            DECLARE
+                service_public_name text;
+            BEGIN
+                IF NEW.catalog_items_snapshot = '[]'::jsonb THEN
+                    SELECT public_name
+                    INTO service_public_name
+                    FROM services
+                    WHERE id = NEW.service_id;
+
+                    IF service_public_name IS NOT NULL THEN
+                        NEW.catalog_items_snapshot := jsonb_build_array(
+                            jsonb_build_object(
+                                'service_id', NEW.service_id::text,
+                                'kind', 'base',
+                                'public_name', service_public_name,
+                                'price_type', 'fixed',
+                                'price_amount', NEW.price_amount::text,
+                                'price_min_amount', NULL,
+                                'price_max_amount', NULL,
+                                'price_unit', NULL,
+                                'currency', NEW.currency,
+                                'duration_minutes', NEW.duration_minutes_snapshot,
+                                'extra_minutes', 0
+                            )
+                        );
+                        NEW.catalog_price_type_snapshot := 'fixed';
+                        NEW.catalog_price_min_snapshot := NEW.price_amount;
+                        NEW.catalog_price_max_snapshot := NEW.price_amount;
+                        NEW.catalog_price_unit_snapshot := NULL;
+                        NEW.duration_source := 'catalog_snapshot';
+                    END IF;
+                END IF;
+
+                RETURN NEW;
+            END;
+            $$
+            """
+        )
+    )
+    op.execute(
+        sa.text(
+            f"""
+            CREATE TRIGGER {_LEGACY_INSERT_TRIGGER}
+            BEFORE INSERT ON bookings
+            FOR EACH ROW
+            EXECUTE FUNCTION {_LEGACY_INSERT_FUNCTION}()
+            """
+        )
+    )
+
     op.create_check_constraint(
         "booking_catalog_price_type_valid",
         "bookings",
@@ -112,6 +175,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute(sa.text(f"DROP TRIGGER {_LEGACY_INSERT_TRIGGER} ON bookings"))
+    op.execute(sa.text(f"DROP FUNCTION {_LEGACY_INSERT_FUNCTION}()"))
     op.drop_constraint("booking_catalog_price_range_ordered", "bookings", type_="check")
     op.drop_constraint("booking_catalog_price_max_non_negative", "bookings", type_="check")
     op.drop_constraint("booking_catalog_price_min_non_negative", "bookings", type_="check")
