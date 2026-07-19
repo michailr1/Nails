@@ -11,7 +11,14 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import get_session_factory
-from app.models import AuditEvent, Booking, BookingStatus, Client, ClientProfileStatus, Service
+from app.models import (
+    AuditEvent,
+    Booking,
+    BookingStatus,
+    Client,
+    ClientProfileStatus,
+    Service,
+)
 from app.services.normalization import normalize_public_name
 from app.services.web_auth import _keyed_hash
 from app.web_auth_models import WebSession
