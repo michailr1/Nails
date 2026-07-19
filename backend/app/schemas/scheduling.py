@@ -18,18 +18,28 @@ DateOccurrence = Literal[
     "current_year",
     "next_year",
 ]
+ServiceKindValue = Literal["base", "addon"]
+ServicePriceTypeValue = Literal["fixed", "range", "per_unit", "on_request"]
 
 
 class ServiceSummary(BaseModel):
     id: uuid.UUID
     public_name: str
     public_description: str | None
-    price_amount: Decimal
+    price_amount: Decimal | None
     currency: str
-    duration_minutes: int
+    duration_minutes: int | None
     buffer_before_minutes: int
     buffer_after_minutes: int
     is_active: bool
+    kind: ServiceKindValue
+    price_type: ServicePriceTypeValue
+    price_min_amount: Decimal | None
+    price_max_amount: Decimal | None
+    price_unit: str | None
+    category: str | None
+    sort_order: int
+    extra_minutes: int
 
 
 class ServiceListResponse(BaseModel):
@@ -46,12 +56,20 @@ class ServiceDefinition(BaseModel):
 
     public_name: str = Field(min_length=1, max_length=160)
     public_description: str | None = Field(default=None, max_length=1000)
-    price_amount: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    price_amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
-    duration_minutes: int = Field(ge=1, le=1440)
+    duration_minutes: int | None = Field(default=None, ge=1, le=1440)
     buffer_before_minutes: int = Field(ge=0, le=1440)
     buffer_after_minutes: int = Field(ge=0, le=1440)
     is_active: bool = True
+    kind: ServiceKindValue = "base"
+    price_type: ServicePriceTypeValue | None = None
+    price_min_amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    price_max_amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    price_unit: str | None = Field(default=None, max_length=80)
+    category: str | None = Field(default=None, max_length=160)
+    sort_order: int = Field(default=0, ge=0, le=1_000_000)
+    extra_minutes: int = Field(default=0, ge=0, le=1440)
 
     @field_validator("public_name")
     @classmethod
@@ -61,13 +79,55 @@ class ServiceDefinition(BaseModel):
             raise ValueError("public_name must not be empty")
         return candidate
 
-    @field_validator("public_description")
+    @field_validator("public_description", "price_unit", "category")
     @classmethod
-    def normalize_description(cls, value: str | None) -> str | None:
+    def normalize_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         candidate = " ".join(value.split())
         return candidate or None
+
+    @model_validator(mode="after")
+    def validate_catalog_shape(self) -> ServiceDefinition:
+        if self.price_type is None:
+            self.price_type = "fixed" if self.price_amount is not None else "on_request"
+
+        if self.kind == "base":
+            if self.duration_minutes is None:
+                raise ValueError("base service requires duration_minutes")
+            if self.extra_minutes != 0:
+                raise ValueError("base service cannot have extra_minutes")
+        elif self.duration_minutes is not None:
+            raise ValueError("addon uses extra_minutes instead of duration_minutes")
+
+        if self.price_type == "fixed":
+            if self.price_amount is None:
+                raise ValueError("fixed price requires price_amount")
+            if any(value is not None for value in (self.price_min_amount, self.price_max_amount, self.price_unit)):
+                raise ValueError("fixed price cannot contain range or unit fields")
+        elif self.price_type == "range":
+            if self.price_min_amount is None or self.price_max_amount is None:
+                raise ValueError("range price requires price_min_amount and price_max_amount")
+            if self.price_max_amount < self.price_min_amount:
+                raise ValueError("price_max_amount must not be below price_min_amount")
+            if self.price_amount is not None or self.price_unit is not None:
+                raise ValueError("range price cannot contain price_amount or price_unit")
+        elif self.price_type == "per_unit":
+            if self.price_amount is None or self.price_unit is None:
+                raise ValueError("per_unit price requires price_amount and price_unit")
+            if self.price_min_amount is not None or self.price_max_amount is not None:
+                raise ValueError("per_unit price cannot contain range fields")
+        elif any(
+            value is not None
+            for value in (
+                self.price_amount,
+                self.price_min_amount,
+                self.price_max_amount,
+                self.price_unit,
+            )
+        ):
+            raise ValueError("on_request price cannot contain amount fields")
+        return self
 
 
 class ServiceCreateRequest(ServiceDefinition):
