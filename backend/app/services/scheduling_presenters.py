@@ -12,12 +12,22 @@ def service_summary(service: Service) -> ServiceSummary:
         id=service.id,
         public_name=service.public_name,
         public_description=service.public_description,
-        price_amount=service.price_amount,
+        price_amount=(
+            service.price_amount if service.price_type in {"fixed", "per_unit"} else None
+        ),
         currency=service.currency,
-        duration_minutes=service.duration_minutes,
+        duration_minutes=service.duration_minutes if service.kind == "base" else None,
         buffer_before_minutes=service.buffer_before_minutes,
         buffer_after_minutes=service.buffer_after_minutes,
         is_active=service.is_active,
+        kind=service.kind,
+        price_type=service.price_type,
+        price_min_amount=service.price_min_amount,
+        price_max_amount=service.price_max_amount,
+        price_unit=service.price_unit,
+        category=service.category,
+        sort_order=service.sort_order,
+        extra_minutes=service.extra_minutes,
     )
 
 
