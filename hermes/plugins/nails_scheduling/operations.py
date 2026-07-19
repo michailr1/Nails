@@ -2,11 +2,21 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from datetime import time as wall_time
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .presenters import _normalized_lookup, _parse_backend_datetime
 from .transport import _call_backend, _error
+
+
+def _optional_decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except InvalidOperation as exc:
+        raise ValueError("invalid decimal") from exc
 
 
 def _matching_existing_booking(
@@ -15,6 +25,9 @@ def _matching_existing_booking(
     client_public_name: str,
     service_name: str,
     starts_at: datetime,
+    addon_names: list[str] | None = None,
+    price_override_amount: str | None = None,
+    duration_override_minutes: int | None = None,
 ) -> dict[str, Any] | None:
     bookings = day_result.get("bookings")
     if not isinstance(bookings, list):
@@ -35,8 +48,39 @@ def _matching_existing_booking(
             existing_start = _parse_backend_datetime(booking.get("starts_at"))
         except ValueError:
             continue
-        if existing_start == starts_at:
-            matches.append(booking)
+        if existing_start != starts_at:
+            continue
+
+        if addon_names is not None:
+            existing_addons = booking.get("addon_names")
+            if not isinstance(existing_addons, list):
+                continue
+            requested = sorted(_normalized_lookup(name) for name in addon_names)
+            actual = sorted(_normalized_lookup(str(name)) for name in existing_addons)
+            if requested != actual:
+                continue
+
+            existing_price_source = booking.get("price_source")
+            if price_override_amount is None:
+                if existing_price_source == "manual_override":
+                    continue
+            elif (
+                existing_price_source != "manual_override"
+                or _optional_decimal(booking.get("price_amount"))
+                != Decimal(price_override_amount)
+            ):
+                continue
+
+            existing_duration_source = booking.get("duration_source")
+            if duration_override_minutes is None:
+                if existing_duration_source == "manual_override":
+                    continue
+            elif (
+                existing_duration_source != "manual_override"
+                or booking.get("duration_minutes") != duration_override_minutes
+            ):
+                continue
+        matches.append(booking)
     if len(matches) > 1:
         raise ValueError("ambiguous existing booking")
     return matches[0] if matches else None
@@ -101,6 +145,9 @@ def _create_booking(
             client_public_name=values["client_public_name"],
             service_name=values["service_name"],
             starts_at=requested_start,
+            addon_names=values["addon_names"],
+            price_override_amount=values["price_override_amount"],
+            duration_override_minutes=values["duration_override_minutes"],
         )
     except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError):
         return _error(
@@ -125,7 +172,10 @@ def _create_booking(
         json_body={
             "client_public_name": values["client_public_name"],
             "service_name": values["service_name"],
+            "addon_names": values["addon_names"],
             "starts_at": requested_start.isoformat(),
+            "price_override_amount": values["price_override_amount"],
+            "duration_override_minutes": values["duration_override_minutes"],
         },
     )
 
