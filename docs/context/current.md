@@ -25,6 +25,12 @@ Hermes plugins: nails-onboarding, nails-scheduling
 
 Основной агент пишет код, тесты и документацию, управляет GitHub, review, CI и fast-forward merge. VPS-агент только выполняет утверждённый runbook и не меняет код или GitHub.
 
+Обязательные постоянные правила:
+
+- один живой Telegram-тест за раз;
+- в GitHub используются только роли `master`, `admin`, `client`, без персональных имён;
+- имя интерфейса и помощника — «Нэйли».
+
 Релизы выполняются постоянным `ops/deploy/deploy.sh <exact-SHA>` по схеме PR → CI → candidate exact SHA → fast-forward того же SHA → finalize.
 
 ## Production milestone
