@@ -27,6 +27,7 @@ from app.schemas.scheduling_catalog_bookings import (
 )
 from app.schemas.scheduling_management import (
     BookingCancelRequest,
+    BookingFinalizeRequest,
     BookingMutationResponse,
     BookingRescheduleRequest,
     ClientCandidateListResponse,
@@ -49,6 +50,7 @@ from app.services.scheduling_lookup import (
 )
 from app.services.scheduling_management import (
     cancel_booking,
+    finalize_booking,
     find_client_candidates,
     reschedule_booking,
 )
@@ -256,5 +258,17 @@ def booking_cancel(
 ) -> BookingMutationResponse:
     try:
         return cancel_booking(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
+@router.put("/bookings/finalize", response_model=BookingMutationResponse)
+def booking_finalize(
+    body: BookingFinalizeRequest,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> BookingMutationResponse:
+    try:
+        return finalize_booking(session, identity, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
