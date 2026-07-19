@@ -14,12 +14,19 @@ _API_BASE_URL = "http://127.0.0.1:8210"
 _RETRYABLE_STATUS_CODES = {502, 503, 504}
 _TIMEOUT = httpx.Timeout(5.0, connect=1.0)
 _ALLOWED_BACKEND_ERRORS = {
+    "addon_buffers_not_supported",
+    "addon_not_found",
     "availability_unknown",
+    "booking_on_day_off",
     "booking_outside_availability",
     "booking_overlap",
+    "catalog_currency_mismatch",
     "client_contact_conflict",
     "client_not_found",
+    "duration_out_of_range",
     "idempotency_conflict",
+    "invalid_catalog_price",
+    "price_total_out_of_range",
     "service_not_found",
 }
 
