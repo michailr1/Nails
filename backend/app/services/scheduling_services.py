@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
@@ -29,7 +29,23 @@ _SERVICE_FIELDS = (
     "buffer_before_minutes",
     "buffer_after_minutes",
     "is_active",
+    "kind",
+    "price_type",
+    "price_min_amount",
+    "price_max_amount",
+    "price_unit",
+    "category",
+    "sort_order",
+    "extra_minutes",
 )
+
+
+def _legacy_price_amount(body: ServiceCreateRequest | ServiceReplaceRequest) -> Decimal:
+    if body.price_amount is not None:
+        return Decimal(body.price_amount)
+    if body.price_min_amount is not None:
+        return Decimal(body.price_min_amount)
+    return Decimal("0")
 
 
 def _service_values(body: ServiceCreateRequest | ServiceReplaceRequest) -> dict[str, Any]:
@@ -37,12 +53,20 @@ def _service_values(body: ServiceCreateRequest | ServiceReplaceRequest) -> dict[
         "public_name": body.public_name,
         "normalized_public_name": normalize_public_name(body.public_name),
         "public_description": body.public_description,
-        "price_amount": Decimal(body.price_amount),
+        "price_amount": _legacy_price_amount(body),
         "currency": body.currency,
-        "duration_minutes": body.duration_minutes,
+        "duration_minutes": body.duration_minutes if body.duration_minutes is not None else 1,
         "buffer_before_minutes": body.buffer_before_minutes,
         "buffer_after_minutes": body.buffer_after_minutes,
         "is_active": body.is_active,
+        "kind": body.kind,
+        "price_type": body.price_type,
+        "price_min_amount": body.price_min_amount,
+        "price_max_amount": body.price_max_amount,
+        "price_unit": body.price_unit,
+        "category": body.category,
+        "sort_order": body.sort_order,
+        "extra_minutes": body.extra_minutes,
     }
 
 
@@ -71,7 +95,13 @@ def list_services(
     statement = select(Service).where(Service.owner_user_id == identity.user_id)
     if not include_inactive:
         statement = statement.where(Service.is_active.is_(True))
-    services = session.scalars(statement.order_by(Service.public_name)).all()
+    services = session.scalars(
+        statement.order_by(
+            func.coalesce(Service.category, ""),
+            Service.sort_order,
+            Service.public_name,
+        )
+    ).all()
     return ServiceListResponse(services=[service_summary(service) for service in services])
 
 
@@ -112,8 +142,11 @@ def create_service(
             object_id=service.id,
             request_id=identity.request_id,
             safe_changes={
+                "kind": service.kind,
+                "price_type": service.price_type,
                 "currency": service.currency,
-                "duration_minutes": service.duration_minutes,
+                "duration_minutes": body.duration_minutes,
+                "extra_minutes": service.extra_minutes,
                 "buffer_before_minutes": service.buffer_before_minutes,
                 "buffer_after_minutes": service.buffer_after_minutes,
                 "is_active": service.is_active,
@@ -168,8 +201,11 @@ def replace_service(
                 request_id=identity.request_id,
                 safe_changes={
                     "changed_fields": sorted(changed_fields),
+                    "kind": service.kind,
+                    "price_type": service.price_type,
                     "currency": service.currency,
-                    "duration_minutes": service.duration_minutes,
+                    "duration_minutes": body.duration_minutes,
+                    "extra_minutes": service.extra_minutes,
                     "buffer_before_minutes": service.buffer_before_minutes,
                     "buffer_after_minutes": service.buffer_after_minutes,
                     "is_active": service.is_active,
