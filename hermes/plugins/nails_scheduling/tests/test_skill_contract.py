@@ -20,7 +20,9 @@ def test_skill_preserves_confirmation_date_and_security_contract():
     required = (
         "telegram identity берётся только из trusted gateway context",
         "не передавай технические id",
-        "не передавай цену, длительность или buffers",
+        "price_override_amount",
+        "только когда мастер явно назвал и подтвердил итоговую цену или длительность",
+        "buffers вручную в запись не передавай",
         "никогда не вычисляет дату, год или день недели самостоятельно",
         "action=resolve_date",
         "date_kind=month_day",
@@ -48,6 +50,11 @@ def test_skill_supports_full_service_management_after_onboarding():
         "action=find_service",
         "action=create_service",
         "action=update_service",
+        "kind=base",
+        "kind=addon",
+        "price_type=range",
+        "price_type=per_unit",
+        "price_type=on_request",
         "is_active=false",
         "is_active=true",
         "service_name_conflict",
@@ -160,7 +167,7 @@ def test_create_booking_uses_guarded_read_write_readback_without_slot_gate():
     section = _section(text, "## создание записи", "## перенос существующей записи")
     for marker in (
         "заново найди клиентку",
-        "заново найди услугу",
+        "заново найди базовую услугу и каждый названный доп",
         "не вызывай `free_slots` как предварительный гейт",
         "вызови `create_booking`",
         "guarded action",
@@ -169,6 +176,9 @@ def test_create_booking_uses_guarded_read_write_readback_without_slot_gate():
         "не вызывай отдельный повторный write",
         "booking_on_day_off",
         "booking_overlap",
+        "addon_not_found",
+        "catalog_currency_mismatch",
+        "on_request",
     ):
         assert marker in section
     assert "после write снова вызови `day_view`" not in section
