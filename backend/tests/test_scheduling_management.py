@@ -17,7 +17,7 @@ def _create_catalog_service(
 ) -> None:
     response = client.post(
         "/api/v1/scheduling/services",
-        headers=auth_headers(request_id=f"service-{public_name}"),
+        headers=auth_headers(request_id="catalog-service-create"),
         json={
             "public_name": public_name,
             "public_description": None,
@@ -127,8 +127,18 @@ def test_booking_can_be_rescheduled_with_snapshots_preserved_and_repeat_is_safe(
     auth_headers: Callable,
 ) -> None:
     user = create_user()
-    create_service(user.id, price_amount="2700.00", duration_minutes=120, buffer_after_minutes=21)
-    create_availability(user.id, day=date(2026, 7, 17), start_time=time(11), end_time=time(18))
+    create_service(
+        user.id,
+        price_amount="2700.00",
+        duration_minutes=120,
+        buffer_after_minutes=21,
+    )
+    create_availability(
+        user.id,
+        day=date(2026, 7, 17),
+        start_time=time(11),
+        end_time=time(18),
+    )
     original = _create_booking(client, auth_headers)
 
     payload = {
@@ -168,8 +178,18 @@ def test_booking_cancel_is_soft_idempotent_and_frees_slot(
     auth_headers: Callable,
 ) -> None:
     user = create_user()
-    create_service(user.id, price_amount="2700.00", duration_minutes=120, buffer_after_minutes=21)
-    create_availability(user.id, day=date(2026, 7, 17), start_time=time(11), end_time=time(18))
+    create_service(
+        user.id,
+        price_amount="2700.00",
+        duration_minutes=120,
+        buffer_after_minutes=21,
+    )
+    create_availability(
+        user.id,
+        day=date(2026, 7, 17),
+        start_time=time(11),
+        end_time=time(18),
+    )
     _create_booking(client, auth_headers)
 
     payload = {
@@ -200,7 +220,10 @@ def test_booking_cancel_is_soft_idempotent_and_frees_slot(
         params={"day": "2026-07-17", "service_name": "Маникюр"},
     )
     assert slots.status_code == 200, slots.text
-    assert any(value.startswith("2026-07-17T11:00:00") for value in slots.json()["starts_at"])
+    assert any(
+        value.startswith("2026-07-17T11:00:00")
+        for value in slots.json()["starts_at"]
+    )
 
 
 @pytest.mark.usefixtures("clean_database")
@@ -370,11 +393,17 @@ def test_finalize_is_owner_scoped(
     owner = create_user(telegram_user_id=1001)
     create_user(telegram_user_id=2002)
     create_service(owner.id, price_amount="2700.00")
-    _create_booking(client, lambda **kwargs: auth_headers(telegram_user_id=1001, **kwargs))
+    _create_booking(
+        client,
+        lambda **kwargs: auth_headers(telegram_user_id=1001, **kwargs),
+    )
 
     response = client.put(
         "/api/v1/scheduling/bookings/finalize",
-        headers=auth_headers(telegram_user_id=2002, request_id="cross-owner-finalize"),
+        headers=auth_headers(
+            telegram_user_id=2002,
+            request_id="cross-owner-finalize",
+        ),
         json=_finalize_payload(),
     )
     assert response.status_code == 404, response.text
@@ -410,6 +439,27 @@ def test_cancelled_booking_cannot_be_finalized(
     )
     assert finalized.status_code == 409, finalized.text
     assert finalized.json()["detail"]["code"] == "booking_cancelled"
+
+
+@pytest.mark.usefixtures("clean_database")
+def test_future_booking_cannot_be_finalized(
+    client: TestClient,
+    create_user: Callable,
+    create_service: Callable,
+    auth_headers: Callable,
+) -> None:
+    user = create_user()
+    create_service(user.id, price_amount="2700.00")
+    starts_at = "2099-07-17T11:00:00+02:00"
+    _create_booking(client, auth_headers, starts_at=starts_at)
+
+    response = client.put(
+        "/api/v1/scheduling/bookings/finalize",
+        headers=auth_headers(request_id="future-finalize"),
+        json=_finalize_payload(starts_at=starts_at),
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "booking_not_finished"
 
 
 def test_no_show_payload_rejects_price(
