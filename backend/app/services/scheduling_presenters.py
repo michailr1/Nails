@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from zoneinfo import ZoneInfo
 
-from app.models import Booking, Client, Service
+from app.models import Booking, BookingStatus, Client, Service
 from app.schemas.scheduling import ClientSummary, ServiceSummary
 from app.schemas.scheduling_catalog_bookings import (
     CatalogBookingSummary,
@@ -81,7 +81,10 @@ def _catalog_items(booking: Booking, service: Service) -> list[CatalogItemSummar
 
 
 def _presented_price(booking: Booking):
-    if booking.price_source in {"final_no_show", "final_price_unknown"}:
+    if (
+        booking.status == BookingStatus.no_show
+        or booking.price_source == "final_price_unknown"
+    ):
         return None
     if booking.price_source == "final_range_lower_bound_unconfirmed":
         return booking.price_amount
@@ -91,6 +94,19 @@ def _presented_price(booking: Booking):
     ):
         return booking.price_amount
     return None
+
+
+def _presented_price_source(booking: Booking) -> str:
+    if booking.status == BookingStatus.no_show:
+        return "final_no_show"
+    return booking.price_source
+
+
+def _presented_price_confirmed(booking: Booking) -> bool:
+    return (
+        booking.status != BookingStatus.no_show
+        and booking.price_confirmed_at is not None
+    )
 
 
 def booking_summary(
@@ -117,8 +133,8 @@ def booking_summary(
         price_min_amount=booking.catalog_price_min_snapshot,
         price_max_amount=booking.catalog_price_max_snapshot,
         price_unit=booking.catalog_price_unit_snapshot,
-        price_source=booking.price_source,
-        price_confirmed=booking.price_confirmed_at is not None,
+        price_source=_presented_price_source(booking),
+        price_confirmed=_presented_price_confirmed(booking),
         duration_minutes=booking.duration_minutes_snapshot,
         duration_source=booking.duration_source,
         buffer_before_minutes=booking.buffer_before_minutes_snapshot,
