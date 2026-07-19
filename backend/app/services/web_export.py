@@ -4,14 +4,17 @@ import csv
 import io
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.models import AuditEvent
+from app.config import get_settings
+from app.models import AuditEvent, Booking, Client, Service
 from app.services.web_read import list_calendar, list_clients
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
@@ -57,6 +60,23 @@ def _xlsx_bytes(sheet_name: str, headers: list[str], rows: Iterable[list[object]
     return stream.getvalue()
 
 
+def _export_bytes(
+    *,
+    sheet_name: str,
+    headers: list[str],
+    rows: list[list[object]],
+    format_name: str,
+) -> tuple[bytes, str]:
+    if format_name == "csv":
+        return _csv_bytes(headers, rows), "text/csv; charset=utf-8"
+    if format_name == "xlsx":
+        return (
+            _xlsx_bytes(sheet_name, headers, rows),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    raise ValueError("unsupported_export_format")
+
+
 def _audit_export(
     session: Session,
     identity: RequestIdentity,
@@ -78,6 +98,18 @@ def _audit_export(
     session.commit()
 
 
+def _calendar_headers() -> list[str]:
+    return [
+        "Дата и время начала",
+        "Дата и время окончания",
+        "Клиентка",
+        "Услуга",
+        "Статус",
+        "Цена",
+        "Валюта",
+    ]
+
+
 def export_calendar(
     session: Session,
     identity: RequestIdentity,
@@ -92,15 +124,6 @@ def export_calendar(
         date_from=date_from,
         date_to=date_to,
     )
-    headers = [
-        "Дата и время начала",
-        "Дата и время окончания",
-        "Клиентка",
-        "Услуга",
-        "Статус",
-        "Цена",
-        "Валюта",
-    ]
     rows = [
         [
             item.starts_at,
@@ -113,14 +136,12 @@ def export_calendar(
         ]
         for item in data.bookings
     ]
-    if format_name == "csv":
-        content = _csv_bytes(headers, rows)
-        media_type = "text/csv; charset=utf-8"
-    elif format_name == "xlsx":
-        content = _xlsx_bytes("Календарь", headers, rows)
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    else:
-        raise ValueError("unsupported_export_format")
+    content, media_type = _export_bytes(
+        sheet_name="Календарь",
+        headers=_calendar_headers(),
+        rows=rows,
+        format_name=format_name,
+    )
     _audit_export(
         session,
         identity,
@@ -132,6 +153,57 @@ def export_calendar(
         content=content,
         media_type=media_type,
         filename=f"calendar-{date_from}-{date_to}.{format_name}",
+    )
+
+
+def export_all_calendar(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    format_name: str,
+) -> ExportedFile:
+    timezone = ZoneInfo(get_settings().app_timezone)
+    records = session.execute(
+        select(Booking, Client.public_name, Service.public_name)
+        .join(Client, Client.id == Booking.client_id)
+        .join(Service, Service.id == Booking.service_id)
+        .where(
+            Booking.owner_user_id == identity.user_id,
+            Client.owner_user_id == identity.user_id,
+            Service.owner_user_id == identity.user_id,
+        )
+        .order_by(Booking.starts_at, Booking.id)
+    ).all()
+    rows = [
+        [
+            booking.starts_at.astimezone(timezone),
+            booking.ends_at.astimezone(timezone),
+            client_name,
+            service_name,
+            booking.status.value,
+            booking.price_amount,
+            booking.currency,
+        ]
+        for booking, client_name, service_name in records
+    ]
+    content, media_type = _export_bytes(
+        sheet_name="Весь календарь",
+        headers=_calendar_headers(),
+        rows=rows,
+        format_name=format_name,
+    )
+    _audit_export(
+        session,
+        identity,
+        resource="calendar_all",
+        format_name=format_name,
+        row_count=len(rows),
+    )
+    generated_on = datetime.now(UTC).astimezone(timezone).date()
+    return ExportedFile(
+        content=content,
+        media_type=media_type,
+        filename=f"calendar-all-{generated_on}.{format_name}",
     )
 
 
@@ -169,14 +241,12 @@ def export_clients(
         ]
         for item in data.clients
     ]
-    if format_name == "csv":
-        content = _csv_bytes(headers, rows)
-        media_type = "text/csv; charset=utf-8"
-    elif format_name == "xlsx":
-        content = _xlsx_bytes("Клиентки", headers, rows)
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    else:
-        raise ValueError("unsupported_export_format")
+    content, media_type = _export_bytes(
+        sheet_name="Клиентки",
+        headers=headers,
+        rows=rows,
+        format_name=format_name,
+    )
     _audit_export(
         session,
         identity,
@@ -184,8 +254,9 @@ def export_clients(
         format_name=format_name,
         row_count=len(rows),
     )
+    generated_on = datetime.now(UTC).date()
     return ExportedFile(
         content=content,
         media_type=media_type,
-        filename=f"clients.{format_name}",
+        filename=f"clients-all-{generated_on}.{format_name}",
     )
