@@ -284,6 +284,13 @@ def finalize_booking(
 
     now = datetime.now(UTC)
     previous_completed_at = booking.completed_at
+    if (
+        previous_completed_at is None
+        and booking.status == BookingStatus.scheduled
+        and booking.ends_at > now
+    ):
+        raise SchedulingDomainError("booking_not_finished")
+
     previous = (
         booking.status,
         booking.price_amount,
