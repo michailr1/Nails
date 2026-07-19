@@ -51,7 +51,7 @@ def test_replace_catalog_rejects_duplicate_public_names() -> None:
         validate_replace_catalog_args(
             {
                 "action": "replace_catalog",
-                "services": [_service("Маникюр"), _service("маникюр")],
+                "services": [_service("Маникюр"), _service("  маникюр  ")],
                 "confirmed": True,
             }
         )
@@ -90,35 +90,44 @@ def test_replace_catalog_builds_complete_backend_payload() -> None:
     }
 
 
-def test_catalog_result_strips_internal_ids() -> None:
-    result = sanitize_replace_catalog_result(
-        {
-            "changed": True,
-            "created_count": 1,
-            "updated_count": 0,
-            "archived_count": 0,
-            "services": [
-                {
-                    "id": "internal-id",
-                    "public_name": "Маникюр",
-                    "public_description": None,
-                    "price_amount": "2700.00",
-                    "currency": "RUB",
-                    "duration_minutes": 120,
-                    "buffer_before_minutes": 0,
-                    "buffer_after_minutes": 0,
-                    "is_active": True,
-                    "kind": "base",
-                    "price_type": "fixed",
-                    "price_min_amount": "2700.00",
-                    "price_max_amount": "2700.00",
-                    "price_unit": None,
-                    "category": "Основное",
-                    "sort_order": 0,
-                    "extra_minutes": 0,
-                }
-            ],
-        }
-    )
+def _backend_result(*, verified: bool) -> dict:
+    return {
+        "changed": True,
+        "created_count": 1,
+        "updated_count": 0,
+        "archived_count": 0,
+        "verified": verified,
+        "services": [
+            {
+                "id": "internal-id",
+                "public_name": "Маникюр",
+                "public_description": None,
+                "price_amount": "2700.00",
+                "currency": "RUB",
+                "duration_minutes": 120,
+                "buffer_before_minutes": 0,
+                "buffer_after_minutes": 0,
+                "is_active": True,
+                "kind": "base",
+                "price_type": "fixed",
+                "price_min_amount": "2700.00",
+                "price_max_amount": "2700.00",
+                "price_unit": None,
+                "category": "Основное",
+                "sort_order": 0,
+                "extra_minutes": 0,
+            }
+        ],
+    }
+
+
+def test_catalog_result_strips_internal_ids_and_preserves_verification() -> None:
+    result = sanitize_replace_catalog_result(_backend_result(verified=True))
     assert "id" not in result["services"][0]
     assert result["services"][0]["public_name"] == "Маникюр"
+    assert result["verified"] is True
+
+
+def test_catalog_result_rejects_unverified_success() -> None:
+    with pytest.raises(ValueError, match="verified catalog replacement"):
+        sanitize_replace_catalog_result(_backend_result(verified=False))
