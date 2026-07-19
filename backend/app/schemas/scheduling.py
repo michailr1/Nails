@@ -71,7 +71,10 @@ class ServiceDefinition(BaseModel):
 
 
 class ServiceCreateRequest(ServiceDefinition):
-    pass
+    currency: str = Field(default="RUB", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    buffer_before_minutes: int = Field(default=0, ge=0, le=1440)
+    buffer_after_minutes: int = Field(default=0, ge=0, le=1440)
+    is_active: bool = True
 
 
 class ServiceReplaceRequest(ServiceDefinition):
