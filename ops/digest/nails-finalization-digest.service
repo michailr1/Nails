@@ -1,6 +1,7 @@
 [Unit]
 Description=Nails finalization digest sender
-After=network-online.target nails-api.service
+Requires=docker.service
+After=docker.service network-online.target
 Wants=network-online.target
 
 [Service]
