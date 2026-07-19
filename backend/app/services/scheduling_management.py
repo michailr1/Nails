@@ -255,7 +255,7 @@ def _final_price_values(
             raise SchedulingDomainError("price_total_out_of_range")
         return price_amount, "final_manual_override", now
 
-    if booking.status == BookingStatus.completed and booking.price_confirmed_at is not None:
+    if booking.price_confirmed_at is not None:
         return booking.price_amount, booking.price_source, booking.price_confirmed_at
 
     if booking.catalog_price_type_snapshot == "range":
@@ -268,7 +268,7 @@ def _final_price_values(
         )
     if booking.catalog_price_type_snapshot in {"on_request", "per_unit"}:
         return booking.price_amount, "final_price_unknown", None
-    return booking.price_amount, booking.price_source, booking.price_confirmed_at or now
+    return booking.price_amount, booking.price_source, now
 
 
 def finalize_booking(
@@ -300,8 +300,6 @@ def finalize_booking(
 
     if body.outcome == "no_show":
         booking.status = BookingStatus.no_show
-        booking.price_source = "final_no_show"
-        booking.price_confirmed_at = None
     else:
         price_amount, price_source, price_confirmed_at = _final_price_values(
             booking,
@@ -329,6 +327,9 @@ def finalize_booking(
             changed=False,
         )
 
+    effective_price_source = (
+        "final_no_show" if booking.status == BookingStatus.no_show else booking.price_source
+    )
     session.add(
         AuditEvent(
             owner_user_id=identity.user_id,
@@ -343,8 +344,11 @@ def finalize_booking(
             request_id=identity.request_id,
             safe_changes={
                 "status": booking.status.value,
-                "price_source": booking.price_source,
-                "price_confirmed": booking.price_confirmed_at is not None,
+                "price_source": effective_price_source,
+                "price_confirmed": (
+                    booking.status != BookingStatus.no_show
+                    and booking.price_confirmed_at is not None
+                ),
                 "correction": previous_completed_at is not None,
             },
         )
