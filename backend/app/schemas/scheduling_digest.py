@@ -8,6 +8,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class FinalizationDigestOwnersResponse(BaseModel):
+    telegram_user_ids: list[int]
+
+
 class FinalizationDigestClaimRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
