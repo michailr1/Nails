@@ -9,15 +9,36 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.models import AuditEvent, Booking, BookingStatus, Client, Service
+from app.models import (
+    AuditEvent,
+    Booking,
+    BookingStatus,
+    Client,
+    Service,
+    User,
+    UserRole,
+)
 from app.schemas.scheduling_digest import (
     FinalizationDigestAckRequest,
     FinalizationDigestAckResponse,
     FinalizationDigestBooking,
     FinalizationDigestClaimRequest,
     FinalizationDigestClaimResponse,
+    FinalizationDigestOwnersResponse,
 )
 from app.services.scheduling_common import app_timezone, lock_owner_schedule
+
+
+def list_digest_owners(session: Session) -> FinalizationDigestOwnersResponse:
+    user_ids = session.scalars(
+        select(User.telegram_user_id)
+        .where(
+            User.is_active.is_(True),
+            User.role.in_((UserRole.master, UserRole.admin)),
+        )
+        .order_by(User.telegram_user_id)
+    ).all()
+    return FinalizationDigestOwnersResponse(telegram_user_ids=list(user_ids))
 
 
 def _addon_names(snapshot: Any) -> list[str]:
