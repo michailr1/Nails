@@ -45,7 +45,7 @@ _SERVICE_FIELDS = (
     "sort_order",
     "extra_minutes",
 )
-_CATALOG_ITEM_FIELDS = (
+_CATALOG_ITEM_REQUIRED_FIELDS = (
     "service_id",
     "kind",
     "public_name",
@@ -57,6 +57,9 @@ _CATALOG_ITEM_FIELDS = (
     "currency",
     "duration_minutes",
     "extra_minutes",
+)
+_CATALOG_ITEM_PUBLIC_FIELDS = tuple(
+    field for field in _CATALOG_ITEM_REQUIRED_FIELDS if field != "service_id"
 )
 _BOOKING_FIELDS = (
     "client_public_name",
@@ -143,9 +146,9 @@ def _availability_day_result(value: Any) -> dict[str, Any]:
 def _catalog_item_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("invalid catalog item")
-    if not set(_CATALOG_ITEM_FIELDS).issubset(value):
+    if not set(_CATALOG_ITEM_REQUIRED_FIELDS).issubset(value):
         raise ValueError("invalid catalog item")
-    return {key: value[key] for key in _CATALOG_ITEM_FIELDS}
+    return {key: value[key] for key in _CATALOG_ITEM_PUBLIC_FIELDS}
 
 
 def _booking_summary(value: Any) -> dict[str, Any]:
