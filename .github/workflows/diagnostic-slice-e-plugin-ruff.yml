@@ -1,0 +1,31 @@
+name: Diagnostic Slice E Plugin Ruff
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install 'ruff>=0.9,<1'
+      - run: |
+          set +e
+          ruff check hermes/plugins/nails_scheduling > plugin-ruff.txt 2>&1
+          status=$?
+          printf '%s\n' "$status" > plugin-ruff.status
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-ruff
+          path: |
+            plugin-ruff.txt
+            plugin-ruff.status
+          retention-days: 1
+      - run: test "$(cat plugin-ruff.status)" = "0"
