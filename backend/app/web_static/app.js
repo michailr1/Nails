@@ -1,7 +1,9 @@
 const app = document.querySelector("#app");
+const APP_TIMEZONE = "Europe/Moscow";
 const state = {
   view: "calendar",
-  selectedDate: todayInTimezone("Europe/Moscow"),
+  calendarMode: "day",
+  selectedDate: todayInTimezone(APP_TIMEZONE),
   challenge: null,
   pollTimer: null,
   offline: !navigator.onLine,
@@ -177,12 +179,12 @@ function appShell(title, body) {
           <button class="tab-button ${state.view === "calendar" ? "active" : ""}" data-view="calendar">Календарь</button>
           <button class="tab-button ${state.view === "clients" ? "active" : ""}" data-view="clients">Клиентки</button>
         </nav>
-        <div class="sidebar-bottom"><button id="logout" class="ghost-button" type="button">Выйти</button></div>
+        <div class="sidebar-bottom"><button class="ghost-button logout-button" type="button">Выйти</button></div>
       </aside>
       <main class="main">
         <header class="topbar">
           <div><p class="eyebrow">Только просмотр</p><h1>${escapeHtml(title)}</h1></div>
-          <div class="actions" id="page-actions"></div>
+          <div class="topbar-side"><div class="actions" id="page-actions"></div><button class="ghost-button mobile-logout logout-button" type="button">Выйти</button></div>
         </header>
         <section id="page-content">${body}</section>
       </main>
@@ -193,7 +195,7 @@ function appShell(title, body) {
       renderApp();
     });
   });
-  document.querySelector("#logout")?.addEventListener("click", logout);
+  document.querySelectorAll(".logout-button").forEach((button) => button.addEventListener("click", logout));
   setOffline(state.offline);
 }
 
@@ -224,94 +226,204 @@ function addDays(iso, count) {
   return toIsoDate(date);
 }
 
+function addMonths(iso, count) {
+  const date = parseIsoDate(iso);
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + count);
+  return toIsoDate(date);
+}
+
+function startOfWeek(iso) {
+  const date = parseIsoDate(iso);
+  const mondayOffset = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - mondayOffset);
+  return toIsoDate(date);
+}
+
+function endOfMonth(iso) {
+  const date = parseIsoDate(iso);
+  date.setUTCMonth(date.getUTCMonth() + 1, 0);
+  return toIsoDate(date);
+}
+
+function periodRange() {
+  if (state.calendarMode === "week") {
+    const dateFrom = startOfWeek(state.selectedDate);
+    return { dateFrom, dateTo: addDays(dateFrom, 6) };
+  }
+  if (state.calendarMode === "month") {
+    const dateFrom = `${state.selectedDate.slice(0, 7)}-01`;
+    return { dateFrom, dateTo: endOfMonth(dateFrom) };
+  }
+  return { dateFrom: state.selectedDate, dateTo: state.selectedDate };
+}
+
 function dateLabel(iso, options) {
   return new Intl.DateTimeFormat("ru-RU", { timeZone: "UTC", ...options }).format(parseIsoDate(iso));
 }
 
-function renderDateStrip() {
-  const selected = state.selectedDate;
-  const dates = Array.from({ length: 7 }, (_, index) => addDays(selected, index - 3));
-  return `<div class="date-strip">${dates.map((iso) => `
-    <button class="date-button ${iso === selected ? "active" : ""}" data-date="${iso}">
-      ${escapeHtml(dateLabel(iso, { weekday: "short" }))}
-      <strong>${escapeHtml(dateLabel(iso, { day: "numeric", month: "short" }))}</strong>
-    </button>`).join("")}</div>`;
+function periodLabel(range) {
+  if (state.calendarMode === "day") {
+    return dateLabel(range.dateFrom, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  }
+  if (state.calendarMode === "week") {
+    return `${dateLabel(range.dateFrom, { day: "numeric", month: "short" })} — ${dateLabel(range.dateTo, { day: "numeric", month: "short", year: "numeric" })}`;
+  }
+  return dateLabel(range.dateFrom, { month: "long", year: "numeric" });
 }
 
-async function renderCalendar() {
-  appShell("Календарь", `${renderDateStrip()}<div class="panel"><div class="loading-state">Загружаем записи…</div></div>`);
-  const actions = document.querySelector("#page-actions");
-  actions.innerHTML = `
-    <button id="today" class="secondary-button" type="button">Сегодня</button>
-    <button id="export-calendar" class="secondary-button" type="button">Экспорт XLSX</button>`;
-  document.querySelectorAll("[data-date]").forEach((button) => {
+function renderModeSwitch() {
+  return `<div class="mode-switch" role="group" aria-label="Период календаря">
+    ${[["day", "День"], ["week", "Неделя"], ["month", "Месяц"]].map(([mode, label]) => `
+      <button class="mode-button ${state.calendarMode === mode ? "active" : ""}" data-mode="${mode}" type="button">${label}</button>`).join("")}
+  </div>`;
+}
+
+function shiftPeriod(direction) {
+  if (state.calendarMode === "month") state.selectedDate = addMonths(state.selectedDate, direction);
+  else state.selectedDate = addDays(state.selectedDate, direction * (state.calendarMode === "week" ? 7 : 1));
+  renderCalendar();
+}
+
+function bindCalendarControls() {
+  document.querySelectorAll("[data-mode]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.selectedDate = button.dataset.date;
+      state.calendarMode = button.dataset.mode;
       renderCalendar();
     });
   });
-  document.querySelector("#today").addEventListener("click", () => {
-    state.selectedDate = todayInTimezone("Europe/Moscow");
+  document.querySelector("#period-prev")?.addEventListener("click", () => shiftPeriod(-1));
+  document.querySelector("#period-next")?.addEventListener("click", () => shiftPeriod(1));
+  document.querySelector("#today")?.addEventListener("click", () => {
+    state.selectedDate = todayInTimezone(APP_TIMEZONE);
     renderCalendar();
   });
-  document.querySelector("#export-calendar").addEventListener("click", () => downloadExport(
-    `/web/api/exports/calendar?date_from=${state.selectedDate}&date_to=${state.selectedDate}&format=xlsx`,
-    `calendar-${state.selectedDate}.xlsx`,
+}
+
+async function renderCalendar() {
+  const range = periodRange();
+  appShell("Календарь", `<div class="loading-state">Загружаем записи…</div>`);
+  const actions = document.querySelector("#page-actions");
+  actions.innerHTML = `
+    <button id="export-period" class="secondary-button" type="button">Выгрузить период</button>
+    <button id="export-all-calendar" class="secondary-button" type="button">Весь календарь</button>`;
+  document.querySelector("#export-period").addEventListener("click", () => downloadExport(
+    `/web/api/exports/calendar?date_from=${range.dateFrom}&date_to=${range.dateTo}&format=xlsx`,
+    `calendar-${range.dateFrom}-${range.dateTo}.xlsx`,
   ));
+  document.querySelector("#export-all-calendar").addEventListener("click", () => {
+    if (!window.confirm("В файл попадут все прошедшие и будущие записи календаря, включая отменённые и завершённые. Выгрузить весь календарь?")) return;
+    downloadExport("/web/api/exports/calendar/all?format=xlsx", `calendar-all-${todayInTimezone(APP_TIMEZONE)}.xlsx`);
+  });
   try {
-    const data = await api(`/web/api/calendar?date_from=${state.selectedDate}&date_to=${state.selectedDate}`);
-    const content = document.querySelector("#page-content");
-    content.innerHTML = `${renderDateStrip()}${calendarPanel(data)}`;
-    content.querySelectorAll("[data-date]").forEach((button) => {
+    const data = await api(`/web/api/calendar?date_from=${range.dateFrom}&date_to=${range.dateTo}`);
+    document.querySelector("#page-content").innerHTML = calendarView(data, range);
+    bindCalendarControls();
+    document.querySelectorAll("[data-open-date]").forEach((button) => {
       button.addEventListener("click", () => {
-        state.selectedDate = button.dataset.date;
+        state.selectedDate = button.dataset.openDate;
+        state.calendarMode = "day";
         renderCalendar();
       });
     });
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
-    document.querySelector("#page-content").innerHTML = `${renderDateStrip()}<div class="panel error-state"><strong>Не удалось загрузить календарь</strong><button id="retry" class="secondary-button">Повторить</button></div>`;
+    document.querySelector("#page-content").innerHTML = `<div class="panel error-state"><strong>Не удалось загрузить календарь</strong><button id="retry" class="secondary-button">Повторить</button></div>`;
     document.querySelector("#retry").addEventListener("click", renderCalendar);
   }
 }
 
-function calendarPanel(data) {
-  const title = dateLabel(state.selectedDate, { weekday: "long", day: "numeric", month: "long" });
-  if (!data.bookings.length) {
-    return `<div class="panel"><div class="panel-header"><h2>${escapeHtml(title)}</h2><span class="muted small">${escapeHtml(data.timezone)}</span></div><div class="empty">На этот день записей нет.</div></div>`;
-  }
-  return `<div class="panel">
-    <div class="panel-header"><h2>${escapeHtml(title)}</h2><span class="muted small">${data.bookings.length} записей</span></div>
-    <div class="list">${data.bookings.map((booking) => {
-      const start = new Date(booking.starts_at);
-      const end = new Date(booking.ends_at);
-      const format = new Intl.DateTimeFormat("ru-RU", { timeZone: data.timezone, hour: "2-digit", minute: "2-digit" });
-      return `<article class="booking">
-        <div class="time">${escapeHtml(format.format(start))}</div>
-        <div><h3>${escapeHtml(booking.client_name)}</h3><p>${escapeHtml(booking.service_name)} · до ${escapeHtml(format.format(end))}</p><span class="badge">${escapeHtml(booking.status)}</span></div>
-        <div class="price">${escapeHtml(formatMoney(booking.price_amount, booking.currency))}</div>
-      </article>`;
+function calendarToolbar(range) {
+  return `<div class="calendar-toolbar">
+    ${renderModeSwitch()}
+    <div class="period-navigation">
+      <button id="period-prev" class="secondary-button" type="button" aria-label="Предыдущий период">←</button>
+      <button id="today" class="secondary-button" type="button">Сегодня</button>
+      <button id="period-next" class="secondary-button" type="button" aria-label="Следующий период">→</button>
+    </div>
+    <strong class="period-title">${escapeHtml(periodLabel(range))}</strong>
+  </div>`;
+}
+
+function calendarView(data, range) {
+  const toolbar = calendarToolbar(range);
+  if (state.calendarMode === "month") return toolbar + monthPanel(data, range);
+  if (state.calendarMode === "week") return toolbar + groupedCalendar(data, range);
+  return toolbar + dayPanel(data, range.dateFrom);
+}
+
+function bookingCard(booking, timezone) {
+  const start = new Date(booking.starts_at);
+  const end = new Date(booking.ends_at);
+  const format = new Intl.DateTimeFormat("ru-RU", { timeZone: timezone, hour: "2-digit", minute: "2-digit" });
+  return `<article class="booking">
+    <div class="time">${escapeHtml(format.format(start))}</div>
+    <div><h3>${escapeHtml(booking.client_name)}</h3><p>${escapeHtml(booking.service_name)} · до ${escapeHtml(format.format(end))}</p><span class="badge">${escapeHtml(booking.status)}</span></div>
+    <div class="price">${escapeHtml(formatMoney(booking.price_amount, booking.currency))}</div>
+  </article>`;
+}
+
+function bookingsForDate(data, iso) {
+  return data.bookings.filter((booking) => booking.starts_at.slice(0, 10) === iso);
+}
+
+function dayPanel(data, iso) {
+  const bookings = bookingsForDate(data, iso);
+  const title = dateLabel(iso, { weekday: "long", day: "numeric", month: "long" });
+  return `<div class="panel"><div class="panel-header"><h2>${escapeHtml(title)}</h2><span class="muted small">${bookings.length} записей</span></div>
+    ${bookings.length ? `<div class="list">${bookings.map((item) => bookingCard(item, data.timezone)).join("")}</div>` : `<div class="empty">На этот день записей нет.</div>`}
+  </div>`;
+}
+
+function groupedCalendar(data, range) {
+  const days = [];
+  for (let iso = range.dateFrom; iso <= range.dateTo; iso = addDays(iso, 1)) days.push(iso);
+  return `<div class="week-list">${days.map((iso) => {
+    const bookings = bookingsForDate(data, iso);
+    return `<section class="panel week-day"><div class="panel-header"><h2>${escapeHtml(dateLabel(iso, { weekday: "long", day: "numeric", month: "short" }))}</h2><span class="muted small">${bookings.length}</span></div>
+      ${bookings.length ? `<div class="list">${bookings.map((item) => bookingCard(item, data.timezone)).join("")}</div>` : `<div class="empty compact">Записей нет</div>`}
+    </section>`;
+  }).join("")}</div>`;
+}
+
+function monthPanel(data, range) {
+  const first = parseIsoDate(range.dateFrom);
+  const leading = (first.getUTCDay() + 6) % 7;
+  const cells = [];
+  for (let index = 0; index < leading; index += 1) cells.push(null);
+  for (let iso = range.dateFrom; iso <= range.dateTo; iso = addDays(iso, 1)) cells.push(iso);
+  return `<div class="month-panel panel">
+    <div class="month-weekdays">${["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((day) => `<span>${day}</span>`).join("")}</div>
+    <div class="month-grid">${cells.map((iso) => {
+      if (!iso) return `<span class="month-cell empty-cell"></span>`;
+      const bookings = bookingsForDate(data, iso);
+      return `<button class="month-cell ${iso === todayInTimezone(APP_TIMEZONE) ? "today-cell" : ""}" data-open-date="${iso}" type="button">
+        <strong>${escapeHtml(dateLabel(iso, { day: "numeric" }))}</strong>
+        <span>${bookings.length ? `${bookings.length} запис.` : "—"}</span>
+        ${bookings.slice(0, 2).map((booking) => `<small>${escapeHtml(booking.client_name)}</small>`).join("")}
+      </button>`;
     }).join("")}</div>
   </div>`;
 }
 
 function formatMoney(amount, currency) {
+  if (amount === null || amount === undefined || amount === "") return "Цена не указана";
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency, maximumFractionDigits: 0 }).format(Number(amount));
 }
 
 async function renderClients() {
   appShell("Клиентки", `<div class="loading-state">Загружаем карточки…</div>`);
   const actions = document.querySelector("#page-actions");
-  actions.innerHTML = `<button id="export-clients" class="secondary-button" type="button">Экспорт XLSX</button>`;
-  document.querySelector("#export-clients").addEventListener("click", () => downloadExport(
-    "/web/api/exports/clients?format=xlsx",
-    "clients.xlsx",
-  ));
+  actions.innerHTML = `<button id="export-clients" class="secondary-button" type="button">Выгрузить всех клиенток</button>`;
+  document.querySelector("#export-clients").addEventListener("click", () => {
+    if (!window.confirm("В файл попадут все карточки клиенток со всеми заполненными полями. Выгрузить всех клиенток?")) return;
+    downloadExport("/web/api/exports/clients?format=xlsx", `clients-all-${todayInTimezone(APP_TIMEZONE)}.xlsx`);
+  });
   try {
     const data = await api("/web/api/clients");
-    document.querySelector("#page-content").innerHTML = data.clients.length
-      ? `<div class="client-grid">${data.clients.map(clientCard).join("")}</div>`
-      : `<div class="panel empty">Карточек клиенток пока нет.</div>`;
+    document.querySelector("#page-content").innerHTML = `
+      <div class="info-note">Все поддерживаемые поля показаны ниже. Пока их можно заполнить через Нэйли; редактирование в кабинете появится в следующем этапе.</div>
+      ${data.clients.length ? `<div class="client-grid">${data.clients.map(clientCard).join("")}</div>` : `<div class="panel empty">Карточек клиенток пока нет.</div>`}`;
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
     document.querySelector("#page-content").innerHTML = `<div class="panel error-state"><strong>Не удалось загрузить клиенток</strong><button id="retry" class="secondary-button">Повторить</button></div>`;
@@ -329,11 +441,11 @@ function clientCard(client) {
     ["Чувствительность", client.sensitivity_notes],
     ["Стиль", client.style_preferences],
     ["Общение", client.communication_preferences],
-  ].filter(([, value]) => value);
+  ];
   return `<article class="client-card">
     <h3>${escapeHtml(client.public_name)}</h3>
     <p>${escapeHtml(client.profile_status)}</p>
-    ${fields.length ? `<dl>${fields.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl>` : `<p class="small">Дополнительных данных нет.</p>`}
+    <dl>${fields.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd class="${value ? "" : "empty-value"}">${escapeHtml(value || "Не заполнено")}</dd>`).join("")}</dl>
   </article>`;
 }
 
@@ -360,7 +472,8 @@ async function logout() {
   try {
     await api("/web/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
   } catch {}
-  renderLogin();
+  state.challenge = null;
+  renderLogin("Вы вышли из кабинета.");
 }
 
 renderApp();
