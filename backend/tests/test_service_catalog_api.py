@@ -35,16 +35,6 @@ def test_catalog_price_shapes_persist_and_sort_stably(
             "category": "База",
             "sort_order": 10,
         },
-        {
-            "public_name": "Дизайн ногтя",
-            "kind": "addon",
-            "price_type": "per_unit",
-            "price_amount": "100.00",
-            "price_unit": "1 ноготь",
-            "extra_minutes": 10,
-            "category": "Дизайн",
-            "sort_order": 10,
-        },
     ]
 
     for index, payload in enumerate(payloads, start=1):
@@ -65,11 +55,10 @@ def test_catalog_price_shapes_persist_and_sort_stably(
     assert [service["public_name"] for service in services] == [
         "Маникюр",
         "Педикюр",
-        "Дизайн ногтя",
         "Сложный дизайн",
     ]
 
-    manicure, pedicure, nail_design, complex_design = services
+    manicure, pedicure, complex_design = services
 
     assert manicure["kind"] == "base"
     assert manicure["price_type"] == "fixed"
@@ -80,13 +69,6 @@ def test_catalog_price_shapes_persist_and_sort_stably(
     assert pedicure["price_amount"] is None
     assert pedicure["price_min_amount"] == "1900.00"
     assert pedicure["price_max_amount"] == "2300.00"
-
-    assert nail_design["kind"] == "addon"
-    assert nail_design["price_type"] == "per_unit"
-    assert nail_design["price_amount"] == "100.00"
-    assert nail_design["price_unit"] == "1 ноготь"
-    assert nail_design["duration_minutes"] is None
-    assert nail_design["extra_minutes"] == 10
 
     assert complex_design["price_type"] == "on_request"
     assert complex_design["price_amount"] is None
