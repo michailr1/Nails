@@ -93,7 +93,9 @@ def sanitize_replace_catalog_result(result: Any) -> dict[str, Any]:
         raise ValueError("invalid catalog replacement services")
     safe_services: list[dict[str, Any]] = []
     for service in services:
-        if not isinstance(service, dict) or not set(_PUBLIC_SERVICE_FIELDS).issubset(service):
+        if not isinstance(service, dict) or not set(
+            _PUBLIC_SERVICE_FIELDS
+        ).issubset(service):
             raise ValueError("invalid catalog replacement service")
         safe_services.append({field: service[field] for field in _PUBLIC_SERVICE_FIELDS})
     return {
