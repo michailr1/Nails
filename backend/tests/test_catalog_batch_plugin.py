@@ -71,7 +71,7 @@ def test_replace_catalog_builds_complete_backend_payload() -> None:
             {
                 "public_name": "Маникюр",
                 "public_description": None,
-                "price_amount": 2700,
+                "price_amount": "2700.00",
                 "currency": "RUB",
                 "duration_minutes": 120,
                 "buffer_before_minutes": 0,
