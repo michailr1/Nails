@@ -32,6 +32,38 @@ def get_active_service(
     return service
 
 
+def get_active_addons(
+    session: Session,
+    owner_user_id: uuid.UUID,
+    public_names: list[str],
+) -> list[Service]:
+    if not public_names:
+        return []
+
+    normalized_names = [normalize_public_name(name) for name in public_names]
+    services = session.scalars(
+        select(Service).where(
+            Service.owner_user_id == owner_user_id,
+            Service.normalized_public_name.in_(normalized_names),
+            Service.is_active.is_(True),
+            Service.kind == ServiceKind.addon,
+        )
+    ).all()
+    by_name = {service.normalized_public_name: service for service in services}
+    missing = [
+        public_name
+        for public_name, normalized in zip(public_names, normalized_names, strict=True)
+        if normalized not in by_name
+    ]
+    if missing:
+        raise SchedulingDomainError(
+            "addon_not_found",
+            status_code=404,
+            details={"missing_names": missing},
+        )
+    return [by_name[normalized] for normalized in normalized_names]
+
+
 def get_active_client(
     session: Session,
     owner_user_id: uuid.UUID,
