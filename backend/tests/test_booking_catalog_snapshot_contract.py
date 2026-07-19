@@ -1,10 +1,7 @@
 from decimal import Decimal
 
 from app.models import Booking, Service
-from app.services.scheduling_bookings import (
-    _catalog_item_snapshot,
-    _catalog_price_bounds,
-)
+from app.services.scheduling_bookings import _catalog_item_snapshot, _catalog_price_bounds
 
 
 def test_fixed_service_snapshot_preserves_catalog_values() -> None:
