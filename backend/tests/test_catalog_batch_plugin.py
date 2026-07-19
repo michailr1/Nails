@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -10,12 +11,12 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[2] / "hermes" / "plugins"
 if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 
-from nails_scheduling.catalog_batch import (  # noqa: E402
-    replace_catalog_request_body,
-    sanitize_replace_catalog_result,
-    validate_replace_catalog_args,
-)
-from nails_scheduling.validation import ToolInputError  # noqa: E402
+catalog_batch = importlib.import_module("nails_scheduling.catalog_batch")
+validation = importlib.import_module("nails_scheduling.validation")
+replace_catalog_request_body = catalog_batch.replace_catalog_request_body
+sanitize_replace_catalog_result = catalog_batch.sanitize_replace_catalog_result
+validate_replace_catalog_args = catalog_batch.validate_replace_catalog_args
+ToolInputError = validation.ToolInputError
 
 
 def _service(name: str) -> dict:
