@@ -37,12 +37,11 @@ def _claim(
     headers: dict[str, str],
     *,
     local_day: str = "2026-07-19",
-    now: str = "2026-07-19T21:30:00+03:00",
 ):
     return client.post(
         "/api/v1/scheduling/finalization-digest/claim",
         headers=headers,
-        json={"local_day": local_day, "now": now},
+        json={"local_day": local_day},
     )
 
 
@@ -201,7 +200,6 @@ def test_digest_ack_sent_is_idempotent_and_prevents_future_prompt(
         client,
         auth_headers(request_id="digest-next-day"),
         local_day="2026-07-20",
-        now="2026-07-20T21:30:00+03:00",
     )
     assert next_day.status_code == 200, next_day.text
     assert next_day.json()["claimed"] is False
