@@ -70,6 +70,11 @@ def _service_values(body: ServiceCreateRequest | ServiceReplaceRequest) -> dict[
     }
 
 
+def _ensure_rollback_safe_kind(body: ServiceCreateRequest | ServiceReplaceRequest) -> None:
+    if body.kind == "addon":
+        raise SchedulingDomainError("addon_rollout_not_enabled")
+
+
 def _get_service(
     session: Session,
     identity: RequestIdentity,
@@ -121,6 +126,7 @@ def create_service(
     identity: RequestIdentity,
     body: ServiceCreateRequest,
 ) -> ServiceCreateResponse:
+    _ensure_rollback_safe_kind(body)
     lock_owner_schedule(session, identity.user_id)
     existing = _get_service(session, identity, body.public_name, lock=True)
     desired = _service_values(body)
@@ -162,6 +168,7 @@ def replace_service(
     identity: RequestIdentity,
     body: ServiceReplaceRequest,
 ) -> ServiceReplaceResponse:
+    _ensure_rollback_safe_kind(body)
     lock_owner_schedule(session, identity.user_id)
     service = _get_service(session, identity, body.current_public_name, lock=True)
     if service is None:
