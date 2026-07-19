@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import unicodedata
 from typing import Any
 
 from .service_catalog import validate_service_catalog_args
@@ -24,6 +25,11 @@ _PUBLIC_SERVICE_FIELDS = (
     "sort_order",
     "extra_minutes",
 )
+
+
+def _normalize_public_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value)
+    return " ".join(normalized.split()).casefold()
 
 
 def validate_replace_catalog_args(args: dict[str, Any]) -> dict[str, Any]:
@@ -51,7 +57,7 @@ def validate_replace_catalog_args(args: dict[str, Any]) -> dict[str, Any]:
                 **item,
             }
         )
-        normalized_name = values["service_name"].casefold()
+        normalized_name = _normalize_public_name(values["service_name"])
         if normalized_name in normalized_names:
             raise ToolInputError("catalog service names must be unique")
         normalized_names.add(normalized_name)
@@ -86,8 +92,8 @@ def replace_catalog_request_body(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def sanitize_replace_catalog_result(result: Any) -> dict[str, Any]:
-    if not isinstance(result, dict):
-        raise ValueError("invalid catalog replacement result")
+    if not isinstance(result, dict) or result.get("verified") is not True:
+        raise ValueError("verified catalog replacement result is required")
     services = result.get("services")
     if not isinstance(services, list):
         raise ValueError("invalid catalog replacement services")
@@ -104,4 +110,5 @@ def sanitize_replace_catalog_result(result: Any) -> dict[str, Any]:
         "updated_count": result["updated_count"],
         "archived_count": result["archived_count"],
         "services": safe_services,
+        "verified": True,
     }
