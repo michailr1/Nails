@@ -3,7 +3,11 @@ from __future__ import annotations
 from zoneinfo import ZoneInfo
 
 from app.models import Booking, Client, Service
-from app.schemas.scheduling import ClientSummary, DayBookingSummary, ServiceSummary
+from app.schemas.scheduling import ClientSummary, ServiceSummary
+from app.schemas.scheduling_catalog_bookings import (
+    CatalogBookingSummary,
+    CatalogItemSummary,
+)
 from app.schemas.scheduling_management import ClientCardSummary
 
 
@@ -55,24 +59,61 @@ def client_card_summary(client: Client) -> ClientCardSummary:
     )
 
 
+def _catalog_items(booking: Booking, service: Service) -> list[CatalogItemSummary]:
+    raw_items = booking.catalog_items_snapshot
+    if not raw_items:
+        raw_items = [
+            {
+                "service_id": str(service.id),
+                "kind": "base",
+                "public_name": service.public_name,
+                "price_type": "fixed",
+                "price_amount": str(booking.price_amount),
+                "price_min_amount": None,
+                "price_max_amount": None,
+                "price_unit": None,
+                "currency": booking.currency,
+                "duration_minutes": booking.duration_minutes_snapshot,
+                "extra_minutes": 0,
+            }
+        ]
+    return [CatalogItemSummary.model_validate(item) for item in raw_items]
+
+
 def booking_summary(
     booking: Booking,
     client: Client,
     service: Service,
     timezone: ZoneInfo,
-) -> DayBookingSummary:
-    return DayBookingSummary(
+) -> CatalogBookingSummary:
+    items = _catalog_items(booking, service)
+    confirmed_price = (
+        booking.price_amount
+        if booking.price_confirmed_at is not None
+        or booking.price_source in {"service_snapshot", "catalog_fixed", "manual_override"}
+        else None
+    )
+    return CatalogBookingSummary(
         id=booking.id,
         client_public_name=client.public_name,
         service_name=service.public_name,
+        addon_names=[item.public_name for item in items if item.kind == "addon"],
+        catalog_items=items,
         starts_at=booking.starts_at.astimezone(timezone),
         ends_at=booking.ends_at.astimezone(timezone),
         reserved_starts_at=booking.reserved_starts_at.astimezone(timezone),
         reserved_ends_at=booking.reserved_ends_at.astimezone(timezone),
         status=booking.status,
-        price_amount=booking.price_amount,
+        price_amount=confirmed_price,
         currency=booking.currency,
+        price_type=booking.catalog_price_type_snapshot,
+        price_min_amount=booking.catalog_price_min_snapshot,
+        price_max_amount=booking.catalog_price_max_snapshot,
+        price_unit=booking.catalog_price_unit_snapshot,
+        price_source=booking.price_source,
+        price_confirmed=booking.price_confirmed_at is not None,
         duration_minutes=booking.duration_minutes_snapshot,
+        duration_source=booking.duration_source,
         buffer_before_minutes=booking.buffer_before_minutes_snapshot,
         buffer_after_minutes=booking.buffer_after_minutes_snapshot,
     )
