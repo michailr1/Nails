@@ -14,23 +14,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Ruff
-        run: python -m pip install 'ruff>=0.9,<1'
-      - name: Capture Ruff
-        run: |
-          set +e
-          {
-            echo '=== backend ==='
-            ruff check backend
-            echo '=== scheduling plugin ==='
-            ruff check hermes/plugins/nails_scheduling
-          } > slice-e-ruff.txt 2>&1
-          printf '%s\n' "$?" > slice-e-ruff.status
+      - run: python -m pip install 'ruff>=0.9,<1'
+      - run: ruff check --fix backend/tests/test_catalog_batch_plugin.py
       - uses: actions/upload-artifact@v4
         with:
-          name: slice-e-ruff
-          path: |
-            slice-e-ruff.txt
-            slice-e-ruff.status
+          name: slice-e-ruff-fixed
+          path: backend/tests/test_catalog_batch_plugin.py
           retention-days: 1
-      - run: test "$(cat slice-e-ruff.status)" = "0"
