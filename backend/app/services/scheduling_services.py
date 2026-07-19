@@ -70,11 +70,13 @@ def _service_values(body: ServiceCreateRequest | ServiceReplaceRequest) -> dict[
     }
 
 
-def _ensure_rollback_safe_catalog(body: ServiceCreateRequest | ServiceReplaceRequest) -> None:
-    if body.kind == "addon":
-        raise SchedulingDomainError("addon_rollout_not_enabled")
-    if body.price_type != "fixed":
-        raise SchedulingDomainError("price_type_rollout_not_enabled")
+def _ensure_catalog_write_shape(
+    body: ServiceCreateRequest | ServiceReplaceRequest,
+) -> None:
+    if body.kind == "addon" and (
+        body.buffer_before_minutes != 0 or body.buffer_after_minutes != 0
+    ):
+        raise SchedulingDomainError("addon_buffers_not_supported")
 
 
 def _get_service(
@@ -128,7 +130,7 @@ def create_service(
     identity: RequestIdentity,
     body: ServiceCreateRequest,
 ) -> ServiceCreateResponse:
-    _ensure_rollback_safe_catalog(body)
+    _ensure_catalog_write_shape(body)
     lock_owner_schedule(session, identity.user_id)
     existing = _get_service(session, identity, body.public_name, lock=True)
     desired = _service_values(body)
@@ -170,7 +172,7 @@ def replace_service(
     identity: RequestIdentity,
     body: ServiceReplaceRequest,
 ) -> ServiceReplaceResponse:
-    _ensure_rollback_safe_catalog(body)
+    _ensure_catalog_write_shape(body)
     lock_owner_schedule(session, identity.user_id)
     service = _get_service(session, identity, body.current_public_name, lock=True)
     if service is None:
