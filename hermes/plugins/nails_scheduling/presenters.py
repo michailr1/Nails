@@ -27,6 +27,60 @@ _CLIENT_FIELDS = (
     "style_preferences",
     "communication_preferences",
 )
+_SERVICE_FIELDS = (
+    "public_name",
+    "public_description",
+    "price_amount",
+    "currency",
+    "duration_minutes",
+    "buffer_before_minutes",
+    "buffer_after_minutes",
+    "is_active",
+    "kind",
+    "price_type",
+    "price_min_amount",
+    "price_max_amount",
+    "price_unit",
+    "category",
+    "sort_order",
+    "extra_minutes",
+)
+_CATALOG_ITEM_FIELDS = (
+    "service_id",
+    "kind",
+    "public_name",
+    "price_type",
+    "price_amount",
+    "price_min_amount",
+    "price_max_amount",
+    "price_unit",
+    "currency",
+    "duration_minutes",
+    "extra_minutes",
+)
+_BOOKING_FIELDS = (
+    "client_public_name",
+    "service_name",
+    "addon_names",
+    "catalog_items",
+    "starts_at",
+    "ends_at",
+    "reserved_starts_at",
+    "reserved_ends_at",
+    "status",
+    "price_amount",
+    "currency",
+    "price_type",
+    "price_min_amount",
+    "price_max_amount",
+    "price_unit",
+    "price_source",
+    "price_confirmed",
+    "duration_minutes",
+    "duration_source",
+    "buffer_before_minutes",
+    "buffer_after_minutes",
+)
 
 
 def _reject_technical_text(value: Any) -> None:
@@ -49,19 +103,9 @@ def _reject_technical_text(value: Any) -> None:
 def _service_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("invalid service")
-    fields = (
-        "public_name",
-        "public_description",
-        "price_amount",
-        "currency",
-        "duration_minutes",
-        "buffer_before_minutes",
-        "buffer_after_minutes",
-        "is_active",
-    )
-    if not set(fields).issubset(value):
+    if not set(_SERVICE_FIELDS).issubset(value):
         raise ValueError("invalid service")
-    return {key: value[key] for key in fields}
+    return {key: value[key] for key in _SERVICE_FIELDS}
 
 
 def _client_summary(value: Any) -> dict[str, Any]:
@@ -96,26 +140,33 @@ def _availability_day_result(value: Any) -> dict[str, Any]:
     }
 
 
+def _catalog_item_summary(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("invalid catalog item")
+    if not set(_CATALOG_ITEM_FIELDS).issubset(value):
+        raise ValueError("invalid catalog item")
+    return {key: value[key] for key in _CATALOG_ITEM_FIELDS}
+
+
 def _booking_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("invalid booking")
-    fields = (
-        "client_public_name",
-        "service_name",
-        "starts_at",
-        "ends_at",
-        "reserved_starts_at",
-        "reserved_ends_at",
-        "status",
-        "price_amount",
-        "currency",
-        "duration_minutes",
-        "buffer_before_minutes",
-        "buffer_after_minutes",
-    )
-    if not set(fields).issubset(value):
+    if not set(_BOOKING_FIELDS).issubset(value):
         raise ValueError("invalid booking")
-    return {key: value[key] for key in fields}
+    addon_names = value.get("addon_names")
+    catalog_items = value.get("catalog_items")
+    if not isinstance(addon_names, list) or not all(
+        isinstance(name, str) for name in addon_names
+    ):
+        raise ValueError("invalid booking addons")
+    if not isinstance(catalog_items, list):
+        raise ValueError("invalid booking catalog items")
+    result = {key: value[key] for key in _BOOKING_FIELDS}
+    result["addon_names"] = list(addon_names)
+    result["catalog_items"] = [
+        _catalog_item_summary(item) for item in catalog_items
+    ]
+    return result
 
 
 def _sanitize_success(action: str, result: Any) -> dict[str, Any]:
