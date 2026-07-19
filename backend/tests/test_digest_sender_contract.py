@@ -58,7 +58,7 @@ def test_message_uses_public_fields_and_never_turns_unknown_price_into_zero():
     assert "Маникюр + Снятие" in message
     assert "2700 ₽" in message
     assert "Итоговая сумма не указана" in message
-    assert "0 ₽" not in message
+    assert "\nОриентир: 0 ₽" not in message
     assert "claim_id" not in message
     assert "booking_id" not in message
 
@@ -103,7 +103,7 @@ def test_sender_keeps_bot_credential_outside_backend_requests(monkeypatch):
         "internal-key",
         "bot-secret",
         700000001,
-        datetime(2026, 7, 19, 21, 30, tzinfo=ZoneInfo("Europe/Moscow")),
+        datetime(2026, 7, 19, 23, 30, tzinfo=ZoneInfo("Europe/Moscow")),
     )
 
     assert result is True
@@ -163,7 +163,7 @@ def test_known_telegram_failure_releases_claim(monkeypatch):
             "internal-key",
             "bot-secret",
             700000001,
-            datetime(2026, 7, 19, 21, 30, tzinfo=ZoneInfo("Europe/Moscow")),
+            datetime(2026, 7, 19, 23, 30, tzinfo=ZoneInfo("Europe/Moscow")),
         )
     except httpx.HTTPStatusError:
         pass
