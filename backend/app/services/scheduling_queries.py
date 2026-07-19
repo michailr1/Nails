@@ -7,11 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.models import Booking, BookingStatus, Client, Service
-from app.schemas.scheduling import (
-    AvailabilitySummary,
-    DayViewResponse,
-    FreeSlotsResponse,
-)
+from app.schemas.scheduling import AvailabilitySummary, FreeSlotsResponse
+from app.schemas.scheduling_catalog_bookings import CatalogDayViewResponse
 from app.services.scheduling_common import (
     DEFAULT_SUGGESTION_END,
     DEFAULT_SUGGESTION_START,
@@ -53,7 +50,7 @@ def get_day_view(
     session: Session,
     identity: RequestIdentity,
     day: date,
-) -> DayViewResponse:
+) -> CatalogDayViewResponse:
     timezone = app_timezone()
     start_at, end_at = day_bounds(day, timezone)
     availability = availability_for_day(session, identity.user_id, day)
@@ -63,7 +60,7 @@ def get_day_view(
         start_at,
         end_at,
     )
-    return DayViewResponse(
+    return CatalogDayViewResponse(
         day=day,
         timezone=str(timezone),
         weekday_iso=day.isoweekday(),
