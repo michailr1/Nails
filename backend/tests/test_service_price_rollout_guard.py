@@ -105,7 +105,10 @@ def test_non_fixed_replace_cannot_change_legacy_fixed_price(
         json={
             "current_public_name": "Маникюр",
             "public_name": "Маникюр",
+            "currency": "RUB",
             "duration_minutes": 120,
+            "buffer_before_minutes": 0,
+            "buffer_after_minutes": 0,
             **price_fields,
         },
     )
