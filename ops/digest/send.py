@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -166,7 +165,7 @@ def _send_owner_digest(
         "POST",
         "/api/v1/scheduling/finalization-digest/claim",
         headers=_headers(api_key, telegram_user_id),
-        json_body={"local_day": now.date().isoformat(), "now": now.isoformat()},
+        json_body={"local_day": now.date().isoformat()},
     )
     if claim.get("claimed") is not True:
         return False
