@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from app.models import (
 )
 from app.schemas.scheduling_management import (
     BookingCancelRequest,
+    BookingFinalizeRequest,
     BookingMutationResponse,
     BookingRescheduleRequest,
     BookingSelector,
@@ -48,6 +50,7 @@ _NAME_ALIASES = {
     "ксюша": "ксения",
     "лиза": "елизавета",
 }
+_MAX_MONEY = Decimal("9999999999.99")
 
 
 def _canonical_first_name(public_name: str) -> str:
@@ -233,6 +236,110 @@ def cancel_booking(
             object_id=booking.id,
             request_id=identity.request_id,
             safe_changes={"status": BookingStatus.cancelled.value},
+        )
+    )
+    session.commit()
+    return BookingMutationResponse(
+        booking=booking_summary(booking, client, service, timezone),
+        changed=True,
+    )
+
+
+def _final_price_values(
+    booking: Booking,
+    price_amount: Decimal | None,
+    now: datetime,
+) -> tuple[Decimal, str, datetime | None]:
+    if price_amount is not None:
+        if price_amount < 0 or price_amount > _MAX_MONEY:
+            raise SchedulingDomainError("price_total_out_of_range")
+        return price_amount, "final_manual_override", now
+
+    if booking.status == BookingStatus.completed and booking.price_confirmed_at is not None:
+        return booking.price_amount, booking.price_source, booking.price_confirmed_at
+
+    if booking.catalog_price_type_snapshot == "range":
+        if booking.catalog_price_min_snapshot is None:
+            raise SchedulingDomainError("invalid_booking_price_snapshot")
+        return (
+            booking.catalog_price_min_snapshot,
+            "final_range_lower_bound_unconfirmed",
+            None,
+        )
+    if booking.catalog_price_type_snapshot in {"on_request", "per_unit"}:
+        return booking.price_amount, "final_price_unknown", None
+    return booking.price_amount, booking.price_source, booking.price_confirmed_at or now
+
+
+def finalize_booking(
+    session: Session,
+    identity: RequestIdentity,
+    body: BookingFinalizeRequest,
+) -> BookingMutationResponse:
+    lock_owner_schedule(session, identity.user_id)
+    booking, client, service = _find_booking(session, identity, body, lock=True)
+    timezone = app_timezone()
+    if booking.status == BookingStatus.cancelled:
+        raise SchedulingDomainError("booking_cancelled")
+
+    now = datetime.now(UTC)
+    previous_completed_at = booking.completed_at
+    previous = (
+        booking.status,
+        booking.price_amount,
+        booking.price_source,
+        booking.price_confirmed_at,
+    )
+
+    if body.outcome == "no_show":
+        booking.status = BookingStatus.no_show
+        booking.price_source = "final_no_show"
+        booking.price_confirmed_at = None
+    else:
+        price_amount, price_source, price_confirmed_at = _final_price_values(
+            booking,
+            body.price_amount,
+            now,
+        )
+        booking.status = BookingStatus.completed
+        booking.price_amount = price_amount
+        booking.price_source = price_source
+        booking.price_confirmed_at = price_confirmed_at
+
+    if booking.completed_at is None:
+        booking.completed_at = now
+
+    current = (
+        booking.status,
+        booking.price_amount,
+        booking.price_source,
+        booking.price_confirmed_at,
+    )
+    changed = previous != current or previous_completed_at is None
+    if not changed:
+        return BookingMutationResponse(
+            booking=booking_summary(booking, client, service, timezone),
+            changed=False,
+        )
+
+    session.add(
+        AuditEvent(
+            owner_user_id=identity.user_id,
+            actor_user_id=identity.user_id,
+            action=(
+                "booking.finalized"
+                if previous_completed_at is None
+                else "booking.finalization_corrected"
+            ),
+            object_type="booking",
+            object_id=booking.id,
+            request_id=identity.request_id,
+            safe_changes={
+                "status": booking.status.value,
+                "price_source": booking.price_source,
+                "price_confirmed": booking.price_confirmed_at is not None,
+                "correction": previous_completed_at is not None,
+            },
         )
     )
     session.commit()
