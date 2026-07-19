@@ -5,6 +5,7 @@ import logging
 import os
 from typing import Any
 
+from .booking_catalog import validate_catalog_booking_args
 from .client_cards import (
     create_client_card,
     update_client_card,
@@ -122,13 +123,14 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             values = {}
         elif action == "preview_availability":
             values = _preview_values(args)
+        elif action == "create_booking":
+            values = validate_catalog_booking_args(args)
         elif action in {"create_service", "update_service"}:
             action, values = validate_service_catalog_args(
                 _with_service_create_defaults(args)
             )
         else:
             action, values = _validate_args(_with_service_create_defaults(args))
-
         telegram_user_id = _trusted_telegram_user_id()
         api_key = _api_key()
 
