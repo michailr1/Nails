@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.feedback import router as feedback_router
 from app.api.onboarding import router as onboarding_router
 from app.api.scheduling import router as scheduling_router
+from app.api.scheduling_digest import router as scheduling_digest_router
 from app.api.web_auth import router as web_auth_router
 from app.api.web_auth_conversation import router as web_auth_conversation_router
 from app.api.web_read import router as web_read_router
@@ -81,6 +82,7 @@ async def add_web_security_headers(request: Request, call_next):
 
 app.include_router(onboarding_router)
 app.include_router(scheduling_router)
+app.include_router(scheduling_digest_router)
 app.include_router(feedback_router)
 app.include_router(web_auth_router)
 app.include_router(web_auth_conversation_router)
