@@ -106,4 +106,5 @@ def replace_catalog(
         updated_count=updated_count,
         archived_count=archived_count,
         services=[service_summary(service) for service in services],
+        verified=True,
     )
