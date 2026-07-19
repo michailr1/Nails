@@ -10,11 +10,11 @@
 
 ```text
 repository: michailr1/Nails
-GitHub main: 2c9f919dbb1a6266904a9b08f504fbb6f83f103b
+GitHub main: 9e219911a2878032bce7de048f21114ccb6a6b00
 production host: de.funti.cc
 production repo: /opt/nails/repo
 production branch: main
-production SHA: 2c9f919dbb1a6266904a9b08f504fbb6f83f103b
+production SHA: 9e219911a2878032bce7de048f21114ccb6a6b00
 backend env: /opt/nails/.env
 internal API: http://127.0.0.1:8210
 health: /health
@@ -35,71 +35,82 @@ Hermes plugins: nails-onboarding, nails-scheduling
 
 ## Production milestone
 
-ADR-007 Slice A развернут и финализирован:
+ADR-007 Slice B1 развернут и финализирован:
 
 ```text
-production SHA: 2c9f919dbb1a6266904a9b08f504fbb6f83f103b
+production SHA: 9e219911a2878032bce7de048f21114ccb6a6b00
+previous SHA: 2c9f919dbb1a6266904a9b08f504fbb6f83f103b
 API bind: 127.0.0.1:8210
-health: ok
-readiness: ok
-working tree: clean
+candidate: success
+production: success
+backup: /opt/nails/backups/nails-before-deploy-20260719T163400Z.sql.gz
 ```
 
-Каталог услуг получил schema/model для `base|addon` и `fixed|range|per_unit|on_request`, категории, сортировку и `extra_minutes`. Rollback-safe write gate пока разрешает только `base/fixed`.
+`bookings` имеют expand-only snapshot состава и исходной ценовой семантики. DB compatibility trigger заполняет snapshot при insert из предыдущего release.
 
 ## Текущая задача
 
-Issue #125 — ADR-007 Slice B1: booking catalog snapshot baseline.
-
-Продолжение после production rollout: issue #127 — Slice B2, активация состава услуги, новых типов цены и overrides.
+Issue #127 — ADR-007 Slice B2: активация состава услуги, новых типов цены и overrides.
 
 Рабочая ветка:
 
 ```text
-feat/adr007-slice-b-booking-snapshots
-baseline=2c9f919dbb1a6266904a9b08f504fbb6f83f103b
+feat/adr007-slice-b2-activation-overrides
+baseline=9e219911a2878032bce7de048f21114ccb6a6b00
 ```
 
-## Phased rollout
+## Scope
 
-Slice B1 — обязательный промежуточный release для смены rollback baseline:
+- разрешить запись `addon`, `range`, `per_unit`, `on_request` в каталоге;
+- запись содержит одну base-услугу и до 20 addons;
+- длительность по умолчанию: base duration + addon `extra_minutes`;
+- fixed цены складываются;
+- fixed + range формируют итоговую вилку;
+- single per-unit сохраняет цену и единицу, смешанный per-unit остаётся неподтверждённым ориентиром;
+- on-request не отображается как подтверждённый ноль;
+- мастер может явно переопределить итоговую цену и длительность;
+- idempotency учитывает состав и overrides;
+- day view и Telegram plugin возвращают полный неизменяемый snapshot.
 
-1. expand-only добавить в `bookings` неизменяемый snapshot состава и ценовой семантики;
-2. backfill существующих записей как один `base/fixed` item;
-3. новый booking path заполняет snapshot для текущих разрешённых `base/fixed` услуг;
-4. gates на `addon` и non-fixed цены остаются включены;
-5. только после deployment следующий issue #127 активирует допы, range, per-unit, on-request и overrides.
+## Rollback-контракт
 
-Это предотвращает появление записей, которые предыдущий production SHA интерпретирует как неверную фиксированную цену.
+Предыдущий production release понимает только одну fixed/base услугу. Миграция `0012` обновляет существующий DB trigger:
+
+- legacy insert с `duration_source=catalog_snapshot` продолжает работать для fixed/base;
+- legacy insert для addon или non-fixed base отклоняется;
+- новый path пишет `duration_source=catalog_v2` либо `manual_override` и сохраняет полный snapshot.
+
+Так rollback не создаёт тихо повреждённую запись, но обычные старые fixed/base записи остаются доступны.
 
 ## Инварианты
 
 - confirmation каждой мутации;
-- owner-scoping;
-- booking price/duration snapshots;
+- owner-scoping base, addons и clients;
+- неизменяемые booking price/duration snapshots;
 - ADR-006 day-off и overlap gate;
 - idempotency;
-- expand-only миграция минимум на один релиз;
 - backup перед мутирующим deploy;
 - успех только после `ok=true` и exact runtime SHA.
 
-## Сознательно не входит в Slice B1
+## Сознательно не входит
 
-- снятие catalog rollout gates;
-- выбор addons в request/API/plugin;
-- overrides цены и длительности;
-- вечерний дайджест;
+- количество для per-unit («за ноготь»);
+- правила совместимости конкретных addons;
+- per-client price overrides;
+- вечерний дайджест и финализация визита;
+- no-show flow;
 - импорт прайса по фото;
 - публичный прайс и клиентский контур.
 
 ## Точка продолжения
 
 ```text
-1. завершить review exact diff и rollback-контракта PR #126
-2. получить зелёный CI на финальном head
-3. перевести PR в Ready for review
-4. candidate deployment exact PR head
-5. fast-forward main тем же SHA
-6. finalize production
-7. начать issue #127 Slice B2 activation + overrides
+1. завершить реализацию и regression tests issue #127
+2. открыть draft PR к main
+3. исправить CI на exact head
+4. review rollback, owner-scoping и idempotency
+5. перевести PR в Ready for review
+6. candidate deployment exact PR head
+7. fast-forward main тем же SHA
+8. finalize production
 ```
