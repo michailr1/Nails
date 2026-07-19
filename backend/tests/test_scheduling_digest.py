@@ -57,8 +57,12 @@ def test_digest_claim_selects_only_ended_scheduled_owner_bookings_once(
     second = create_user(telegram_user_id=2002)
     create_service(first.id, price_amount="2700.00")
     create_service(second.id, price_amount="2800.00")
-    first_headers = lambda **kwargs: auth_headers(telegram_user_id=1001, **kwargs)
-    second_headers = lambda **kwargs: auth_headers(telegram_user_id=2002, **kwargs)
+
+    def first_headers(**kwargs):
+        return auth_headers(telegram_user_id=1001, **kwargs)
+
+    def second_headers(**kwargs):
+        return auth_headers(telegram_user_id=2002, **kwargs)
 
     _create_booking(
         client,
