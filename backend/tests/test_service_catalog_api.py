@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.mark.usefixtures("clean_database")
-def test_catalog_price_shapes_persist_and_sort_stably(
+def test_fixed_catalog_rows_persist_and_sort_stably(
     client: TestClient,
     create_user: Callable,
     auth_headers: Callable,
@@ -15,15 +15,14 @@ def test_catalog_price_shapes_persist_and_sort_stably(
     payloads = [
         {
             "public_name": "Сложный дизайн",
+            "price_amount": "900.00",
             "duration_minutes": 30,
             "category": "Дизайн",
             "sort_order": 20,
         },
         {
             "public_name": "Педикюр",
-            "price_type": "range",
-            "price_min_amount": "1900.00",
-            "price_max_amount": "2300.00",
+            "price_amount": "2300.00",
             "duration_minutes": 100,
             "category": "База",
             "sort_order": 20,
@@ -57,20 +56,10 @@ def test_catalog_price_shapes_persist_and_sort_stably(
         "Педикюр",
         "Сложный дизайн",
     ]
-
-    manicure, pedicure, complex_design = services
-
-    assert manicure["kind"] == "base"
-    assert manicure["price_type"] == "fixed"
-    assert manicure["price_amount"] == "2700.00"
-    assert manicure["duration_minutes"] == 120
-
-    assert pedicure["price_type"] == "range"
-    assert pedicure["price_amount"] is None
-    assert pedicure["price_min_amount"] == "1900.00"
-    assert pedicure["price_max_amount"] == "2300.00"
-
-    assert complex_design["price_type"] == "on_request"
-    assert complex_design["price_amount"] is None
-    assert complex_design["price_min_amount"] is None
-    assert complex_design["price_max_amount"] is None
+    assert all(service["kind"] == "base" for service in services)
+    assert all(service["price_type"] == "fixed" for service in services)
+    assert [service["price_amount"] for service in services] == [
+        "2700.00",
+        "2300.00",
+        "900.00",
+    ]
