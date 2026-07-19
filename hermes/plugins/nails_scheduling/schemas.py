@@ -57,11 +57,11 @@ NAILS_SCHEDULING = {
         "price_override_amount. Use duration_override_minutes only when the master explicitly "
         "changes the composed duration. Create, reschedule, cancel, or finalize a booking only "
         "after showing a complete human-readable current-to-future summary and receiving explicit "
-        "confirmation. finalize_booking records completed or no_show; omit price_amount to preserve "
-        "the booking estimate, or provide it only when the master states the final total. "
-        "Rescheduling must use an exact backend free slot. Cancellation is soft and preserves "
-        "history. Do not promise an operation before a successful tool result. Send at most one "
-        "brief progress message before the final result."
+        "confirmation. finalize_booking records completed or no_show; "
+        "omit price_amount to preserve the booking estimate, or provide it only when the master "
+        "states the final total. Rescheduling must use an exact backend free slot. Cancellation "
+        "is soft and preserves history. Do not promise an operation before a successful tool "
+        "result. Send at most one brief progress message before the final result."
     ),
     "parameters": {
         "type": "object",
