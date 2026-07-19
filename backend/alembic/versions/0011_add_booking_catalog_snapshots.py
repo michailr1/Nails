@@ -69,7 +69,10 @@ def upgrade() -> None:
                         'kind', 'base',
                         'public_name', s.public_name,
                         'price_type', 'fixed',
-                        'price_amount', b.price_amount,
+                        'price_amount', b.price_amount::text,
+                        'price_min_amount', b.price_amount::text,
+                        'price_max_amount', b.price_amount::text,
+                        'price_unit', NULL,
                         'currency', b.currency,
                         'duration_minutes', b.duration_minutes_snapshot,
                         'extra_minutes', 0
