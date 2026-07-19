@@ -29,6 +29,7 @@ jobs:
           pytest -q hermes/plugins/nails_scheduling/tests > scheduling-plugin-pytest.txt 2>&1
           status=$?
           printf '%s\n' "$status" > scheduling-plugin-pytest.status
+          cp hermes/plugins/nails_scheduling/tests/test_plugin.py diagnostic-test_plugin.py
           exit 0
 
       - name: Upload diagnostic output
@@ -38,6 +39,7 @@ jobs:
           path: |
             scheduling-plugin-pytest.txt
             scheduling-plugin-pytest.status
+            diagnostic-test_plugin.py
           if-no-files-found: error
           retention-days: 1
 
