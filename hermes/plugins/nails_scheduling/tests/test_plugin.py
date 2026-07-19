@@ -69,6 +69,7 @@ def test_schema_exposes_only_public_business_arguments():
         "communication_preferences",
         "start_time",
         "new_start_time",
+        "outcome",
         "confirmed",
     }
     assert parameters["properties"]["action"]["enum"] == [
@@ -89,6 +90,7 @@ def test_schema_exposes_only_public_business_arguments():
         "create_booking",
         "reschedule_booking",
         "cancel_booking",
+        "finalize_booking",
     ]
     serialized = json.dumps(schemas.NAILS_SCHEDULING).lower()
     for forbidden in (
