@@ -12,7 +12,11 @@ from app.schemas.scheduling_catalog_replace import (
 from app.services.normalization import normalize_public_name
 from app.services.scheduling_common import lock_owner_schedule
 from app.services.scheduling_presenters import service_summary
-from app.services.scheduling_services import _SERVICE_FIELDS, _service_values
+from app.services.scheduling_services import (
+    _SERVICE_FIELDS,
+    _ensure_catalog_write_shape,
+    _service_values,
+)
 
 
 def replace_catalog(
@@ -20,6 +24,9 @@ def replace_catalog(
     identity: RequestIdentity,
     body: CatalogReplaceRequest,
 ) -> CatalogReplaceResponse:
+    for definition in body.services:
+        _ensure_catalog_write_shape(definition)
+
     lock_owner_schedule(session, identity.user_id)
     existing_services = session.scalars(
         select(Service)
