@@ -1,7 +1,10 @@
 from decimal import Decimal
 
 from app.models import Booking, Service
-from app.services.scheduling_bookings import _catalog_item_snapshot, _catalog_price_bounds
+from app.services.scheduling_bookings import (
+    _catalog_item_snapshot,
+    _catalog_price_bounds,
+)
 
 
 def test_fixed_service_snapshot_preserves_catalog_values() -> None:
@@ -40,7 +43,10 @@ def test_fixed_service_snapshot_preserves_catalog_values() -> None:
         "duration_minutes": 120,
         "extra_minutes": 0,
     }
-    assert _catalog_price_bounds(service) == (Decimal("2700.00"), Decimal("2700.00"))
+    assert _catalog_price_bounds(service) == (
+        Decimal("2700.00"),
+        Decimal("2700.00"),
+    )
 
 
 def test_range_and_on_request_bounds_keep_semantics() -> None:
