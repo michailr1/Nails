@@ -106,6 +106,7 @@ def claim_finalization_digest(
             bookings=[],
         )
 
+    cutoff = datetime.now(UTC)
     rows = session.execute(
         select(Booking, Client, Service)
         .join(Client, Client.id == Booking.client_id)
@@ -113,7 +114,7 @@ def claim_finalization_digest(
         .where(
             Booking.owner_user_id == identity.user_id,
             Booking.status == BookingStatus.scheduled,
-            Booking.ends_at <= body.now.astimezone(UTC),
+            Booking.ends_at <= cutoff,
             text("finalization_digest_claim_id IS NULL"),
             text("finalization_digest_sent_at IS NULL"),
         )
@@ -129,7 +130,7 @@ def claim_finalization_digest(
         )
 
     claim_id = uuid.uuid4()
-    claimed_at = datetime.now(UTC)
+    claimed_at = cutoff
     for booking, _, _ in rows:
         session.execute(
             text(
