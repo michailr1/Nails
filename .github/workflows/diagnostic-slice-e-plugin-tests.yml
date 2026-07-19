@@ -1,0 +1,31 @@
+name: Diagnostic Slice E Plugin Tests
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install httpx pytest pyyaml ruff
+      - run: |
+          set +e
+          PYTHONPATH=hermes/plugins pytest -q hermes/plugins/nails_scheduling/tests > plugin-tests.txt 2>&1
+          status=$?
+          printf '%s\n' "$status" > plugin-tests.status
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-tests
+          path: |
+            plugin-tests.txt
+            plugin-tests.status
+          retention-days: 1
+      - run: test "$(cat plugin-tests.status)" = "0"
