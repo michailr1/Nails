@@ -212,6 +212,8 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 raise ValueError("invalid client update result")
             if action == "preview_availability":
                 safe_result = _sanitize_preview_result(raw_result)
+            elif action == "finalize_booking":
+                safe_result = _sanitize_success("cancel_booking", raw_result)
             else:
                 safe_result = (
                     raw_result
