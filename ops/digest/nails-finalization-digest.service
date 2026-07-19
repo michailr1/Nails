@@ -15,4 +15,4 @@ PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadOnlyPaths=/opt/nails/digest /opt/nails/.env /root/.hermes/profiles/nails/.env
+ReadOnlyPaths=/opt/nails/digest /opt/nails/.env -/root/.hermes/profiles/nails/.env
