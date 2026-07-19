@@ -36,18 +36,20 @@ def _forbidden() -> HTTPException:
     )
 
 
-def require_request_identity(
-    session: SessionDependency,
+def require_internal_key(
     internal_key: str | None = Header(default=None, alias="X-Nails-Internal-Key"),
-    telegram_user_id: str | None = Header(default=None, alias="X-Telegram-User-ID"),
-    request_id: str | None = Header(default=None, alias="X-Request-ID"),
-) -> RequestIdentity:
-    settings = get_settings()
-    expected_key = settings.internal_api_key.get_secret_value()
-
+) -> None:
+    expected_key = get_settings().internal_api_key.get_secret_value()
     if internal_key is None or not hmac.compare_digest(internal_key, expected_key):
         raise _unauthorized()
 
+
+def require_request_identity(
+    session: SessionDependency,
+    _: Annotated[None, Depends(require_internal_key)],
+    telegram_user_id: str | None = Header(default=None, alias="X-Telegram-User-ID"),
+    request_id: str | None = Header(default=None, alias="X-Request-ID"),
+) -> RequestIdentity:
     try:
         parsed_telegram_user_id = int(telegram_user_id or "")
     except ValueError as exc:
