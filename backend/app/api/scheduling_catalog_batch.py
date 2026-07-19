@@ -5,7 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity, require_request_identity
 from app.db import get_db_session
-from app.schemas.scheduling_catalog_replace import CatalogReplaceRequest, CatalogReplaceResponse
+from app.schemas.scheduling_catalog_replace import (
+    CatalogReplaceRequest,
+    CatalogReplaceResponse,
+)
 from app.services.scheduling_catalog_replace import replace_catalog
 
 router = APIRouter(prefix="/api/v1/scheduling", tags=["scheduling"])
