@@ -23,12 +23,17 @@ from app.services.scheduling_presenters import booking_summary
 
 
 def _catalog_item_snapshot(service: Service) -> dict[str, Any]:
+    price_amount = (
+        str(service.price_amount)
+        if service.price_type in {"fixed", "per_unit"}
+        else None
+    )
     return {
         "service_id": str(service.id),
         "kind": service.kind,
         "public_name": service.public_name,
         "price_type": service.price_type,
-        "price_amount": str(service.price_amount) if service.price_type in {"fixed", "per_unit"} else None,
+        "price_amount": price_amount,
         "price_min_amount": (
             str(service.price_min_amount) if service.price_min_amount is not None else None
         ),
