@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.mark.usefixtures("clean_database")
-def test_addon_cannot_be_used_for_slots_or_standalone_booking(
+def test_addon_write_is_blocked_until_legacy_rollback_window_closes(
     client: TestClient,
     create_user: Callable,
     auth_headers: Callable,
@@ -23,8 +23,15 @@ def test_addon_cannot_be_used_for_slots_or_standalone_booking(
             "extra_minutes": 20,
         },
     )
-    assert addon.status_code == 200, addon.text
-    assert addon.json()["service"]["kind"] == "addon"
+    assert addon.status_code == 409, addon.text
+    assert addon.json()["detail"]["code"] == "addon_rollout_not_enabled"
+
+    catalog = client.get(
+        "/api/v1/scheduling/services",
+        headers=auth_headers(),
+    )
+    assert catalog.status_code == 200, catalog.text
+    assert catalog.json()["services"] == []
 
     slots = client.get(
         "/api/v1/scheduling/slots",
