@@ -1,0 +1,36 @@
+name: Diagnostic Slice E Ruff
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Ruff
+        run: python -m pip install 'ruff>=0.9,<1'
+      - name: Capture Ruff
+        run: |
+          set +e
+          {
+            echo '=== backend ==='
+            ruff check backend
+            echo '=== scheduling plugin ==='
+            ruff check hermes/plugins/nails_scheduling
+          } > slice-e-ruff.txt 2>&1
+          printf '%s\n' "$?" > slice-e-ruff.status
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slice-e-ruff
+          path: |
+            slice-e-ruff.txt
+            slice-e-ruff.status
+          retention-days: 1
+      - run: test "$(cat slice-e-ruff.status)" = "0"
