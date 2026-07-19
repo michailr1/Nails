@@ -7,6 +7,16 @@ from .validation import ToolInputError
 
 _SERVICE_KINDS = {"base", "addon"}
 _PRICE_TYPES = {"fixed", "range", "per_unit", "on_request"}
+_CATALOG_FIELDS = {
+    "kind",
+    "price_type",
+    "price_min_amount",
+    "price_max_amount",
+    "price_unit",
+    "category",
+    "sort_order",
+    "extra_minutes",
+}
 _SERVICE_FIELDS = {
     "service_name",
     "service_description",
@@ -16,14 +26,7 @@ _SERVICE_FIELDS = {
     "buffer_before_minutes",
     "buffer_after_minutes",
     "is_active",
-    "kind",
-    "price_type",
-    "price_min_amount",
-    "price_max_amount",
-    "price_unit",
-    "category",
-    "sort_order",
-    "extra_minutes",
+    *_CATALOG_FIELDS,
 }
 
 
@@ -96,6 +99,7 @@ def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, 
     if args.get("confirmed") is not True:
         raise ToolInputError("explicit confirmation is required")
 
+    supplied_catalog_fields = set(args) & _CATALOG_FIELDS
     kind = args.get("kind", "base")
     if kind not in _SERVICE_KINDS:
         raise ToolInputError("kind is invalid")
@@ -175,6 +179,7 @@ def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, 
         "category": _optional_text(args.get("category"), "category", 160),
         "sort_order": _integer(args.get("sort_order", 0), "sort_order", 0, 1_000_000),
         "extra_minutes": extra_minutes,
+        "supplied_catalog_fields": supplied_catalog_fields,
     }
     if action == "update_service":
         values["current_service_name"] = _text(
@@ -198,15 +203,20 @@ def service_catalog_request_spec(
         "buffer_before_minutes": values["buffer_before_minutes"],
         "buffer_after_minutes": values["buffer_after_minutes"],
         "is_active": values["is_active"],
-        "kind": values["kind"],
-        "price_type": values["price_type"],
-        "price_min_amount": values["price_min_amount"],
-        "price_max_amount": values["price_max_amount"],
-        "price_unit": values["price_unit"],
-        "category": values["category"],
-        "sort_order": values["sort_order"],
-        "extra_minutes": values["extra_minutes"],
     }
+    field_mapping = {
+        "kind": "kind",
+        "price_type": "price_type",
+        "price_min_amount": "price_min_amount",
+        "price_max_amount": "price_max_amount",
+        "price_unit": "price_unit",
+        "category": "category",
+        "sort_order": "sort_order",
+        "extra_minutes": "extra_minutes",
+    }
+    for source, target in field_mapping.items():
+        if source in values["supplied_catalog_fields"]:
+            body[target] = values[source]
     if action == "create_service":
         return "POST", "/api/v1/scheduling/services", None, body
     body["current_public_name"] = values["current_service_name"]
