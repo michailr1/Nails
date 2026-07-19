@@ -27,6 +27,14 @@ def _service(*, name="Маникюр", active=True):
         "buffer_before_minutes": 0,
         "buffer_after_minutes": 21,
         "is_active": active,
+        "kind": "base",
+        "price_type": "fixed",
+        "price_min_amount": None,
+        "price_max_amount": None,
+        "price_unit": None,
+        "category": None,
+        "sort_order": 0,
+        "extra_minutes": 0,
     }
 
 
