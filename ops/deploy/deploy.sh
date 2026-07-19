@@ -126,7 +126,7 @@ on_error() {
   restore_images
 
   if [[ "$RUNTIME_MUTATED" == "true" ]]; then
-    log "rollback: restoring previous images, containers, plugins, skills, backup timer and gateway"
+    log "rollback: restoring previous images, containers, plugins, skills, timers and gateway"
     restore_containers
     [[ -d "${RUNTIME_BACKUP}/plugins.before" ]] && {
       rm -rf "${PROFILE}/plugins"
@@ -137,6 +137,8 @@ on_error() {
       cp -a "${RUNTIME_BACKUP}/skills.before" "${PROFILE}/skills"
     }
     restore_backup_runtime
+    NAILS_DEPLOY_WORKTREE="$WORKTREE" \
+      bash "$WORKTREE/ops/digest/deploy_runtime.sh" restore "$RUNTIME_BACKUP" "$SOURCE_REF"
     user_systemctl start "$GATEWAY" >/dev/null 2>&1
     printf 'DEPLOY_ROLLED_BACK=true prev_sha=%s\n' "$PREV_SHA"
   else
@@ -217,6 +219,8 @@ cp -a "${PROFILE}/skills" "${RUNTIME_BACKUP}/skills.before"
 [[ -f "$BACKUP_TIMER" ]] && cp -a "$BACKUP_TIMER" "${RUNTIME_BACKUP}/nails-backup.timer.before"
 systemctl is-enabled nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-enabled.before" 2>/dev/null || true
 systemctl is-active nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-active.before" 2>/dev/null || true
+NAILS_DEPLOY_WORKTREE="$WORKTREE" \
+  bash "$WORKTREE/ops/digest/deploy_runtime.sh" snapshot "$RUNTIME_BACKUP" "$SOURCE_REF"
 
 if docker image inspect "$WEB_IMAGE" >/dev/null 2>&1; then
   WEB_IMAGE_EXISTED="true"
@@ -250,17 +254,27 @@ assert actual == expected, f"image built from wrong tree: {actual!r} != {expecte
 
 from app.api.onboarding import router as onboarding_router
 from app.api.scheduling import router as scheduling_router
+from app.api.scheduling_digest import router as scheduling_digest_router
 from app.main import app
 
 onboarding_paths = {getattr(route, "path", "") for route in onboarding_router.routes}
 scheduling_paths = {getattr(route, "path", "") for route in scheduling_router.routes}
+digest_paths = {getattr(route, "path", "") for route in scheduling_digest_router.routes}
 app_paths = {getattr(route, "path", "") for route in app.routes}
 
 assert any(path.startswith("/api/v1/onboarding") for path in onboarding_paths), sorted(onboarding_paths)
 assert any(path.startswith("/api/v1/scheduling") for path in scheduling_paths), sorted(scheduling_paths)
+assert "/api/v1/scheduling/finalization-digest/claim" in digest_paths, sorted(digest_paths)
+assert "/api/v1/scheduling/finalization-digest/ack" in digest_paths, sorted(digest_paths)
 assert "/health" in app_paths and "/ready" in app_paths, sorted(app_paths)
 print("BUILT_API_IMAGE_OK=true")
 PY
+
+bash -n "$WORKTREE/ops/digest/deploy_runtime.sh"
+"/usr/local/lib/hermes-agent/venv/bin/python" -m py_compile "$WORKTREE/ops/digest/send.py"
+systemd-analyze verify \
+  "$WORKTREE/ops/digest/nails-finalization-digest.service" \
+  "$WORKTREE/ops/digest/nails-finalization-digest.timer" >/dev/null
 
 docker run --rm --network none --read-only --tmpfs /var/cache/nginx:size=16m \
   --tmpfs /var/run:size=1m --tmpfs /tmp:size=8m \
@@ -269,8 +283,10 @@ WEB_BUILT_SHA="$(docker run --rm --network none "$WEB_IMAGE" sh -c 'printf %s "$
 [[ "$WEB_BUILT_SHA" == "$RELEASE_SHA" ]] || die "WEB image built from wrong tree"
 printf 'BUILT_WEB_IMAGE_OK=true sha=%s\n' "$WEB_BUILT_SHA"
 
-log "5. Остановка gateway и перезапуск nails-api + nails-web"
+log "5. Остановка digest timer, gateway и перезапуск nails-api + nails-web"
 RUNTIME_MUTATED="true"
+NAILS_DEPLOY_WORKTREE="$WORKTREE" \
+  bash "$WORKTREE/ops/digest/deploy_runtime.sh" stop "$RUNTIME_BACKUP" "$SOURCE_REF"
 user_systemctl stop "$GATEWAY"
 compose up -d --no-deps --force-recreate --no-build nails-api nails-web >/dev/null
 wait_api_ready
@@ -292,7 +308,7 @@ RUNNING_WEB_SHA="$(
   exit 1
 }
 
-log "6. Установка plugins, skills и backup runtime из релизного дерева"
+log "6. Установка plugins, skills, backup и digest runtime из релизного дерева"
 for name in "${PLUGINS[@]}"; do
   src="${WORKTREE}/hermes/plugins/${name}"
   dst="${PROFILE}/plugins/${name}"
@@ -318,6 +334,8 @@ systemctl daemon-reload
 systemctl enable --now nails-backup.timer >/dev/null
 systemctl is-enabled --quiet nails-backup.timer
 systemctl is-active --quiet nails-backup.timer
+NAILS_DEPLOY_WORKTREE="$WORKTREE" \
+  bash "$WORKTREE/ops/digest/deploy_runtime.sh" install "$RUNTIME_BACKUP" "$SOURCE_REF"
 
 log "7. Старт gateway"
 user_systemctl start "$GATEWAY"
