@@ -12,23 +12,21 @@ from .client_cards import (
     validate_client_card_args,
     validate_client_card_update_args,
 )
+from .finalization import finalize_booking, validate_finalize_booking_args
 from .presenters import _sanitize_success
 from .service_catalog import service_catalog_request_spec, validate_service_catalog_args
 from .transport import _call_backend, _error
-from .validation import (
-    ToolInputError,
-    _availability_days,
-    _request_spec,
-    _validate_args,
-)
-from .verified_operations import (
-    _verified_booking_mutation,
-    _verified_create_booking,
-)
+from .validation import ToolInputError, _availability_days, _request_spec, _validate_args
+from .verified_operations import _verified_booking_mutation, _verified_create_booking
 
 logger = logging.getLogger(__name__)
 _API_KEY_ENV = "NAILS_INTERNAL_API_KEY"
-_VERIFIED_ACTIONS = {"create_booking", "reschedule_booking", "cancel_booking"}
+_VERIFIED_ACTIONS = {
+    "create_booking",
+    "reschedule_booking",
+    "cancel_booking",
+    "finalize_booking",
+}
 _SERVICE_CREATE_DEFAULTS = {
     "currency": "RUB",
     "buffer_before_minutes": 0,
@@ -125,6 +123,8 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             values = _preview_values(args)
         elif action == "create_booking":
             values = validate_catalog_booking_args(args)
+        elif action == "finalize_booking":
+            values = validate_finalize_booking_args(args)
         elif action in {"create_service", "update_service"}:
             action, values = validate_service_catalog_args(
                 _with_service_create_defaults(args)
@@ -179,6 +179,12 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 telegram_user_id=telegram_user_id,
                 api_key=api_key,
             )
+        elif action == "finalize_booking":
+            response = finalize_booking(
+                values,
+                telegram_user_id=telegram_user_id,
+                api_key=api_key,
+            )
         else:
             if action in {"create_service", "update_service"}:
                 method, path, params, json_body = service_catalog_request_spec(
@@ -224,9 +230,7 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 )
             )
 
-        return _json_response(
-            {"ok": True, "action": action, "result": safe_result}
-        )
+        return _json_response({"ok": True, "action": action, "result": safe_result})
     except ToolInputError:
         return _json_response(
             _error(
