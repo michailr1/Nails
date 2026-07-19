@@ -1,0 +1,30 @@
+name: Temporary Slice E Ruff Fix
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.head_ref == 'feat/adr007-slice-e-photo-price-import'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/adr007-slice-e-photo-price-import
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install 'ruff>=0.9,<1'
+      - run: ruff check --fix --config backend/pyproject.toml hermes/plugins/nails_scheduling
+      - run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add hermes/plugins/nails_scheduling
+          git commit -m 'fix: apply Ruff formatting to scheduling plugin'
+          git push origin HEAD:feat/adr007-slice-e-photo-price-import
