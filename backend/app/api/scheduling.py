@@ -9,11 +9,8 @@ from app.db import get_db_session
 from app.schemas.scheduling import (
     AvailabilityReplaceRequest,
     AvailabilityReplaceResponse,
-    BookingCreateRequest,
-    BookingCreateResponse,
     DateResolveRequest,
     DateResolveResponse,
-    DayViewResponse,
     FreeSlotsResponse,
     ServiceCreateRequest,
     ServiceCreateResponse,
@@ -23,6 +20,11 @@ from app.schemas.scheduling import (
     ServiceReplaceResponse,
 )
 from app.schemas.scheduling_availability import AvailabilityPreviewResponse
+from app.schemas.scheduling_catalog_bookings import (
+    CatalogBookingCreateRequest,
+    CatalogBookingCreateResponse,
+    CatalogDayViewResponse,
+)
 from app.schemas.scheduling_management import (
     BookingCancelRequest,
     BookingMutationResponse,
@@ -179,12 +181,12 @@ def client_replace(
         raise _translate_domain_error(exc) from exc
 
 
-@router.get("/day", response_model=DayViewResponse)
+@router.get("/day", response_model=CatalogDayViewResponse)
 def day_view(
     session: SessionDependency,
     identity: IdentityDependency,
     day: date,
-) -> DayViewResponse:
+) -> CatalogDayViewResponse:
     return get_day_view(session, identity, day)
 
 
@@ -222,12 +224,12 @@ def availability_replace(
         raise _translate_domain_error(exc) from exc
 
 
-@router.post("/bookings", response_model=BookingCreateResponse)
+@router.post("/bookings", response_model=CatalogBookingCreateResponse)
 def booking_create(
-    body: BookingCreateRequest,
+    body: CatalogBookingCreateRequest,
     session: SessionDependency,
     identity: IdentityDependency,
-) -> BookingCreateResponse:
+) -> CatalogBookingCreateResponse:
     try:
         return create_booking(session, identity, body)
     except SchedulingDomainError as exc:
