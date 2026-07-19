@@ -24,6 +24,14 @@ def test_web_assets_are_served(client, clean_database):
     assert script.status_code == 200
     assert stylesheet.status_code == 200
     assert "fetch(path" in script.text
+    assert 'calendarMode: "day"' in script.text
+    assert '["week", "Неделя"]' in script.text
+    assert '["month", "Месяц"]' in script.text
+    assert "/web/api/exports/calendar/all" in script.text
+    assert "Выгрузить всех клиенток" in script.text
+    assert "Не заполнено" in script.text
+    assert ".mobile-logout" in stylesheet.text
+    assert "display: inline-flex" in stylesheet.text
     assert "--primary" in stylesheet.text
 
 
