@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.scheduling import DayBookingSummary
+from app.schemas.scheduling_catalog_bookings import CatalogBookingSummary
 
 
 class ClientCardSummary(BaseModel):
@@ -147,5 +147,5 @@ class BookingCancelRequest(BookingSelector):
 
 
 class BookingMutationResponse(BaseModel):
-    booking: DayBookingSummary
+    booking: CatalogBookingSummary
     changed: bool
