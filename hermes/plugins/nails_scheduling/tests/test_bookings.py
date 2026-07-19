@@ -30,6 +30,22 @@ def _booking_payload(
         "id": "22222222-2222-4222-8222-222222222222",
         "client_public_name": client,
         "service_name": service,
+        "addon_names": [],
+        "catalog_items": [
+            {
+                "service_id": "11111111-1111-4111-8111-111111111111",
+                "kind": "base",
+                "public_name": service,
+                "price_type": "fixed",
+                "price_amount": "2500.00",
+                "price_min_amount": None,
+                "price_max_amount": None,
+                "price_unit": None,
+                "currency": "RUB",
+                "duration_minutes": 120,
+                "extra_minutes": 0,
+            }
+        ],
         "starts_at": starts_at,
         "ends_at": "2026-07-18T15:10:00+02:00",
         "reserved_starts_at": starts_at,
@@ -37,7 +53,14 @@ def _booking_payload(
         "status": "scheduled",
         "price_amount": "2500.00",
         "currency": "RUB",
+        "price_type": "fixed",
+        "price_min_amount": "2500.00",
+        "price_max_amount": "2500.00",
+        "price_unit": None,
+        "price_source": "catalog_fixed",
+        "price_confirmed": True,
         "duration_minutes": 120,
+        "duration_source": "catalog_v2",
         "buffer_before_minutes": 0,
         "buffer_after_minutes": 21,
     }
@@ -117,7 +140,14 @@ def test_create_booking_accepts_exact_time_and_returns_verified_readback(monkeyp
     ]
     body = calls[2]["json_body"]
     assert body["starts_at"] == "2026-07-18T13:10:00+02:00"
-    assert set(body) == {"client_public_name", "service_name", "starts_at"}
+    assert body == {
+        "client_public_name": "Анна",
+        "service_name": "Маникюр",
+        "addon_names": [],
+        "starts_at": "2026-07-18T13:10:00+02:00",
+        "price_override_amount": None,
+        "duration_override_minutes": None,
+    }
     assert "idempotency_key" not in json.dumps(result)
     assert "id" not in result["result"]["booking"]
 
