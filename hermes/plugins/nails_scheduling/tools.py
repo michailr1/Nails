@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from .booking_catalog import validate_catalog_booking_args
+from .catalog_batch import replace_catalog_request_body, validate_replace_catalog_args
 from .client_cards import (
     create_client_card,
     update_client_card,
@@ -125,6 +126,8 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             values = validate_catalog_booking_args(args)
         elif action == "finalize_booking":
             values = validate_finalize_booking_args(args)
+        elif action == "replace_catalog":
+            values = validate_replace_catalog_args(args)
         elif action in {"create_service", "update_service"}:
             action, values = validate_service_catalog_args(
                 _with_service_create_defaults(args)
@@ -165,6 +168,16 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 path="/api/v1/scheduling/availability/preview",
                 params=None,
                 json_body={"days": values["days"]},
+            )
+        elif action == "replace_catalog":
+            response = _call_backend(
+                action=action,
+                telegram_user_id=telegram_user_id,
+                api_key=api_key,
+                method="PUT",
+                path="/api/v1/scheduling/services/catalog",
+                params=None,
+                json_body=replace_catalog_request_body(values),
             )
         elif action == "create_booking":
             response = _verified_create_booking(
