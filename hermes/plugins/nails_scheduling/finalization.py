@@ -1,13 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfoNotFoundError
 
 from .operations import _local_datetime, _matching_existing_booking
 from .transport import _call_backend, _error
-from .validation import ToolInputError, _confirmed, _day, _keys, _price, _text, _time
+from .validation import (
+    ToolInputError,
+    _confirmed,
+    _day,
+    _keys,
+    _price,
+    _text,
+    _time,
+)
 
 
 def validate_finalize_booking_args(args: dict[str, Any]) -> dict[str, Any]:
@@ -74,7 +81,10 @@ def _decimal(value: Any) -> Decimal | None:
         raise ValueError("invalid booking price") from exc
 
 
-def _same_finalization(write_booking: dict[str, Any], read_booking: dict[str, Any]) -> bool:
+def _same_finalization(
+    write_booking: dict[str, Any],
+    read_booking: dict[str, Any],
+) -> bool:
     scalar_fields = (
         "status",
         "price_source",
