@@ -70,6 +70,9 @@ def _verified_create_booking(
             client_public_name=values["client_public_name"],
             service_name=values["service_name"],
             starts_at=starts_at,
+            addon_names=values["addon_names"],
+            price_override_amount=values["price_override_amount"],
+            duration_override_minutes=values["duration_override_minutes"],
         )
     except (KeyError, TypeError, ValueError):
         return _error(
@@ -87,7 +90,7 @@ def _verified_create_booking(
         "ok": True,
         "action": "create_booking",
         "result": {
-            "booking": verified_booking,
+            "booking": write_booking,
             "created": result["created"],
             "verified": True,
         },
