@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FinalizationDigestOwnersResponse(BaseModel):
@@ -16,14 +16,6 @@ class FinalizationDigestClaimRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     local_day: date
-    now: datetime
-
-    @field_validator("now")
-    @classmethod
-    def require_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("now must include a timezone offset")
-        return value
 
 
 class FinalizationDigestBooking(BaseModel):
