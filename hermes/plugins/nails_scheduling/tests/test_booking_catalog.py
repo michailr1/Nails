@@ -51,14 +51,15 @@ def test_addon_catalog_validator_rejects_buffers():
         raise AssertionError("addon buffers must be rejected")
 
 
-def test_presenter_preserves_catalog_semantics():
+def test_presenter_preserves_catalog_semantics_without_technical_ids():
+    service_id = "00000000-0000-0000-0000-000000000001"
     booking = {
         "client_public_name": "Анна",
         "service_name": "Маникюр",
         "addon_names": ["Снятие"],
         "catalog_items": [
             {
-                "service_id": "00000000-0000-0000-0000-000000000001",
+                "service_id": service_id,
                 "kind": "base",
                 "public_name": "Маникюр",
                 "price_type": "range",
@@ -99,3 +100,5 @@ def test_presenter_preserves_catalog_semantics():
     assert sanitized["booking"]["price_type"] == "range"
     assert sanitized["booking"]["price_amount"] is None
     assert sanitized["booking"]["duration_source"] == "catalog_v2"
+    assert "service_id" not in sanitized["booking"]["catalog_items"][0]
+    assert service_id not in str(sanitized)
