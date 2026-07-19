@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from nails_scheduling import finalization, tools
 from nails_scheduling.schemas import NAILS_SCHEDULING
@@ -100,6 +101,22 @@ def test_schema_exposes_finalize_booking():
     assert properties["outcome"]["enum"] == ["completed", "no_show"]
 
 
+def test_skill_requires_guarded_finalization_and_unknown_price_safety():
+    skill = (
+        Path(__file__).resolve().parents[3]
+        / "skills"
+        / "nails-scheduling"
+        / "SKILL.md"
+    ).read_text(encoding="utf-8").casefold()
+    for phrase in (
+        "finalize_booking",
+        "booking_not_finished",
+        "не превращай `on_request`",
+        "поздняя фраза",
+    ):
+        assert phrase in skill
+
+
 def test_finalize_is_prechecked_written_and_verified(monkeypatch):
     _set_context(monkeypatch)
     calls = []
@@ -134,7 +151,10 @@ def test_finalize_is_prechecked_written_and_verified(monkeypatch):
     assert result["result"]["booking"]["status"] == "completed"
     assert result["result"]["booking"]["price_amount"] == "2700.00"
     assert "id" not in result["result"]["booking"]
-    assert all("service_id" not in item for item in result["result"]["booking"]["catalog_items"])
+    assert all(
+        "service_id" not in item
+        for item in result["result"]["booking"]["catalog_items"]
+    )
     assert [call["path"] for call in calls] == [
         "/api/v1/scheduling/day",
         "/api/v1/scheduling/bookings/finalize",
