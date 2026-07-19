@@ -27,6 +27,12 @@ from .verified_operations import (
 logger = logging.getLogger(__name__)
 _API_KEY_ENV = "NAILS_INTERNAL_API_KEY"
 _VERIFIED_ACTIONS = {"create_booking", "reschedule_booking", "cancel_booking"}
+_SERVICE_CREATE_DEFAULTS = {
+    "currency": "RUB",
+    "buffer_before_minutes": 0,
+    "buffer_after_minutes": 0,
+    "is_active": True,
+}
 
 
 class TrustedContextError(RuntimeError):
@@ -64,6 +70,12 @@ def _preview_values(args: dict[str, Any]) -> dict[str, Any]:
     if set(args) != {"action", "days"}:
         raise ToolInputError("invalid tool arguments")
     return {"days": _availability_days(args.get("days"))}
+
+
+def _with_service_create_defaults(args: dict[str, Any]) -> dict[str, Any]:
+    if args.get("action") != "create_service":
+        return args
+    return {**_SERVICE_CREATE_DEFAULTS, **args}
 
 
 def _sanitize_preview_result(result: Any) -> dict[str, Any]:
@@ -110,7 +122,7 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
         elif action == "preview_availability":
             values = _preview_values(args)
         else:
-            action, values = _validate_args(args)
+            action, values = _validate_args(_with_service_create_defaults(args))
 
         telegram_user_id = _trusted_telegram_user_id()
         api_key = _api_key()
