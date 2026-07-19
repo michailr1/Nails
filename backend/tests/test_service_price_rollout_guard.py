@@ -10,6 +10,13 @@ NON_FIXED_PAYLOADS = [
             "price_min_amount": "1900.00",
             "price_max_amount": "2300.00",
         },
+        {
+            "price_type": "range",
+            "price_amount": None,
+            "price_min_amount": "1900.00",
+            "price_max_amount": "2300.00",
+            "price_unit": None,
+        },
         id="range",
     ),
     pytest.param(
@@ -18,22 +25,37 @@ NON_FIXED_PAYLOADS = [
             "price_amount": "100.00",
             "price_unit": "1 ноготь",
         },
+        {
+            "price_type": "per_unit",
+            "price_amount": "100.00",
+            "price_min_amount": None,
+            "price_max_amount": None,
+            "price_unit": "1 ноготь",
+        },
         id="per-unit",
     ),
     pytest.param(
         {"price_type": "on_request"},
+        {
+            "price_type": "on_request",
+            "price_amount": None,
+            "price_min_amount": None,
+            "price_max_amount": None,
+            "price_unit": None,
+        },
         id="on-request",
     ),
 ]
 
 
 @pytest.mark.usefixtures("clean_database")
-@pytest.mark.parametrize("price_fields", NON_FIXED_PAYLOADS)
-def test_non_fixed_create_leaves_no_legacy_visible_service(
+@pytest.mark.parametrize(("price_fields", "expected"), NON_FIXED_PAYLOADS)
+def test_non_fixed_create_is_visible_with_full_semantics(
     client: TestClient,
     create_user: Callable,
     auth_headers: Callable,
     price_fields: dict[str, object],
+    expected: dict[str, object],
 ) -> None:
     create_user()
 
@@ -41,50 +63,35 @@ def test_non_fixed_create_leaves_no_legacy_visible_service(
         "/api/v1/scheduling/services",
         headers=auth_headers(request_id=f"create-{price_fields['price_type']}"),
         json={
-            "public_name": "Небезопасная цена",
+            "public_name": "Гибкая цена",
             "duration_minutes": 120,
             **price_fields,
         },
     )
-    assert response.status_code == 409, response.text
-    assert response.json()["detail"]["code"] == "price_type_rollout_not_enabled"
+    assert response.status_code == 200, response.text
 
-    catalog = client.get(
-        "/api/v1/scheduling/services",
+    service = response.json()["service"]
+    for field, value in expected.items():
+        assert service[field] == value
+
+    lookup = client.get(
+        "/api/v1/scheduling/services/exact",
         headers=auth_headers(),
+        params={"public_name": "Гибкая цена"},
     )
-    assert catalog.status_code == 200, catalog.text
-    assert catalog.json()["services"] == []
-
-    slots = client.get(
-        "/api/v1/scheduling/slots",
-        headers=auth_headers(),
-        params={"day": "2026-07-20", "service_name": "Небезопасная цена"},
-    )
-    assert slots.status_code == 404, slots.text
-    assert slots.json()["detail"]["code"] == "service_not_found"
-
-    booking = client.post(
-        "/api/v1/scheduling/bookings",
-        headers=auth_headers(request_id=f"booking-{price_fields['price_type']}"),
-        json={
-            "client_public_name": "Анна",
-            "service_name": "Небезопасная цена",
-            "starts_at": "2026-07-20T12:00:00+03:00",
-            "idempotency_key": f"booking-{price_fields['price_type']}",
-        },
-    )
-    assert booking.status_code == 404, booking.text
-    assert booking.json()["detail"]["code"] == "service_not_found"
+    assert lookup.status_code == 200, lookup.text
+    for field, value in expected.items():
+        assert lookup.json()["service"][field] == value
 
 
 @pytest.mark.usefixtures("clean_database")
-@pytest.mark.parametrize("price_fields", NON_FIXED_PAYLOADS)
-def test_non_fixed_replace_cannot_change_legacy_fixed_price(
+@pytest.mark.parametrize(("price_fields", "expected"), NON_FIXED_PAYLOADS)
+def test_non_fixed_replace_changes_existing_fixed_service(
     client: TestClient,
     create_user: Callable,
     auth_headers: Callable,
     price_fields: dict[str, object],
+    expected: dict[str, object],
 ) -> None:
     create_user()
 
@@ -112,16 +119,10 @@ def test_non_fixed_replace_cannot_change_legacy_fixed_price(
             **price_fields,
         },
     )
-    assert replaced.status_code == 409, replaced.text
-    assert replaced.json()["detail"]["code"] == "price_type_rollout_not_enabled"
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["changed"] is True
+    assert "price_type" in replaced.json()["changed_fields"]
 
-    lookup = client.get(
-        "/api/v1/scheduling/services/exact",
-        headers=auth_headers(),
-        params={"public_name": "Маникюр"},
-    )
-    assert lookup.status_code == 200, lookup.text
-    service = lookup.json()["service"]
-    assert service["kind"] == "base"
-    assert service["price_type"] == "fixed"
-    assert service["price_amount"] == "2700.00"
+    service = replaced.json()["service"]
+    for field, value in expected.items():
+        assert service[field] == value
