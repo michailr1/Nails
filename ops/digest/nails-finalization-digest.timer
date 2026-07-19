@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Nails finalization digest daily
+
+[Timer]
+OnCalendar=*-*-* 21:30:00 Europe/Moscow
+Persistent=true
+AccuracySec=1m
+Unit=nails-finalization-digest.service
+
+[Install]
+WantedBy=timers.target
