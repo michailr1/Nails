@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +20,34 @@ from app.services.scheduling_common import (
 )
 from app.services.scheduling_lookup import get_active_client, get_active_service
 from app.services.scheduling_presenters import booking_summary
+
+
+def _catalog_item_snapshot(service: Service) -> dict[str, Any]:
+    return {
+        "service_id": str(service.id),
+        "kind": service.kind,
+        "public_name": service.public_name,
+        "price_type": service.price_type,
+        "price_amount": str(service.price_amount) if service.price_type in {"fixed", "per_unit"} else None,
+        "price_min_amount": (
+            str(service.price_min_amount) if service.price_min_amount is not None else None
+        ),
+        "price_max_amount": (
+            str(service.price_max_amount) if service.price_max_amount is not None else None
+        ),
+        "price_unit": service.price_unit,
+        "currency": service.currency,
+        "duration_minutes": service.duration_minutes if service.kind == "base" else None,
+        "extra_minutes": service.extra_minutes,
+    }
+
+
+def _catalog_price_bounds(service: Service) -> tuple[Decimal | None, Decimal | None]:
+    if service.price_type in {"fixed", "per_unit"}:
+        return service.price_amount, service.price_amount
+    if service.price_type == "range":
+        return service.price_min_amount, service.price_max_amount
+    return None, None
 
 
 def _find_idempotent_booking(
@@ -69,6 +99,8 @@ def create_booking(
     ensure_reservation_available(session, identity.user_id, reservation)
 
     now = datetime.now(UTC)
+    price_min, price_max = _catalog_price_bounds(service)
+    price_confirmed_at = now if service.price_type == "fixed" else None
     booking = Booking(
         owner_user_id=identity.user_id,
         client_id=client.id,
@@ -85,7 +117,13 @@ def create_booking(
         price_amount=service.price_amount,
         currency=service.currency,
         price_source="service_snapshot",
-        price_confirmed_at=now,
+        price_confirmed_at=price_confirmed_at,
+        catalog_items_snapshot=[_catalog_item_snapshot(service)],
+        catalog_price_type_snapshot=service.price_type,
+        catalog_price_min_snapshot=price_min,
+        catalog_price_max_snapshot=price_max,
+        catalog_price_unit_snapshot=service.price_unit,
+        duration_source="catalog_snapshot",
         idempotency_key=body.idempotency_key,
     )
     session.add(booking)
@@ -100,6 +138,9 @@ def create_booking(
             request_id=identity.request_id,
             safe_changes={
                 "status": BookingStatus.scheduled.value,
+                "catalog_item_count": 1,
+                "catalog_price_type": service.price_type,
+                "duration_source": booking.duration_source,
                 "duration_minutes": reservation.duration_minutes,
                 "buffer_before_minutes": reservation.buffer_before_minutes,
                 "buffer_after_minutes": reservation.buffer_after_minutes,
