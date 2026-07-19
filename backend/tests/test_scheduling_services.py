@@ -16,6 +16,17 @@ SERVICE_PAYLOAD = {
     "is_active": True,
 }
 
+CATALOG_DEFAULTS = {
+    "kind": "base",
+    "price_type": "fixed",
+    "price_min_amount": None,
+    "price_max_amount": None,
+    "price_unit": None,
+    "category": None,
+    "sort_order": 0,
+    "extra_minutes": 0,
+}
+
 
 @pytest.mark.usefixtures("clean_database")
 def test_services_can_be_created_and_repeated_safely_after_onboarding(
@@ -34,6 +45,7 @@ def test_services_can_be_created_and_repeated_safely_after_onboarding(
     assert created.json()["created"] is True
     assert created.json()["service"] == {
         **SERVICE_PAYLOAD,
+        **CATALOG_DEFAULTS,
         "price_amount": "2500.00",
         "id": created.json()["service"]["id"],
     }
