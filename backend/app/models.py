@@ -61,6 +61,18 @@ class OnboardingSection(StrEnum):
     bookings = "bookings"
 
 
+class ServiceKind(StrEnum):
+    base = "base"
+    addon = "addon"
+
+
+class ServicePriceType(StrEnum):
+    fixed = "fixed"
+    range = "range"
+    per_unit = "per_unit"
+    on_request = "on_request"
+
+
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -95,10 +107,37 @@ class Service(TimestampMixin, Base):
             "normalized_public_name",
             unique=True,
         ),
+        Index(
+            "ix_services_owner_catalog_order",
+            "owner_user_id",
+            "category",
+            "sort_order",
+            "public_name",
+        ),
         CheckConstraint("price_amount >= 0", name="price_non_negative"),
         CheckConstraint("duration_minutes > 0", name="duration_positive"),
         CheckConstraint("buffer_before_minutes >= 0", name="buffer_before_non_negative"),
         CheckConstraint("buffer_after_minutes >= 0", name="buffer_after_non_negative"),
+        CheckConstraint("kind IN ('base', 'addon')", name="service_kind_valid"),
+        CheckConstraint(
+            "price_type IN ('fixed', 'range', 'per_unit', 'on_request')",
+            name="service_price_type_valid",
+        ),
+        CheckConstraint("sort_order >= 0", name="service_sort_order_non_negative"),
+        CheckConstraint("extra_minutes >= 0", name="service_extra_minutes_non_negative"),
+        CheckConstraint(
+            "price_min_amount IS NULL OR price_min_amount >= 0",
+            name="service_price_min_non_negative",
+        ),
+        CheckConstraint(
+            "price_max_amount IS NULL OR price_max_amount >= 0",
+            name="service_price_max_non_negative",
+        ),
+        CheckConstraint(
+            "price_min_amount IS NULL OR price_max_amount IS NULL "
+            "OR price_max_amount >= price_min_amount",
+            name="service_price_range_ordered",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -114,6 +153,16 @@ class Service(TimestampMixin, Base):
     buffer_before_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     buffer_after_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default=ServiceKind.base)
+    price_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=ServicePriceType.fixed
+    )
+    price_min_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    price_max_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    price_unit: Mapped[str | None] = mapped_column(String(80))
+    category: Mapped[str | None] = mapped_column(String(160))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    extra_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class Client(TimestampMixin, Base):
