@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -144,6 +146,16 @@ class BookingRescheduleRequest(BookingSelector):
 
 class BookingCancelRequest(BookingSelector):
     pass
+
+
+class BookingFinalizeRequest(BookingSelector):
+    outcome: Literal["completed", "no_show"]
+    price_amount: Decimal | None = Field(
+        default=None,
+        ge=0,
+        max_digits=12,
+        decimal_places=2,
+    )
 
 
 class BookingMutationResponse(BaseModel):
