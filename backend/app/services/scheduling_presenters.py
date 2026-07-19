@@ -80,6 +80,19 @@ def _catalog_items(booking: Booking, service: Service) -> list[CatalogItemSummar
     return [CatalogItemSummary.model_validate(item) for item in raw_items]
 
 
+def _presented_price(booking: Booking):
+    if booking.price_source in {"final_no_show", "final_price_unknown"}:
+        return None
+    if booking.price_source == "final_range_lower_bound_unconfirmed":
+        return booking.price_amount
+    if (
+        booking.price_confirmed_at is not None
+        or booking.price_source in {"service_snapshot", "catalog_fixed", "manual_override"}
+    ):
+        return booking.price_amount
+    return None
+
+
 def booking_summary(
     booking: Booking,
     client: Client,
@@ -87,12 +100,6 @@ def booking_summary(
     timezone: ZoneInfo,
 ) -> CatalogBookingSummary:
     items = _catalog_items(booking, service)
-    confirmed_price = (
-        booking.price_amount
-        if booking.price_confirmed_at is not None
-        or booking.price_source in {"service_snapshot", "catalog_fixed", "manual_override"}
-        else None
-    )
     return CatalogBookingSummary(
         id=booking.id,
         client_public_name=client.public_name,
@@ -104,7 +111,7 @@ def booking_summary(
         reserved_starts_at=booking.reserved_starts_at.astimezone(timezone),
         reserved_ends_at=booking.reserved_ends_at.astimezone(timezone),
         status=booking.status,
-        price_amount=confirmed_price,
+        price_amount=_presented_price(booking),
         currency=booking.currency,
         price_type=booking.catalog_price_type_snapshot,
         price_min_amount=booking.catalog_price_min_snapshot,
