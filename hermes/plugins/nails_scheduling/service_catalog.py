@@ -139,6 +139,18 @@ def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, 
 
     duration = args.get("duration_minutes")
     extra_minutes = _integer(args.get("extra_minutes", 0), "extra_minutes", 0, 1440)
+    buffer_before = _integer(
+        args.get("buffer_before_minutes", 0),
+        "buffer_before_minutes",
+        0,
+        1440,
+    )
+    buffer_after = _integer(
+        args.get("buffer_after_minutes", 0),
+        "buffer_after_minutes",
+        0,
+        1440,
+    )
     if kind == "base":
         duration = _integer(duration, "duration_minutes", 1, 1440)
         if extra_minutes != 0:
@@ -146,6 +158,8 @@ def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, 
     else:
         if duration is not None:
             raise ToolInputError("addon cannot have duration_minutes")
+        if buffer_before != 0 or buffer_after != 0:
+            raise ToolInputError("addon cannot have buffers")
         duration = None
 
     values = {
@@ -158,18 +172,8 @@ def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, 
         "price_amount": price_amount,
         "currency": _currency(args.get("currency", "RUB")),
         "duration_minutes": duration,
-        "buffer_before_minutes": _integer(
-            args.get("buffer_before_minutes", 0),
-            "buffer_before_minutes",
-            0,
-            1440,
-        ),
-        "buffer_after_minutes": _integer(
-            args.get("buffer_after_minutes", 0),
-            "buffer_after_minutes",
-            0,
-            1440,
-        ),
+        "buffer_before_minutes": buffer_before,
+        "buffer_after_minutes": buffer_after,
         "is_active": _boolean(args.get("is_active", True), "is_active"),
         "kind": kind,
         "price_type": price_type,
