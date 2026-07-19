@@ -109,28 +109,28 @@ def claim_finalization_digest(
 
     claim_id = uuid.uuid4()
     claimed_at = datetime.now(UTC)
-    booking_ids = [booking.id for booking, _, _ in rows]
-    session.execute(
-        text(
-            """
-            UPDATE bookings
-            SET finalization_digest_claim_id = :claim_id,
-                finalization_digest_claimed_at = :claimed_at,
-                finalization_digest_local_day = :local_day
-            WHERE owner_user_id = :owner_user_id
-              AND id = ANY(CAST(:booking_ids AS uuid[]))
-              AND finalization_digest_claim_id IS NULL
-              AND finalization_digest_sent_at IS NULL
-            """
-        ),
-        {
-            "claim_id": claim_id,
-            "claimed_at": claimed_at,
-            "local_day": body.local_day,
-            "owner_user_id": identity.user_id,
-            "booking_ids": [str(value) for value in booking_ids],
-        },
-    )
+    for booking, _, _ in rows:
+        session.execute(
+            text(
+                """
+                UPDATE bookings
+                SET finalization_digest_claim_id = :claim_id,
+                    finalization_digest_claimed_at = :claimed_at,
+                    finalization_digest_local_day = :local_day
+                WHERE owner_user_id = :owner_user_id
+                  AND id = :booking_id
+                  AND finalization_digest_claim_id IS NULL
+                  AND finalization_digest_sent_at IS NULL
+                """
+            ),
+            {
+                "claim_id": claim_id,
+                "claimed_at": claimed_at,
+                "local_day": body.local_day,
+                "owner_user_id": identity.user_id,
+                "booking_id": booking.id,
+            },
+        )
     session.add(
         AuditEvent(
             owner_user_id=identity.user_id,
@@ -150,7 +150,10 @@ def claim_finalization_digest(
         claimed=True,
         claim_id=claim_id,
         local_day=body.local_day,
-        bookings=[_digest_booking(booking, client, service) for booking, client, service in rows],
+        bookings=[
+            _digest_booking(booking, client, service)
+            for booking, client, service in rows
+        ],
     )
 
 
