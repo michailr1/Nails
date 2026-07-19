@@ -39,6 +39,40 @@ _AVAILABILITY_DAY = {
     "required": ["day", "state", "intervals"],
 }
 
+_CATALOG_SERVICE = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "service_name": {"type": "string"},
+        "service_description": {"type": ["string", "null"]},
+        "kind": {"type": "string", "enum": ["base", "addon"]},
+        "price_type": {
+            "type": "string",
+            "enum": ["fixed", "range", "per_unit", "on_request"],
+        },
+        "price_amount": {"type": ["number", "null"], "minimum": 0},
+        "price_min_amount": {"type": ["number", "null"], "minimum": 0},
+        "price_max_amount": {"type": ["number", "null"], "minimum": 0},
+        "price_unit": {"type": ["string", "null"]},
+        "category": {"type": ["string", "null"]},
+        "sort_order": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "duration_minutes": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 1440,
+            "description": "Suggested duration for a base service.",
+        },
+        "extra_minutes": {"type": "integer", "minimum": 0, "maximum": 1440},
+    },
+    "required": [
+        "service_name",
+        "kind",
+        "price_type",
+        "duration_minutes",
+        "extra_minutes",
+    ],
+}
+
 NAILS_SCHEDULING = {
     "name": "nails_scheduling",
     "description": (
@@ -55,13 +89,15 @@ NAILS_SCHEDULING = {
         "Create a booking from exactly one base service and zero or more addon_names. Preserve "
         "range, per-unit and on-request pricing as estimates unless the master explicitly confirms "
         "price_override_amount. Use duration_override_minutes only when the master explicitly "
-        "changes the composed duration. Create, reschedule, cancel, or finalize a booking only "
-        "after showing a complete human-readable current-to-future summary and receiving explicit "
-        "confirmation. finalize_booking records completed or no_show; "
-        "omit price_amount to preserve the booking estimate, or provide it only when the master "
-        "states the final total. Rescheduling must use an exact backend free slot. Cancellation "
-        "is soft and preserves history. Do not promise an operation before a successful tool "
-        "result. Send at most one brief progress message before the final result."
+        "changes the composed duration. For photo price import, use vision first, show one complete "
+        "editable table, label durations as suggestions, and call replace_catalog only after one "
+        "explicit confirmation of the whole table. Create, reschedule, cancel, or finalize a "
+        "booking only after showing a complete human-readable current-to-future summary and "
+        "receiving explicit confirmation. finalize_booking records completed or no_show; omit "
+        "price_amount to preserve the booking estimate, or provide it only when the master states "
+        "the final total. Rescheduling must use an exact backend free slot. Cancellation is soft "
+        "and preserves history. Do not promise an operation before a successful tool result. Send "
+        "at most one brief progress message before the final result."
     ),
     "parameters": {
         "type": "object",
@@ -75,6 +111,7 @@ NAILS_SCHEDULING = {
                     "find_service",
                     "create_service",
                     "update_service",
+                    "replace_catalog",
                     "day_view",
                     "free_slots",
                     "list_clients",
@@ -121,6 +158,13 @@ NAILS_SCHEDULING = {
                 "items": _AVAILABILITY_DAY,
                 "minItems": 1,
                 "maxItems": 31,
+            },
+            "services": {
+                "type": "array",
+                "items": _CATALOG_SERVICE,
+                "minItems": 1,
+                "maxItems": 200,
+                "description": "Complete desired active catalog for replace_catalog.",
             },
             "include_inactive": {"type": "boolean"},
             "current_service_name": {"type": "string"},
