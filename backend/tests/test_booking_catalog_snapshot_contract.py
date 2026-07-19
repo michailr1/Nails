@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from app.models import Booking, Service
@@ -5,7 +6,9 @@ from app.services.scheduling_bookings import _catalog_item_snapshot, _catalog_pr
 
 
 def test_fixed_service_snapshot_preserves_catalog_values() -> None:
+    service_id = uuid.uuid4()
     service = Service(
+        id=service_id,
         public_name="Маникюр",
         normalized_public_name="маникюр",
         public_description=None,
@@ -28,7 +31,7 @@ def test_fixed_service_snapshot_preserves_catalog_values() -> None:
     snapshot = _catalog_item_snapshot(service)
 
     assert snapshot == {
-        "service_id": "None",
+        "service_id": str(service_id),
         "kind": "base",
         "public_name": "Маникюр",
         "price_type": "fixed",
