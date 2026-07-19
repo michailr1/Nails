@@ -52,11 +52,14 @@ NAILS_SCHEDULING = {
         "be stored and later read back; private_alias is never a client-facing name. Update or "
         "rename an existing client card only after showing the exact fields to change and "
         "receiving explicit confirmation; omitted fields remain unchanged and null clears a field. "
-        "Create, reschedule, or cancel a booking only after showing a complete human-readable "
-        "current-to-future summary and receiving explicit confirmation. Rescheduling must use an "
-        "exact backend free slot. Cancellation is soft and preserves history. Do not promise an "
-        "operation before a successful tool result. Send at most one brief progress message before "
-        "the final result."
+        "Create a booking from exactly one base service and zero or more addon_names. Preserve "
+        "range, per-unit and on-request pricing as estimates unless the master explicitly confirms "
+        "price_override_amount. Use duration_override_minutes only when the master explicitly "
+        "changes the composed duration. Create, reschedule, or cancel a booking only after showing "
+        "a complete human-readable current-to-future summary and receiving explicit confirmation. "
+        "Rescheduling must use an exact backend free slot. Cancellation is soft and preserves "
+        "history. Do not promise an operation before a successful tool result. Send at most one "
+        "brief progress message before the final result."
     ),
     "parameters": {
         "type": "object",
@@ -120,7 +123,13 @@ NAILS_SCHEDULING = {
             "current_service_name": {"type": "string"},
             "service_name": {
                 "type": "string",
-                "description": "Public service name.",
+                "description": "Public base service name for booking actions.",
+            },
+            "addon_names": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 20,
+                "description": "Public addon service names included in the booking.",
             },
             "service_description": {"type": ["string", "null"]},
             "kind": {"type": "string", "enum": ["base", "addon"]},
@@ -132,6 +141,11 @@ NAILS_SCHEDULING = {
             "price_min_amount": {"type": ["number", "null"], "minimum": 0},
             "price_max_amount": {"type": ["number", "null"], "minimum": 0},
             "price_unit": {"type": ["string", "null"]},
+            "price_override_amount": {
+                "type": ["number", "null"],
+                "minimum": 0,
+                "description": "Confirmed final booking price override.",
+            },
             "category": {"type": ["string", "null"]},
             "sort_order": {"type": "integer", "minimum": 0, "maximum": 1000000},
             "extra_minutes": {"type": "integer", "minimum": 0, "maximum": 1440},
@@ -140,6 +154,12 @@ NAILS_SCHEDULING = {
                 "type": ["integer", "null"],
                 "minimum": 1,
                 "maximum": 1440,
+            },
+            "duration_override_minutes": {
+                "type": ["integer", "null"],
+                "minimum": 1,
+                "maximum": 1440,
+                "description": "Confirmed final booking duration override.",
             },
             "buffer_before_minutes": {
                 "type": "integer",
