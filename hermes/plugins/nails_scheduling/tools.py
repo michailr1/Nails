@@ -12,6 +12,7 @@ from .client_cards import (
     validate_client_card_update_args,
 )
 from .presenters import _sanitize_success
+from .service_catalog import service_catalog_request_spec, validate_service_catalog_args
 from .transport import _call_backend, _error
 from .validation import (
     ToolInputError,
@@ -121,6 +122,10 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
             values = {}
         elif action == "preview_availability":
             values = _preview_values(args)
+        elif action in {"create_service", "update_service"}:
+            action, values = validate_service_catalog_args(
+                _with_service_create_defaults(args)
+            )
         else:
             action, values = _validate_args(_with_service_create_defaults(args))
 
@@ -173,7 +178,13 @@ def nails_scheduling(args: dict[str, Any], **kwargs: Any) -> str:
                 api_key=api_key,
             )
         else:
-            method, path, params, json_body = _request_spec(action, values)
+            if action in {"create_service", "update_service"}:
+                method, path, params, json_body = service_catalog_request_spec(
+                    action,
+                    values,
+                )
+            else:
+                method, path, params, json_body = _request_spec(action, values)
             response = _call_backend(
                 action=action,
                 telegram_user_id=telegram_user_id,
