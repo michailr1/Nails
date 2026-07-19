@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.models import Client, ClientProfileStatus, Service
+from app.models import Client, ClientProfileStatus, Service, ServiceKind
 from app.schemas.scheduling import ServiceListResponse
 from app.schemas.scheduling_management import ClientListResponse, ClientLookupResponse
 from app.services.normalization import normalize_public_name
@@ -24,6 +24,7 @@ def get_active_service(
             Service.owner_user_id == owner_user_id,
             Service.normalized_public_name == normalize_public_name(public_name),
             Service.is_active.is_(True),
+            Service.kind == ServiceKind.base,
         )
     )
     if service is None:
