@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.scheduling_catalog_bookings import CatalogBookingSummary
 
@@ -156,6 +156,12 @@ class BookingFinalizeRequest(BookingSelector):
         max_digits=12,
         decimal_places=2,
     )
+
+    @model_validator(mode="after")
+    def reject_no_show_price(self) -> BookingFinalizeRequest:
+        if self.outcome == "no_show" and self.price_amount is not None:
+            raise ValueError("no_show cannot contain price_amount")
+        return self
 
 
 class BookingMutationResponse(BaseModel):
