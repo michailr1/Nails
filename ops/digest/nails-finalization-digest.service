@@ -1,0 +1,17 @@
+[Unit]
+Description=Nails finalization digest sender
+After=network-online.target nails-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/opt/nails/.env
+EnvironmentFile=-/root/.hermes/profiles/nails/.env
+ExecStart=/usr/local/lib/hermes-agent/venv/bin/python /opt/nails/digest/send.py
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=/opt/nails/digest /opt/nails/.env /root/.hermes/profiles/nails/.env
