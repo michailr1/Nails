@@ -11,7 +11,7 @@ from app.auth import RequestIdentity
 from app.db import get_db_session
 from app.schemas.web_read import WebCalendarResponse, WebClientCard, WebClientListResponse
 from app.services.web_auth import require_web_session_identity
-from app.services.web_export import export_calendar, export_clients
+from app.services.web_export import export_all_calendar, export_calendar, export_clients
 from app.services.web_read import list_calendar, list_clients
 
 router = APIRouter(prefix="/web/api", tags=["web-read"])
@@ -97,6 +97,30 @@ def calendar_export(
             identity,
             date_from=date_from,
             date_to=date_to,
+            format_name=format_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": str(exc)},
+        ) from exc
+    return Response(
+        content=exported.content,
+        media_type=exported.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{exported.filename}"'},
+    )
+
+
+@router.post("/exports/calendar/all")
+def all_calendar_export(
+    session: SessionDependency,
+    identity: IdentityDependency,
+    format_name: Annotated[ExportFormat, Query(alias="format")] = "csv",
+) -> Response:
+    try:
+        exported = export_all_calendar(
+            session,
+            identity,
             format_name=format_name,
         )
     except ValueError as exc:
