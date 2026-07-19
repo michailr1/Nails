@@ -27,3 +27,4 @@ class CatalogReplaceResponse(BaseModel):
     updated_count: int = Field(ge=0)
     archived_count: int = Field(ge=0)
     services: list[ServiceSummary]
+    verified: bool
