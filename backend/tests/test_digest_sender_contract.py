@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import ModuleType
 from zoneinfo import ZoneInfo
@@ -52,12 +52,16 @@ def test_message_uses_public_fields_and_never_turns_unknown_price_into_zero():
             ),
         ],
         ZoneInfo("Europe/Moscow"),
+        date(2026, 7, 19),
     )
 
+    assert "Итоги дня — 19.07.2026" in message
     assert "Анна" in message
     assert "Маникюр + Снятие" in message
     assert "2700 ₽" in message
     assert "Итоговая сумма не указана" in message
+    assert "1 — 1700" in message
+    assert "общую подтверждённую сумму" in message
     assert "\nОриентир: 0 ₽" not in message
     assert "claim_id" not in message
     assert "booking_id" not in message
@@ -75,6 +79,7 @@ def test_sender_keeps_bot_credential_outside_backend_requests(monkeypatch):
         return {
             "claimed": True,
             "claim_id": "11111111-1111-4111-8111-111111111111",
+            "local_day": "2026-07-19",
             "bookings": [_booking()],
         }
 
@@ -111,6 +116,7 @@ def test_sender_keeps_bot_credential_outside_backend_requests(monkeypatch):
     assert "bot-secret" not in repr(backend_calls)
     assert telegram_calls[0][0].endswith("/botbot-secret/sendMessage")
     assert telegram_calls[0][1]["chat_id"] == 700000001
+    assert "19.07.2026" in telegram_calls[0][1]["text"]
     assert ack_calls == [
         (
             "internal-key",
@@ -131,6 +137,7 @@ def test_known_telegram_failure_releases_claim(monkeypatch):
         lambda *args, **kwargs: {
             "claimed": True,
             "claim_id": "11111111-1111-4111-8111-111111111111",
+            "local_day": "2026-07-19",
             "bookings": [_booking()],
         },
     )
