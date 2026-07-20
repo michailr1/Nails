@@ -35,7 +35,9 @@ def test_web_assets_are_served(client, clean_database):
     assert "Не заполнено" in script.text
     assert 'TELEGRAM_BOT_USERNAME = "smartnails_bot"' in login_enhancements.text
     assert "Отправить код Нэйли" in login_enhancements.text
-    assert "Нэйли, подтверди вход:" in login_enhancements.text
+    assert "Нэйли, подтверждаю вход:" in login_enhancements.text
+    assert "это сразу подтвердит вход" in login_enhancements.text
+    assert "Вам останется только отправить сообщение" in login_enhancements.text
     assert "https://t.me/${TELEGRAM_BOT_USERNAME}?text=" in login_enhancements.text
     assert '/^\\d{6}$/' in login_enhancements.text
     assert ".mobile-logout" in stylesheet.text
