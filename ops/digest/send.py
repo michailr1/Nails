@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -108,8 +108,12 @@ def _price_text(item: dict[str, Any]) -> str:
     return "Итоговая сумма не указана"
 
 
-def _message(bookings: list[dict[str, Any]], timezone: ZoneInfo) -> str:
-    lines = ["🌙 Итоги дня", ""]
+def _message(
+    bookings: list[dict[str, Any]],
+    timezone: ZoneInfo,
+    local_day: date,
+) -> str:
+    lines = [f"🌙 Итоги дня — {local_day:%d.%m.%Y}", ""]
     for index, item in enumerate(bookings, start=1):
         starts_at = datetime.fromisoformat(str(item["starts_at"])).astimezone(timezone)
         ends_at = datetime.fromisoformat(str(item["ends_at"])).astimezone(timezone)
@@ -127,10 +131,10 @@ def _message(bookings: list[dict[str, Any]], timezone: ZoneInfo) -> str:
         )
     lines.extend(
         (
-            "Напишите, что получилось по каждому визиту: например, "
-            "«у Анны 2800» или «Лена не пришла».",
-            "Если всё совпало с ориентиром, так и напишите — Нэйли покажет сводку "
-            "и попросит подтверждение перед сохранением.",
+            "Ответьте по номеру или имени: «1 — 1700», «у Марины 1700», "
+            "«2 — не пришла».",
+            "Если всё совпало: «всё по ориентиру». Нэйли покажет сводку и общую "
+            "подтверждённую сумму, затем попросит одно подтверждение перед сохранением.",
         )
     )
     return "\n".join(lines)[:_MAX_MESSAGE_LENGTH]
@@ -171,15 +175,25 @@ def _send_owner_digest(
         return False
     claim_id = claim.get("claim_id")
     bookings = claim.get("bookings")
-    if not isinstance(claim_id, str) or not isinstance(bookings, list) or not bookings:
+    claimed_local_day = claim.get("local_day")
+    if (
+        not isinstance(claim_id, str)
+        or not isinstance(bookings, list)
+        or not bookings
+        or not isinstance(claimed_local_day, str)
+    ):
         raise ValueError("backend returned an invalid digest claim")
+    try:
+        local_day = date.fromisoformat(claimed_local_day)
+    except ValueError as exc:
+        raise ValueError("backend returned an invalid digest local day") from exc
 
     try:
         response = client.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
             json={
                 "chat_id": telegram_user_id,
-                "text": _message(bookings, now.tzinfo or _timezone()),
+                "text": _message(bookings, now.tzinfo or _timezone(), local_day),
                 "disable_web_page_preview": True,
             },
         )
