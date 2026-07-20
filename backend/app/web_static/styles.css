@@ -48,7 +48,16 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 
 .verification { margin: 24px 0; text-align: center; }
 .verification-number { margin: 8px 0; font-size: clamp(2.4rem, 13vw, 4rem); line-height: 1; letter-spacing: .14em; font-variant-numeric: tabular-nums; font-weight: 680; color: var(--primary-dark); }
-.telegram-code-button { margin: 20px 0 16px; }
+.telegram-code-button {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  margin: 22px 0 18px;
+  text-align: center;
+  text-decoration: none;
+  line-height: 1.2;
+}
 .status-line { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 26px; color: var(--muted); }
 .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
