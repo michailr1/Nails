@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -106,6 +106,10 @@ def claim_finalization_digest(
             bookings=[],
         )
 
+    timezone = app_timezone()
+    local_midnight = datetime.combine(body.local_day, time.min, tzinfo=timezone)
+    day_start = local_midnight.astimezone(UTC)
+    next_day_start = (local_midnight + timedelta(days=1)).astimezone(UTC)
     cutoff = datetime.now(UTC)
     rows = session.execute(
         select(Booking, Client, Service)
@@ -114,6 +118,8 @@ def claim_finalization_digest(
         .where(
             Booking.owner_user_id == identity.user_id,
             Booking.status == BookingStatus.scheduled,
+            Booking.starts_at >= day_start,
+            Booking.starts_at < next_day_start,
             Booking.ends_at <= cutoff,
             text("finalization_digest_claim_id IS NULL"),
             text("finalization_digest_sent_at IS NULL"),
