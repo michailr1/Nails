@@ -5,12 +5,13 @@
 Обязательные нормативные документы:
 
 - [`docs/context/current.md`](docs/context/current.md) — компактный актуальный handoff: production SHA, текущая задача, обнаруженные проблемы, принятые решения и точка продолжения;
+- [`docs/product/product-principles.md`](docs/product/product-principles.md) — обязательная продуктовая философия: Нэйли как личная помощница мастера, язык мастера, «Мой прайс», прогрессивное раскрытие сложности и проектирование от ментальной модели мастера;
 - [`docs/operations/agent-responsibilities.md`](docs/operations/agent-responsibilities.md) — разделение ответственности основного и VPS-агента;
 - [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — проверенная production-топология, пути и правильный способ управления Hermes;
 - [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — точный контракт загрузки profile-local plugins, `plugins.enabled` и Telegram toolsets для установленной версии Hermes;
 - [`docs/operations/engineering-principles.md`](docs/operations/engineering-principles.md) — обязательные инженерные принципы: соразмерность масштабу проекта, устранение класса ошибки вместо нового защитного слоя, правило вычитания, один постоянный deploy-скрипт (ADR-003), rollback как deploy предыдущего SHA.
 
-Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные operational-документы. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации или release-flow по памяти предыдущего чата.
+Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные operational- и product-документы. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации, release-flow или пользовательскую терминологию по памяти предыдущего чата.
 
 Если `docs/context/current.md` противоречит свежему GitHub, production preflight, коду `ops/deploy/deploy.sh` или более узкому deployment report, основной агент обязан остановиться, установить фактическое состояние и обновить нормативные документы через branch → PR → CI.
 
@@ -106,14 +107,15 @@ NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>
 ## Обязательный порядок работы
 
 1. Основной агент читает этот файл и operational source of truth.
-2. Основной агент проверяет актуальный `main`, active issue и production state.
-3. Основной агент создаёт ветку и вносит изменения.
-4. Основной агент создаёт PR, проводит review и проверяет CI.
-5. При необходимости VPS-агент выполняет candidate deployment точного открытого PR-head SHA из `origin/pr/<number>`; checkout не меняется.
-6. Основной агент анализирует candidate report и выполняет GitHub merge.
-7. Для точного смерженного `main` SHA VPS-агент выполняет единый штатный main deploy через `ops/deploy/deploy.sh`; отдельного finalize нет.
-8. Основной агент проводит пользовательскую приёмку.
-9. Основной агент обновляет `docs/context/current.md` после значимого production milestone или изменения точки продолжения.
-10. Issue закрывает основной агент после выполнения всех критериев.
+2. Перед пользовательским проектированием основной агент читает `docs/product/product-principles.md` и сверяет терминологию и сценарий с ним.
+3. Основной агент проверяет актуальный `main`, active issue и production state.
+4. Основной агент создаёт ветку и вносит изменения.
+5. Основной агент создаёт PR, проводит review и проверяет CI.
+6. При необходимости VPS-агент выполняет candidate deployment точного открытого PR-head SHA из `origin/pr/<number>`; checkout не меняется.
+7. Основной агент анализирует candidate report и выполняет GitHub merge.
+8. Для точного смерженного `main` SHA VPS-агент выполняет единый штатный main deploy через `ops/deploy/deploy.sh`; отдельного finalize нет.
+9. Основной агент проводит пользовательскую приёмку.
+10. Основной агент обновляет `docs/context/current.md` после значимого production milestone или изменения точки продолжения.
+11. Issue закрывает основной агент после выполнения всех критериев.
 
 Любая инструкция, передающая VPS-агенту написание кода, исправление файлов, изменение GitHub или несуществующий release entrypoint, противоречит этому контракту и не должна выполняться.
