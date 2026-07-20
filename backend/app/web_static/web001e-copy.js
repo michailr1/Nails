@@ -1,25 +1,17 @@
 const TELEGRAM_BOT_USERNAME = "smartnails_bot";
+const LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge";
+let challengeRestoreInFlight = false;
+let challengePollInFlight = false;
+let appRenderWrapped = false;
 
 const replacements = new Map([
-  [
-    "Мы покажем число для сверки и отправим запрос в закрытый бот. В Telegram достаточно нажать «Подтвердить».",
-    "Мы покажем шестизначное число. Отправьте его Нэйли в закрытом Telegram-боте — это сразу подтвердит вход.",
-  ],
+  ["Мы покажем число для сверки и отправим запрос в закрытый бот. В Telegram достаточно нажать «Подтвердить».", "Мы покажем шестизначное число. Отправьте его Нэйли в закрытом Telegram-боте — это сразу подтвердит вход."],
   ["Войти через Telegram", "Получить число"],
-  [
-    "Код вводить на сайте или в Telegram не нужно.",
-    "Число вводится только в переписке с Нэйли. На сайте его вводить не нужно.",
-  ],
+  ["Код вводить на сайте или в Telegram не нужно.", "Число вводится только в переписке с Нэйли. На сайте его вводить не нужно."],
   ["Сверьте число", "Отправьте число Нэйли"],
   ["Подтвердите вход", "Подтвердите вход в Telegram"],
-  [
-    "В закрытом Telegram-боте появится запрос с тем же числом.",
-    "Нажмите кнопку под числом. Telegram откроется отдельно и подставит готовое подтверждение. После отправки вернитесь в эту вкладку — кабинет откроется автоматически.",
-  ],
-  [
-    "Ожидаем подтверждение в Telegram…",
-    "Ждём подтверждение в диалоге с Нэйли…",
-  ],
+  ["В закрытом Telegram-боте появится запрос с тем же числом.", "Нажмите кнопку под числом. Telegram откроется отдельно и подставит готовое подтверждение. После отправки вернитесь на сайт — кабинет откроется автоматически."],
+  ["Ожидаем подтверждение в Telegram…", "Ждём подтверждение в диалоге с Нэйли…"],
   ["Вход отклонён в Telegram.", "Вход отклонён в диалоге с Нэйли."],
 ]);
 
@@ -33,42 +25,163 @@ function applyWeb001eCopy(root = document) {
   }
 }
 
-function addTelegramCodeButton(root = document) {
-  const verificationNumber = root.querySelector?.(".verification-number")
-    || document.querySelector(".verification-number");
-  if (!verificationNumber || document.querySelector("#send-code-to-naily")) return;
+function releaseInitialSessionCheck() {
+  return window.__nailsWebAuthBootstrap?.releaseSessionCheck() === true;
+}
 
+function rememberCurrentChallenge() {
+  if (typeof state === "undefined" || !state.challenge) return;
+  const challengeId = state.challenge.challenge_id;
+  const verificationNumber = state.challenge.verification_number;
+  if (!challengeId || !/^\d{6}$/.test(String(verificationNumber))) return;
+  localStorage.setItem(LOGIN_CHALLENGE_STORAGE_KEY, JSON.stringify({
+    challenge_id: challengeId,
+    verification_number: String(verificationNumber),
+  }));
+}
+
+function forgetStoredChallenge() {
+  localStorage.removeItem(LOGIN_CHALLENGE_STORAGE_KEY);
+}
+
+function readStoredChallenge() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LOGIN_CHALLENGE_STORAGE_KEY) || "null");
+    if (!stored?.challenge_id || !/^\d{6}$/.test(String(stored.verification_number))) {
+      forgetStoredChallenge();
+      return null;
+    }
+    return stored;
+  } catch {
+    forgetStoredChallenge();
+    return null;
+  }
+}
+
+function addTelegramCodeButton(root = document) {
+  const verificationNumber = root.querySelector?.(".verification-number") || document.querySelector(".verification-number");
+  if (!verificationNumber || document.querySelector("#send-code-to-naily")) return;
   const code = verificationNumber.textContent.trim();
   if (!/^\d{6}$/.test(code)) return;
-
-  const message = `Нэйли, подтверждаю вход: ${code}`;
+  rememberCurrentChallenge();
   const link = document.createElement("a");
   link.id = "send-code-to-naily";
   link.className = "primary-button telegram-code-button";
-  link.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?text=${encodeURIComponent(message)}`;
+  link.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?text=${encodeURIComponent(`Нэйли, подтверждаю вход: ${code}`)}`;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
   link.textContent = "Отправить код Нэйли";
-
   verificationNumber.insertAdjacentElement("afterend", link);
 }
 
-function resumeChallengePolling() {
-  if (document.visibilityState !== "visible") return;
-  if (typeof state === "undefined" || !state.challenge) return;
+function bindChallengeReset(root = document) {
+  const button = root.querySelector?.("#cancel-login") || document.querySelector("#cancel-login");
+  if (!button || button.dataset.challengeResetBound === "true") return;
+  button.dataset.challengeResetBound = "true";
+  button.addEventListener("click", () => {
+    forgetStoredChallenge();
+    releaseInitialSessionCheck();
+  }, { once: true });
+}
+
+function wrapAuthenticatedRender() {
+  if (appRenderWrapped || typeof renderApp !== "function") return;
+  const originalRenderApp = renderApp;
+  renderApp = (...args) => {
+    releaseInitialSessionCheck();
+    return originalRenderApp(...args);
+  };
+  appRenderWrapped = true;
+}
+
+function finishAuthenticatedLogin() {
+  forgetStoredChallenge();
+  state.challenge = null;
   clearPoll();
-  pollChallenge();
+  const resumedInitialRender = releaseInitialSessionCheck();
+  if (!resumedInitialRender) renderApp();
+}
+
+async function pollPersistedChallenge() {
+  if (!state.challenge || challengePollInFlight) return;
+  challengePollInFlight = true;
+  try {
+    const current = await api(`/web/api/auth/challenges/${encodeURIComponent(state.challenge.challenge_id)}`);
+    if (current.status === "approved") {
+      renderConfirmation("Подтверждение получено. Открываем кабинет…");
+      const result = await api("/web/api/auth/challenges/consume", {
+        method: "POST",
+        body: JSON.stringify({ challenge_id: state.challenge.challenge_id }),
+      });
+      if (result.authenticated) return finishAuthenticatedLogin();
+    }
+    if (["expired", "locked", "denied", "consumed"].includes(current.status)) {
+      forgetStoredChallenge();
+      return renderLogin("Запрос больше не действует. Начните вход заново.");
+    }
+    state.pollTimer = window.setTimeout(pollChallenge, 1800);
+  } catch (error) {
+    if (error.status === 404) {
+      forgetStoredChallenge();
+      return renderLogin("Запрос больше не действует. Начните вход заново.");
+    }
+    state.pollTimer = window.setTimeout(pollChallenge, 3000);
+  } finally {
+    challengePollInFlight = false;
+  }
+}
+
+async function restoreStoredChallenge() {
+  if (document.visibilityState !== "visible" || challengeRestoreInFlight) return;
+  if (typeof state === "undefined" || typeof api !== "function") return;
+  const stored = readStoredChallenge();
+  if (!stored) {
+    releaseInitialSessionCheck();
+    if (state.challenge) {
+      clearPoll();
+      pollChallenge();
+    }
+    return;
+  }
+  state.challenge = stored;
+  renderConfirmation("Проверяем подтверждение в диалоге с Нэйли…");
+  challengeRestoreInFlight = true;
+  try {
+    const current = await api(`/web/api/auth/challenges/${encodeURIComponent(stored.challenge_id)}`);
+    if (["pending", "approved"].includes(current.status)) {
+      renderConfirmation(current.status === "approved" ? "Подтверждение получено. Открываем кабинет…" : "Ждём подтверждение в диалоге с Нэйли…");
+      clearPoll();
+      pollChallenge();
+      return;
+    }
+    forgetStoredChallenge();
+    state.challenge = null;
+    releaseInitialSessionCheck();
+  } catch (error) {
+    if (error.status === 404) {
+      forgetStoredChallenge();
+      state.challenge = null;
+      releaseInitialSessionCheck();
+    }
+  } finally {
+    challengeRestoreInFlight = false;
+  }
 }
 
 function applyLoginEnhancements(root = document) {
   applyWeb001eCopy(root);
   addTelegramCodeButton(root);
+  bindChallengeReset(root);
 }
 
+wrapAuthenticatedRender();
+pollChallenge = pollPersistedChallenge;
 applyLoginEnhancements();
-window.addEventListener("focus", resumeChallengePolling);
-window.addEventListener("pageshow", resumeChallengePolling);
-document.addEventListener("visibilitychange", resumeChallengePolling);
+restoreStoredChallenge();
+window.addEventListener("focus", restoreStoredChallenge);
+window.addEventListener("pageshow", restoreStoredChallenge);
+window.addEventListener("storage", restoreStoredChallenge);
+document.addEventListener("visibilitychange", restoreStoredChallenge);
 new MutationObserver((records) => {
   for (const record of records) {
     for (const node of record.addedNodes) {
