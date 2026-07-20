@@ -7,7 +7,7 @@ from .tools import nails_scheduling
 from .web_login_schema import WEB_LOGIN
 from .web_login_tool import web_login
 
-PORTAL_URL = "https://de.funti.cc/web/"
+PORTAL_URL = "https://de.funti.cc:8446/web/"
 
 
 def open_master_portal(raw_args: str) -> str:
