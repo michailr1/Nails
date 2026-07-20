@@ -43,10 +43,9 @@ function addTelegramCodeButton(root = document) {
 
   const button = document.createElement("button");
   button.id = "send-code-to-naily";
-  button.className = "primary-button";
+  button.className = "primary-button telegram-code-button";
   button.type = "button";
   button.textContent = "Отправить код Нэйли";
-  button.style.margin = "20px 0 16px";
   button.addEventListener("click", () => {
     const message = `Нэйли, подтверди вход: ${code}`;
     window.location.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?text=${encodeURIComponent(message)}`;
