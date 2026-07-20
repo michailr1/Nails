@@ -1,3 +1,5 @@
+const TELEGRAM_BOT_USERNAME = "smartnails_bot";
+
 const replacements = new Map([
   [
     "Мы покажем число для сверки и отправим запрос в закрытый бот. В Telegram достаточно нажать «Подтвердить».",
@@ -12,7 +14,7 @@ const replacements = new Map([
   ["Подтвердите вход", "Подтвердите вход в Telegram"],
   [
     "В закрытом Telegram-боте появится запрос с тем же числом.",
-    "Напишите Нэйли в закрытом боте: «подтверди вход» и укажите число с экрана. Нэйли повторит его и попросит отдельное подтверждение.",
+    "Нажмите кнопку под числом. Telegram откроет диалог с Нэйли и подставит готовое сообщение. Вам останется его отправить и отдельно подтвердить вход.",
   ],
   [
     "Ожидаем подтверждение в Telegram…",
@@ -31,12 +33,39 @@ function applyWeb001eCopy(root = document) {
   }
 }
 
-applyWeb001eCopy();
+function addTelegramCodeButton(root = document) {
+  const verificationNumber = root.querySelector?.(".verification-number")
+    || document.querySelector(".verification-number");
+  if (!verificationNumber || document.querySelector("#send-code-to-naily")) return;
+
+  const code = verificationNumber.textContent.trim();
+  if (!/^\d{6}$/.test(code)) return;
+
+  const button = document.createElement("button");
+  button.id = "send-code-to-naily";
+  button.className = "primary-button";
+  button.type = "button";
+  button.textContent = "Отправить код Нэйли";
+  button.style.margin = "20px 0 16px";
+  button.addEventListener("click", () => {
+    const message = `Нэйли, подтверди вход: ${code}`;
+    window.location.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?text=${encodeURIComponent(message)}`;
+  });
+
+  verificationNumber.insertAdjacentElement("afterend", button);
+}
+
+function applyLoginEnhancements(root = document) {
+  applyWeb001eCopy(root);
+  addTelegramCodeButton(root);
+}
+
+applyLoginEnhancements();
 new MutationObserver((records) => {
   for (const record of records) {
     for (const node of record.addedNodes) {
-      if (node.nodeType === Node.TEXT_NODE) applyWeb001eCopy(node.parentNode);
-      if (node.nodeType === Node.ELEMENT_NODE) applyWeb001eCopy(node);
+      if (node.nodeType === Node.TEXT_NODE) applyLoginEnhancements(node.parentNode);
+      if (node.nodeType === Node.ELEMENT_NODE) applyLoginEnhancements(node);
     }
   }
 }).observe(document.documentElement, { childList: true, subtree: true });
