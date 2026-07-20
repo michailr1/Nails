@@ -34,6 +34,9 @@ def test_web_assets_are_served(client, clean_database):
     assert "Выгрузить всех клиенток" in script.text
     assert "Не заполнено" in script.text
     assert 'TELEGRAM_BOT_USERNAME = "smartnails_bot"' in login_enhancements.text
+    assert 'LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge"' in (
+        login_enhancements.text
+    )
     assert "Отправить код Нэйли" in login_enhancements.text
     assert "Нэйли, подтверждаю вход:" in login_enhancements.text
     assert "это сразу подтвердит вход" in login_enhancements.text
@@ -42,19 +45,26 @@ def test_web_assets_are_served(client, clean_database):
     assert "https://t.me/${TELEGRAM_BOT_USERNAME}?text=" in login_enhancements.text
     assert 'link.target = "_blank"' in login_enhancements.text
     assert 'link.rel = "noopener noreferrer"' in login_enhancements.text
-    assert (
-        'window.addEventListener("focus", resumeChallengePolling)'
-        in login_enhancements.text
+    assert "localStorage.setItem(LOGIN_CHALLENGE_STORAGE_KEY" in login_enhancements.text
+    assert "localStorage.removeItem(LOGIN_CHALLENGE_STORAGE_KEY)" in login_enhancements.text
+    assert "async function restoreStoredChallenge()" in login_enhancements.text
+    assert '["pending", "approved"].includes(current.status)' in login_enhancements.text
+    assert 'window.addEventListener("focus", restoreStoredChallenge)' in (
+        login_enhancements.text
     )
-    assert (
-        'window.addEventListener("pageshow", resumeChallengePolling)'
-        in login_enhancements.text
+    assert 'window.addEventListener("pageshow", restoreStoredChallenge)' in (
+        login_enhancements.text
     )
-    assert (
-        'document.addEventListener("visibilitychange", resumeChallengePolling)'
-        in login_enhancements.text
+    assert 'window.addEventListener("storage", restoreStoredChallenge)' in (
+        login_enhancements.text
+    )
+    assert 'document.addEventListener("visibilitychange", restoreStoredChallenge)' in (
+        login_enhancements.text
     )
     assert '/^\\d{6}$/' in login_enhancements.text
+    assert ".telegram-code-button" in stylesheet.text
+    assert "text-decoration: none" in stylesheet.text
+    assert "min-height: 52px" in stylesheet.text
     assert ".mobile-logout" in stylesheet.text
     assert "display: inline-flex" in stylesheet.text
     assert "--primary" in stylesheet.text
