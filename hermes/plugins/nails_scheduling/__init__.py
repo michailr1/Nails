@@ -29,11 +29,13 @@ def register(ctx):
         schema=SAVE_FEEDBACK,
         handler=save_feedback,
     )
-    ctx.register_command(
-        "portal",
-        handler=open_master_portal,
-        description="Личный кабинет мастера",
-    )
+    register_command = getattr(ctx, "register_command", None)
+    if register_command is not None:
+        register_command(
+            "portal",
+            handler=open_master_portal,
+            description="Личный кабинет мастера",
+        )
     if os.getenv("NAILS_WEB_LOGIN_TOOL_ENABLED", "").strip().lower() == "true":
         ctx.register_tool(
             name="web_login",
