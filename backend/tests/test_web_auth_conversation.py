@@ -57,6 +57,38 @@ def test_master_can_claim_read_and_approve_own_challenge(
     assert consumed.json() == {"authenticated": True, "status": "consumed"}
 
 
+def test_master_can_approve_without_preceding_read(client, create_user, auth_headers):
+    user = create_user()
+    started = _start(client)
+    number = str(started["verification_number"])
+
+    approved = _decide(client, auth_headers, number, "approve")
+
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    with get_session_factory()() as session:
+        challenge = session.scalar(select(WebLoginChallenge))
+        assert challenge is not None
+        assert challenge.user_id == user.id
+        assert challenge.approved_at is not None
+
+
+def test_master_can_deny_without_preceding_read(client, create_user, auth_headers):
+    user = create_user()
+    started = _start(client)
+    number = str(started["verification_number"])
+
+    denied = _decide(client, auth_headers, number, "deny")
+
+    assert denied.status_code == 200
+    assert denied.json()["status"] == "denied"
+    with get_session_factory()() as session:
+        challenge = session.scalar(select(WebLoginChallenge))
+        assert challenge is not None
+        assert challenge.user_id == user.id
+        assert challenge.approved_at is None
+
+
 def test_other_master_cannot_read_or_decide_claimed_challenge(
     client,
     create_user,
@@ -96,7 +128,6 @@ def test_repeated_approve_is_idempotent(client, create_user, auth_headers):
     started = _start(client)
     number = str(started["verification_number"])
 
-    assert _read(client, auth_headers, number).json()["status"] == "pending"
     first = _decide(client, auth_headers, number, "approve")
     assert first.json()["status"] == "approved"
     second = _decide(client, auth_headers, number, "approve")
@@ -113,7 +144,6 @@ def test_deny_is_idempotent_and_invalid_number_is_not_found(
     number = str(started["verification_number"])
 
     assert _read(client, auth_headers, "000000").json()["status"] == "not_found"
-    assert _read(client, auth_headers, number).json()["status"] == "pending"
     first = _decide(client, auth_headers, number, "deny")
     assert first.json()["status"] == "denied"
     second = _decide(client, auth_headers, number, "deny")
