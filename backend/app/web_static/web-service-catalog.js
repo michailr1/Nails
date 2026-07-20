@@ -1,6 +1,14 @@
 let serviceCatalogDraft = [];
 let serviceCatalogOriginal = [];
 
+const SERVICE_CATEGORY_PRESETS = [
+  "Маникюр",
+  "Педикюр",
+  "Дополнительно",
+  "Дизайн",
+  "Парафинотерапия",
+];
+
 function cloneCatalog(services) {
   return services.map((service) => ({ ...service }));
 }
@@ -46,6 +54,12 @@ function catalogSelect(service, index, name, label, options, help = "") {
   return `<label class="catalog-field"><span>${escapeHtml(label)}</span><select data-service-index="${index}" data-service-field="${name}">${items}</select>${help ? `<small>${escapeHtml(help)}</small>` : ""}</label>`;
 }
 
+function catalogCategoryField(service, index) {
+  const listId = `service-category-${index}`;
+  const options = SERVICE_CATEGORY_PRESETS.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
+  return `<label class="catalog-field"><span>Категория <em>необязательно</em></span><input data-service-index="${index}" data-service-field="category" type="text" list="${listId}" value="${escapeHtml(service.category ?? "")}" placeholder="Выберите или введите свою"><datalist id="${listId}">${options}</datalist><small>Группирует услуги в прайсе. Можно выбрать готовую категорию или написать свою.</small></label>`;
+}
+
 function servicePriceFields(service, index) {
   if (service.price_type === "range") {
     return `${catalogField(service, index, "price_min_amount", "Цена от, ₽", "number", "Нижняя граница стоимости.")}${catalogField(service, index, "price_max_amount", "Цена до, ₽", "number", "Верхняя граница стоимости.")}`;
@@ -75,7 +89,7 @@ function serviceEditorCard(service, index) {
       ${catalogSelect(service, index, "price_type", "Как указана цена", [["fixed", "Фиксированная"], ["range", "Диапазон"], ["per_unit", "За единицу"], ["on_request", "По запросу"]], "Поля цены появятся только когда они нужны.")}
       ${servicePriceFields(service, index)}
       ${timeFields}
-      ${catalogField(service, index, "category", "Категория", "text", "Помогает группировать услуги, например «Маникюр».", true)}
+      ${catalogCategoryField(service, index)}
     </div>
   </article>`;
 }
