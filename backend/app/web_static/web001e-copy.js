@@ -3,7 +3,7 @@ const TELEGRAM_BOT_USERNAME = "smartnails_bot";
 const replacements = new Map([
   [
     "Мы покажем число для сверки и отправим запрос в закрытый бот. В Telegram достаточно нажать «Подтвердить».",
-    "Мы покажем шестизначное число. Отправьте его Нэйли в закрытом Telegram-боте и подтвердите вход в диалоге.",
+    "Мы покажем шестизначное число. Отправьте его Нэйли в закрытом Telegram-боте — это сразу подтвердит вход.",
   ],
   ["Войти через Telegram", "Получить число"],
   [
@@ -14,7 +14,7 @@ const replacements = new Map([
   ["Подтвердите вход", "Подтвердите вход в Telegram"],
   [
     "В закрытом Telegram-боте появится запрос с тем же числом.",
-    "Нажмите кнопку под числом. Telegram откроет диалог с Нэйли и подставит готовое сообщение. Вам останется его отправить и отдельно подтвердить вход.",
+    "Нажмите кнопку под числом. Telegram откроет диалог с Нэйли и подставит готовое подтверждение. Вам останется только отправить сообщение.",
   ],
   [
     "Ожидаем подтверждение в Telegram…",
@@ -47,7 +47,7 @@ function addTelegramCodeButton(root = document) {
   button.type = "button";
   button.textContent = "Отправить код Нэйли";
   button.addEventListener("click", () => {
-    const message = `Нэйли, подтверди вход: ${code}`;
+    const message = `Нэйли, подтверждаю вход: ${code}`;
     window.location.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?text=${encodeURIComponent(message)}`;
   });
 
