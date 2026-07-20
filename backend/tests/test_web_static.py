@@ -14,14 +14,17 @@ def test_web_master_interface_is_served(client, clean_database):
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     assert "Нэйли — кабинет мастера" in response.text
     assert "/web/app.js" in response.text
+    assert "/web/web001e-copy.js" in response.text
     assert "prototype" not in response.text.lower()
 
 
 def test_web_assets_are_served(client, clean_database):
     script = client.get("/web/app.js")
+    login_enhancements = client.get("/web/web001e-copy.js")
     stylesheet = client.get("/web/styles.css")
 
     assert script.status_code == 200
+    assert login_enhancements.status_code == 200
     assert stylesheet.status_code == 200
     assert "fetch(path" in script.text
     assert 'calendarMode: "day"' in script.text
@@ -30,6 +33,11 @@ def test_web_assets_are_served(client, clean_database):
     assert "/web/api/exports/calendar/all" in script.text
     assert "Выгрузить всех клиенток" in script.text
     assert "Не заполнено" in script.text
+    assert 'TELEGRAM_BOT_USERNAME = "smartnails_bot"' in login_enhancements.text
+    assert "Отправить код Нэйли" in login_enhancements.text
+    assert "Нэйли, подтверди вход:" in login_enhancements.text
+    assert "https://t.me/${TELEGRAM_BOT_USERNAME}?text=" in login_enhancements.text
+    assert '/^\\d{6}$/' in login_enhancements.text
     assert ".mobile-logout" in stylesheet.text
     assert "display: inline-flex" in stylesheet.text
     assert "--primary" in stylesheet.text
