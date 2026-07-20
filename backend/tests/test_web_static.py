@@ -66,6 +66,10 @@ def test_web_assets_are_served(client, clean_database):
     assert 'renderConfirmation("Проверяем подтверждение' in login_enhancements.text
     assert "releaseInitialSessionCheck()" in login_enhancements.text
     assert "wrapAuthenticatedRender()" in login_enhancements.text
+    assert "challengePollInFlight" in login_enhancements.text
+    assert "pollChallenge = pollPersistedChallenge" in login_enhancements.text
+    assert 'location.replace("/web/")' in login_enhancements.text
+    assert "forgetStoredChallenge();" in login_enhancements.text
     assert "window.setTimeout(restoreStoredChallenge" not in login_enhancements.text
     assert 'window.addEventListener("focus", restoreStoredChallenge)' in (
         login_enhancements.text
