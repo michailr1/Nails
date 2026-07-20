@@ -37,8 +37,14 @@ def test_web_assets_are_served(client, clean_database):
     assert "Отправить код Нэйли" in login_enhancements.text
     assert "Нэйли, подтверждаю вход:" in login_enhancements.text
     assert "это сразу подтвердит вход" in login_enhancements.text
-    assert "Вам останется только отправить сообщение" in login_enhancements.text
+    assert "Telegram откроется отдельно" in login_enhancements.text
+    assert "кабинет откроется автоматически" in login_enhancements.text
     assert "https://t.me/${TELEGRAM_BOT_USERNAME}?text=" in login_enhancements.text
+    assert 'link.target = "_blank"' in login_enhancements.text
+    assert 'link.rel = "noopener noreferrer"' in login_enhancements.text
+    assert 'window.addEventListener("focus", resumeChallengePolling)' in login_enhancements.text
+    assert 'window.addEventListener("pageshow", resumeChallengePolling)' in login_enhancements.text
+    assert 'document.addEventListener("visibilitychange", resumeChallengePolling)' in login_enhancements.text
     assert '/^\\d{6}$/' in login_enhancements.text
     assert ".mobile-logout" in stylesheet.text
     assert "display: inline-flex" in stylesheet.text
