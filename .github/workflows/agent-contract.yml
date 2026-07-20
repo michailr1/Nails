@@ -47,14 +47,15 @@ jobs:
               "VPS-агент — **только исполнитель заранее подготовленного runbook**",
               "писать, редактировать, исправлять или рефакторить код",
               "выполнять push, merge или любые изменения в GitHub",
-              "candidate deployment точного PR-head SHA",
-              "fast-forward’ом мержит тот же SHA",
+              "candidate deployment точного открытого PR-head SHA",
+              "Отдельного finalize entrypoint в репозитории нет",
+              "NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>",
               "не исправлять проблему самостоятельно",
               "Issue закрывает основной агент",
               "docs/context/current.md",
               "сначала прочитать `docs/context/current.md`",
               "plugin keys",
-              "правила видимости tools",
+              "release-flow",
               "обновляет `docs/context/current.md` после значимого production milestone",
           )
           for phrase in required_root_phrases:
@@ -67,6 +68,8 @@ jobs:
               "nails-scheduling",
               "один живой Telegram-тест за раз",
               "Production state не предполагать",
+              "отдельного finalize entrypoint нет",
+              "DEPLOY_OK=true",
           )
           for phrase in required_context_phrases:
               assert phrase in context_text, f"missing current context fact: {phrase}"
@@ -84,15 +87,25 @@ jobs:
 
           required_detailed_phrases = (
               "Основной агент создаёт изменения и единолично меняет GitHub",
-              "VPS-агент исполняет точные candidate/finalize/diagnostic команды",
-              "GitHub merge выполняется основным агентом только после успешного candidate report",
-              "git merge --ff-only",
-              "fast-forward merge PR head → main",
+              "VPS-агент исполняет точные diagnostic/candidate/main-deploy/rollback команды",
               "Candidate deployment **не меняет локальный production checkout**",
+              "Отдельного finalize script/entrypoint нет",
+              "NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>",
+              "git merge --ff-only <exact-main-SHA>",
               "Успешный candidate deployment сам по себе не закрывает issue",
           )
           for phrase in required_detailed_phrases:
               assert phrase in detailed_text, f"missing detailed contract phrase: {phrase}"
+
+          forbidden_release_phrases = (
+              "VPS-агент исполняет точные candidate/finalize/diagnostic команды",
+              "VPS: finalize локального checkout",
+              "выдаёт finalize-команду после GitHub merge",
+              "fast-forward PR head → main",
+          )
+          for phrase in forbidden_release_phrases:
+              assert phrase not in root_text
+              assert phrase not in detailed_text
 
           required_plugin_phrases = (
               "Hermes Agent v0.18.2 (2026.7.7.2)",
