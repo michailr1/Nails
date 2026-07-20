@@ -4,7 +4,7 @@ from nails_scheduling import open_master_portal, register
 
 
 def test_portal_command_opens_exact_master_cabinet_url():
-    expected = "Личный кабинет мастера: https://de.funti.cc/web/"
+    expected = "Личный кабинет мастера: https://de.funti.cc:8446/web/"
 
     assert open_master_portal("") == expected
     assert open_master_portal("ignored") == expected
