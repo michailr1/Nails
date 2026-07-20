@@ -14,7 +14,7 @@ const replacements = new Map([
   ["Подтвердите вход", "Подтвердите вход в Telegram"],
   [
     "В закрытом Telegram-боте появится запрос с тем же числом.",
-    "Нажмите кнопку под числом. Telegram откроет диалог с Нэйли и подставит готовое подтверждение. Вам останется только отправить сообщение.",
+    "Нажмите кнопку под числом. Telegram откроется отдельно и подставит готовое подтверждение. После отправки вернитесь в эту вкладку — кабинет откроется автоматически.",
   ],
   [
     "Ожидаем подтверждение в Telegram…",
@@ -41,17 +41,23 @@ function addTelegramCodeButton(root = document) {
   const code = verificationNumber.textContent.trim();
   if (!/^\d{6}$/.test(code)) return;
 
-  const button = document.createElement("button");
-  button.id = "send-code-to-naily";
-  button.className = "primary-button telegram-code-button";
-  button.type = "button";
-  button.textContent = "Отправить код Нэйли";
-  button.addEventListener("click", () => {
-    const message = `Нэйли, подтверждаю вход: ${code}`;
-    window.location.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?text=${encodeURIComponent(message)}`;
-  });
+  const message = `Нэйли, подтверждаю вход: ${code}`;
+  const link = document.createElement("a");
+  link.id = "send-code-to-naily";
+  link.className = "primary-button telegram-code-button";
+  link.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?text=${encodeURIComponent(message)}`;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = "Отправить код Нэйли";
 
-  verificationNumber.insertAdjacentElement("afterend", button);
+  verificationNumber.insertAdjacentElement("afterend", link);
+}
+
+function resumeChallengePolling() {
+  if (document.visibilityState !== "visible") return;
+  if (typeof state === "undefined" || !state.challenge) return;
+  clearPoll();
+  pollChallenge();
 }
 
 function applyLoginEnhancements(root = document) {
@@ -60,6 +66,9 @@ function applyLoginEnhancements(root = document) {
 }
 
 applyLoginEnhancements();
+window.addEventListener("focus", resumeChallengePolling);
+window.addEventListener("pageshow", resumeChallengePolling);
+document.addEventListener("visibilitychange", resumeChallengePolling);
 new MutationObserver((records) => {
   for (const record of records) {
     for (const node of record.addedNodes) {
