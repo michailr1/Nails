@@ -10,6 +10,7 @@
 repository: michailr1/Nails
 GitHub main: всегда проверять через GitHub API; после production release может содержать более новые docs-only commits
 production host: de.funti.cc
+public master portal: https://de.funti.cc:8446/web/
 production repo: /opt/nails/repo
 production branch: main
 production application release SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
@@ -17,6 +18,7 @@ runtime API SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
 runtime WEB SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
 backend env: /opt/nails/.env
 internal API: http://127.0.0.1:8210
+loopback web: http://127.0.0.1:8220/web/
 health: /health
 readiness: /ready
 timezone: Europe/Moscow
@@ -39,7 +41,8 @@ Alembic: 0013 (head)
 - после merge отдельного finalize entrypoint нет: production release выполняется единым `NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>`;
 - штатный main deploy создаёт и валидирует backup, собирает и проверяет runtime, выполняет миграции и health/readiness, затем fast-forward’ит локальный checkout и возвращает `DEPLOY_OK=true`;
 - deploy выполняется только через `ops/deploy/deploy.sh <exact-SHA>`; ручное разделение его шагов запрещено;
-- docs-only commits после release не означают, что application runtime отстал: сравнивать нужно последний production application release SHA и фактически работающие API/WEB SHA.
+- docs-only commits после release не означают, что application runtime отстал: сравнивать нужно последний production application release SHA и фактически работающие API/WEB SHA;
+- пользовательские ссылки на кабинет должны использовать внешний TLS endpoint `https://de.funti.cc:8446/web/`, а не внутренние порты 8210/8220 и не корень домена без порта.
 
 ## Завершённый этап
 
@@ -73,6 +76,7 @@ Production verification: backup валиден, миграции `0013 (head)`, 
 
 ```text
 production_application_release_sha=c128a3844243255f4ce9ab4ac8075a7e2249c61b
+public_master_portal=https://de.funti.cc:8446/web/
 release_contract=PR candidate optional before merge; merged main uses one atomic deploy.sh flow, no separate finalize
 next=live web acceptance, then web service catalog editor
 ```
