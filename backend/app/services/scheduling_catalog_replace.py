@@ -87,6 +87,7 @@ def replace_catalog(
             )
         )
     session.commit()
+    session.expire_all()
 
     services = session.scalars(
         select(Service)
