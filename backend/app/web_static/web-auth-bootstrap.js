@@ -6,10 +6,11 @@ let gateSessionBootstrap = Boolean(localStorage.getItem(LOGIN_CHALLENGE_BOOTSTRA
 window.__nailsWebAuthBootstrap = {
   releaseSessionCheck() {
     gateSessionBootstrap = false;
-    if (!gatedSessionRequest) return;
+    if (!gatedSessionRequest) return false;
     const { input, options, resolve, reject } = gatedSessionRequest;
     gatedSessionRequest = null;
     nativeFetch(input, options).then(resolve, reject);
+    return true;
   },
 };
 
