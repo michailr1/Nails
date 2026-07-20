@@ -26,7 +26,7 @@ function applyWeb001eCopy(root = document) {
 }
 
 function releaseInitialSessionCheck() {
-  window.__nailsWebAuthBootstrap?.releaseSessionCheck();
+  return window.__nailsWebAuthBootstrap?.releaseSessionCheck() === true;
 }
 
 function rememberCurrentChallenge() {
@@ -98,8 +98,8 @@ function finishAuthenticatedLogin() {
   forgetStoredChallenge();
   state.challenge = null;
   clearPoll();
-  releaseInitialSessionCheck();
-  location.replace("/web/");
+  const resumedInitialRender = releaseInitialSessionCheck();
+  if (!resumedInitialRender) renderApp();
 }
 
 async function pollPersistedChallenge() {
