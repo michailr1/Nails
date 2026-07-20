@@ -65,6 +65,15 @@ def test_web_assets_are_served(client, clean_database):
     assert "Сохранить весь каталог?" in catalog_editor.text
     assert "result.verified !== true" in catalog_editor.text
     assert "current → future" not in catalog_editor.text
+    assert "Поля цены появятся только когда они нужны." in catalog_editor.text
+    assert "Поля с пометкой «необязательно» можно оставить пустыми." in (
+        catalog_editor.text
+    )
+    assert '"sort_order", "Порядок"' not in catalog_editor.text
+    assert 'service.price_type === "per_unit"' in catalog_editor.text
+    assert 'service.price_type === "range"' in catalog_editor.text
+    assert "За что цена" in catalog_editor.text
+    assert "Помогает группировать услуги" in catalog_editor.text
     assert 'TELEGRAM_BOT_USERNAME = "smartnails_bot"' in login_enhancements.text
     assert 'LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge"' in (
         login_enhancements.text
