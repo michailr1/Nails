@@ -92,7 +92,8 @@ def inspect_conversational_challenge(
         return _view(None, now)
 
     if (
-        challenge.status in {
+        challenge.status
+        in {
             WebChallengeStatus.pending.value,
             WebChallengeStatus.approved.value,
         }
@@ -143,22 +144,29 @@ def decide_conversational_challenge(
     if challenge is None:
         session.commit()
         return _view(None, now)
-    if challenge.user_id is None and now >= challenge.expires_at:
-        challenge.status = WebChallengeStatus.expired.value
-        session.commit()
-        return _view(challenge, now)
-    if challenge.user_id != identity.user_id:
-        session.commit()
-        return _view(None, now)
 
     if (
-        challenge.status in {
+        challenge.status
+        in {
             WebChallengeStatus.pending.value,
             WebChallengeStatus.approved.value,
         }
         and now >= challenge.expires_at
     ):
         challenge.status = WebChallengeStatus.expired.value
+
+    if challenge.user_id is not None and challenge.user_id != identity.user_id:
+        session.commit()
+        return _view(None, now)
+
+    if challenge.user_id is None:
+        if challenge.status == WebChallengeStatus.expired.value:
+            session.commit()
+            return _view(challenge, now)
+        if challenge.status != WebChallengeStatus.pending.value:
+            session.commit()
+            return _view(None, now)
+        challenge.user_id = identity.user_id
 
     if decision == "approve":
         if challenge.status == WebChallengeStatus.pending.value:
