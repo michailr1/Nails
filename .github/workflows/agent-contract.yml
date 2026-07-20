@@ -88,7 +88,7 @@ jobs:
           required_detailed_phrases = (
               "Основной агент создаёт изменения и единолично меняет GitHub",
               "VPS-агент исполняет точные diagnostic/candidate/main-deploy/rollback команды",
-              "Candidate deployment **не меняет локальный production checkout**",
+              "**не меняет локальный production checkout**",
               "Отдельного finalize script/entrypoint нет",
               "NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>",
               "git merge --ff-only <exact-main-SHA>",
