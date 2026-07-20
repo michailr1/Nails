@@ -7,7 +7,6 @@ from .tools import nails_scheduling
 from .web_login_schema import WEB_LOGIN
 from .web_login_tool import web_login
 
-
 PORTAL_URL = "https://de.funti.cc"
 
 
