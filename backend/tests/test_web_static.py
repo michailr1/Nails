@@ -15,21 +15,31 @@ def test_web_master_interface_is_served(client, clean_database):
     assert "Нэйли — кабинет мастера" in response.text
     assert "/web/web-auth-bootstrap.js" in response.text
     assert "/web/app.js" in response.text
+    assert "/web/web-service-catalog.js" in response.text
     assert "/web/web001e-copy.js" in response.text
     assert 'type="module"' not in response.text
-    assert response.text.index("/web/web-auth-bootstrap.js") < response.text.index("/web/app.js")
-    assert response.text.index("/web/app.js") < response.text.index("/web/web001e-copy.js")
+    assert response.text.index("/web/web-auth-bootstrap.js") < response.text.index(
+        "/web/app.js"
+    )
+    assert response.text.index("/web/app.js") < response.text.index(
+        "/web/web-service-catalog.js"
+    )
+    assert response.text.index("/web/web-service-catalog.js") < response.text.index(
+        "/web/web001e-copy.js"
+    )
     assert "prototype" not in response.text.lower()
 
 
 def test_web_assets_are_served(client, clean_database):
     bootstrap = client.get("/web/web-auth-bootstrap.js")
     script = client.get("/web/app.js")
+    catalog_editor = client.get("/web/web-service-catalog.js")
     login_enhancements = client.get("/web/web001e-copy.js")
     stylesheet = client.get("/web/styles.css")
 
     assert bootstrap.status_code == 200
     assert script.status_code == 200
+    assert catalog_editor.status_code == 200
     assert login_enhancements.status_code == 200
     assert stylesheet.status_code == 200
     assert 'LOGIN_CHALLENGE_BOOTSTRAP_KEY = "nails.web-login.pending-challenge"' in (
@@ -49,6 +59,12 @@ def test_web_assets_are_served(client, clean_database):
     assert "/web/api/exports/calendar/all" in script.text
     assert "Выгрузить всех клиенток" in script.text
     assert "Не заполнено" in script.text
+    assert 'state.view !== "services"' in catalog_editor.text
+    assert 'api("/web/api/services")' in catalog_editor.text
+    assert 'api("/web/api/services/catalog"' in catalog_editor.text
+    assert "Сохранить весь каталог?" in catalog_editor.text
+    assert "result.verified !== true" in catalog_editor.text
+    assert "current → future" not in catalog_editor.text
     assert 'TELEGRAM_BOT_USERNAME = "smartnails_bot"' in login_enhancements.text
     assert 'LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge"' in (
         login_enhancements.text
@@ -94,6 +110,8 @@ def test_web_assets_are_served(client, clean_database):
     assert "text-decoration: none" in stylesheet.text
     assert "min-height: 52px" in stylesheet.text
     assert ".mobile-logout" in stylesheet.text
+    assert ".catalog-grid" in stylesheet.text
+    assert "repeat(3, 1fr)" in stylesheet.text
     assert "display: inline-flex" in stylesheet.text
     assert "--primary" in stylesheet.text
 

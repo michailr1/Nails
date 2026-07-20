@@ -13,9 +13,9 @@ production host: de.funti.cc
 public master portal: https://de.funti.cc:8446/web/
 production repo: /opt/nails/repo
 production branch: main
-production application release SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
-runtime API SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
-runtime WEB SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
+production application release SHA: 01fe8547e9038c098b4f4ea22f449622d4b774ea
+runtime API SHA: 01fe8547e9038c098b4f4ea22f449622d4b774ea
+runtime WEB SHA: 01fe8547e9038c098b4f4ea22f449622d4b774ea
 backend env: /opt/nails/.env
 internal API: http://127.0.0.1:8210
 loopback web: http://127.0.0.1:8220/web/
@@ -24,7 +24,7 @@ readiness: /ready
 timezone: Europe/Moscow
 Hermes plugins: nails-onboarding, nails-scheduling
 finalization digest timer: enabled, active
-last verified backup: /opt/nails/backups/nails-before-deploy-20260720T064428Z.sql.gz
+last verified backup: /opt/nails/backups/nails-before-deploy-20260720T145208Z.sql.gz
 Alembic: 0013 (head)
 ```
 
@@ -46,37 +46,40 @@ Alembic: 0013 (head)
 
 ## Завершённый этап
 
-На production развернут application release SHA `c128a3844243255f4ce9ab4ac8075a7e2249c61b`.
+На production развернут application release SHA `01fe8547e9038c098b4f4ea22f449622d4b774ea`.
 
-WEB-контур теперь поддерживает:
+WEB-контур поддерживает календарь на день, неделю и месяц, полные XLSX-выгрузки, карточки клиенток, мобильный logout и устойчивый возврат из Telegram при входе.
 
-- календарь на день, неделю и месяц;
-- экспорт выбранного периода и всего календаря;
-- экспорт всех клиенток со всеми полями;
-- мобильный выход из сессии.
+Telegram-редактирование существующей услуги без переименования принято в production: цена и длительность сохраняются после подтверждения, даже если модель передаёт только одно из эквивалентных полей имени.
 
-Итоги дня теперь:
+Production verification: deploy `DEPLOY_OK=true`, checkout/runtime SHA совпадают, backup создан; живая Telegram-приёмка `update_service` пройдена.
 
-- выбирают только записи, начавшиеся в указанную локальную дату;
-- не подтягивают старые незавершённые записи из прошлых дней;
-- показывают дату в заголовке;
-- допускают короткие ответы по номеру или имени;
-- ведут к сводке с общей подтверждённой суммой перед записью изменений.
+## Текущая задача
 
-Production verification: backup валиден, миграции `0013 (head)`, API `/health` и `/ready` — 200, web — 200, gateway active, digest service установлен, timer enabled/active.
+Issue #161 — WEB-002: первый web write-slice для каталога услуг.
+
+Границы:
+
+- переиспользовать существующие owner-scoped service catalog и atomic replace-catalog backend-механизмы;
+- добавить раздел «Услуги» в текущий web shell без нового frontend framework;
+- показывать активные и архивные позиции;
+- перед одной атомарной записью показывать полный список создаваемых, изменяемых и архивируемых услуг;
+- считать успехом только `verified=true` и затем перечитывать каталог;
+- не включать график, записи, client/public каталог, photo import и multi-master.
 
 ## Следующий приоритет
 
-1. Провести живую WEB-приёмку календаря: день / неделя / месяц, logout и выгрузки.
+1. Завершить WEB-002: code → tests → PR → CI → production release → живая web-приёмка.
 2. Провести следующую безопасную проверку итогов дня на реальных новых записях без ручного запуска Telegram-дайджеста.
-3. После acceptance перейти к первому web write-slice — редактированию каталога услуг с переиспользованием существующей backend-валидации и подтверждённой batch-модели.
-4. Затем добавить редактирование графика и записей.
+3. После WEB-002 перейти к web-редактированию графика, затем записей.
 
 ## Точка продолжения
 
 ```text
-production_application_release_sha=c128a3844243255f4ce9ab4ac8075a7e2249c61b
+production_application_release_sha=01fe8547e9038c098b4f4ea22f449622d4b774ea
+active_issue=161
+active_branch=feat/web-service-catalog
 public_master_portal=https://de.funti.cc:8446/web/
 release_contract=PR candidate optional before merge; merged main uses one atomic deploy.sh flow, no separate finalize
-next=live web acceptance, then web service catalog editor
+next=finish WEB-002 service catalog editor, test, review, CI
 ```
