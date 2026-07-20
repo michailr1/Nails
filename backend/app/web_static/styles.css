@@ -19,7 +19,7 @@
 * { box-sizing: border-box; }
 html { min-height: 100%; background: var(--bg); }
 body { margin: 0; min-height: 100vh; background: var(--bg); }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .58; }
 
@@ -118,6 +118,18 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .client-card dd { margin: 0; overflow-wrap: anywhere; }
 .empty-value { color: var(--muted); font-style: italic; }
 
+.catalog-actions { display: flex; justify-content: flex-end; gap: 10px; margin: 0 0 16px; }
+.catalog-actions .primary-button { width: auto; }
+.catalog-list { display: grid; gap: 14px; }
+.catalog-card { overflow: hidden; }
+.catalog-archived { opacity: .72; }
+.catalog-active { display: inline-flex; align-items: center; gap: 7px; font-size: .86rem; color: var(--muted); }
+.catalog-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 20px 22px 24px; }
+.catalog-field { display: grid; gap: 6px; min-width: 0; }
+.catalog-field span { color: var(--muted); font-size: .76rem; font-weight: 620; }
+.catalog-field input, .catalog-field select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); }
+.catalog-field input:focus, .catalog-field select:focus { outline: 2px solid rgba(197,130,131,.28); border-color: var(--primary); }
+
 .empty, .error-state, .loading-state { padding: 46px 24px; text-align: center; color: var(--muted); }
 .error-state strong { display: block; margin-bottom: 8px; color: var(--danger); }
 .offline-banner { position: fixed; left: 50%; bottom: 16px; z-index: 10; transform: translateX(-50%); padding: 10px 14px; border-radius: 999px; background: var(--text); color: white; font-size: .82rem; box-shadow: var(--shadow); }
@@ -126,14 +138,15 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .calendar-toolbar { grid-template-columns: 1fr; }
   .period-title { justify-self: start; }
   .month-cell { min-height: 92px; }
+  .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
   .app-shell { display: block; }
   .sidebar { position: fixed; z-index: 5; top: auto; bottom: 0; width: 100%; height: auto; padding: 9px 12px calc(9px + env(safe-area-inset-bottom)); border: 0; border-top: 1px solid var(--border); }
   .sidebar .brand, .sidebar-bottom { display: none; }
-  .nav { grid-template-columns: 1fr 1fr; }
-  .tab-button { justify-content: center; padding: 11px; }
+  .nav { grid-template-columns: repeat(3, 1fr); }
+  .tab-button { justify-content: center; padding: 11px 6px; }
   .main { padding: 24px 16px 96px; }
   .topbar { align-items: start; }
   .topbar h1 { font-size: 2.15rem; }
@@ -153,4 +166,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .month-cell span { margin: 5px 0 0; font-size: .68rem; }
   .month-cell small { display: none; }
   .client-card dl { grid-template-columns: 105px 1fr; }
+  .catalog-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .catalog-actions .primary-button { width: 100%; }
+  .catalog-grid { grid-template-columns: 1fr; padding: 16px; }
+  .catalog-card .panel-header { padding: 16px; }
 }
