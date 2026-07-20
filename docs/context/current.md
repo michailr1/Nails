@@ -8,11 +8,11 @@
 
 ```text
 repository: michailr1/Nails
-GitHub main: c128a3844243255f4ce9ab4ac8075a7e2249c61b
+GitHub main: всегда проверять через GitHub API; после production release может содержать более новые docs-only commits
 production host: de.funti.cc
 production repo: /opt/nails/repo
 production branch: main
-production SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
+production application release SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
 runtime API SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
 runtime WEB SHA: c128a3844243255f4ce9ab4ac8075a7e2249c61b
 backend env: /opt/nails/.env
@@ -38,11 +38,12 @@ Alembic: 0013 (head)
 - PR-кандидат до merge запускается только из `origin/pr/<number>` и не меняет production checkout;
 - после merge отдельного finalize entrypoint нет: production release выполняется единым `NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>`;
 - штатный main deploy создаёт и валидирует backup, собирает и проверяет runtime, выполняет миграции и health/readiness, затем fast-forward’ит локальный checkout и возвращает `DEPLOY_OK=true`;
-- deploy выполняется только через `ops/deploy/deploy.sh <exact-SHA>`; ручное разделение его шагов запрещено.
+- deploy выполняется только через `ops/deploy/deploy.sh <exact-SHA>`; ручное разделение его шагов запрещено;
+- docs-only commits после release не означают, что application runtime отстал: сравнивать нужно последний production application release SHA и фактически работающие API/WEB SHA.
 
 ## Завершённый этап
 
-На production развернут SHA `c128a3844243255f4ce9ab4ac8075a7e2249c61b`.
+На production развернут application release SHA `c128a3844243255f4ce9ab4ac8075a7e2249c61b`.
 
 WEB-контур теперь поддерживает:
 
@@ -71,7 +72,7 @@ Production verification: backup валиден, миграции `0013 (head)`, 
 ## Точка продолжения
 
 ```text
-production_sha=c128a3844243255f4ce9ab4ac8075a7e2249c61b
+production_application_release_sha=c128a3844243255f4ce9ab4ac8075a7e2249c61b
 release_contract=PR candidate optional before merge; merged main uses one atomic deploy.sh flow, no separate finalize
 next=live web acceptance, then web service catalog editor
 ```
