@@ -36,32 +36,46 @@ function emptyCatalogService() {
   };
 }
 
-function catalogField(service, index, name, label, type = "text") {
+function catalogField(service, index, name, label, type = "text", help = "", optional = false) {
   const value = service[name] ?? "";
-  return `<label class="catalog-field"><span>${escapeHtml(label)}</span><input data-service-index="${index}" data-service-field="${name}" type="${type}" value="${escapeHtml(value)}"></label>`;
+  return `<label class="catalog-field"><span>${escapeHtml(label)}${optional ? ' <em>необязательно</em>' : ""}</span><input data-service-index="${index}" data-service-field="${name}" type="${type}" value="${escapeHtml(value)}">${help ? `<small>${escapeHtml(help)}</small>` : ""}</label>`;
+}
+
+function catalogSelect(service, index, name, label, options, help = "") {
+  const items = options.map(([value, title]) => `<option value="${value}" ${service[name] === value ? "selected" : ""}>${title}</option>`).join("");
+  return `<label class="catalog-field"><span>${escapeHtml(label)}</span><select data-service-index="${index}" data-service-field="${name}">${items}</select>${help ? `<small>${escapeHtml(help)}</small>` : ""}</label>`;
+}
+
+function servicePriceFields(service, index) {
+  if (service.price_type === "range") {
+    return `${catalogField(service, index, "price_min_amount", "Цена от, ₽", "number", "Нижняя граница стоимости.")}${catalogField(service, index, "price_max_amount", "Цена до, ₽", "number", "Верхняя граница стоимости.")}`;
+  }
+  if (service.price_type === "per_unit") {
+    return `${catalogField(service, index, "price_amount", "Цена, ₽", "number", "Стоимость одной единицы.")}${catalogField(service, index, "price_unit", "За что цена", "text", "Например: за ноготь или за минуту.")}`;
+  }
+  if (service.price_type === "fixed") {
+    return catalogField(service, index, "price_amount", "Цена, ₽", "number", "Полная стоимость услуги.");
+  }
+  return "";
 }
 
 function serviceEditorCard(service, index) {
+  const timeFields = service.kind === "addon"
+    ? catalogField(service, index, "extra_minutes", "Доп. время, мин", "number", "Насколько дополнение увеличивает запись.", true)
+    : `${catalogField(service, index, "duration_minutes", "Длительность, мин", "number", "Сколько обычно занимает услуга.")}${catalogField(service, index, "buffer_before_minutes", "Резерв до, мин", "number", "Свободное время перед записью.", true)}${catalogField(service, index, "buffer_after_minutes", "Резерв после, мин", "number", "Свободное время после записи.", true)}`;
   return `<article class="panel catalog-card ${service.is_active ? "" : "catalog-archived"}">
     <div class="panel-header">
       <strong>${escapeHtml(service.public_name || "Новая услуга")}</strong>
       <label class="catalog-active"><input data-service-index="${index}" data-service-field="is_active" type="checkbox" ${service.is_active ? "checked" : ""}> Активна</label>
     </div>
     <div class="catalog-grid">
-      ${catalogField(service, index, "public_name", "Название")}
-      ${catalogField(service, index, "public_description", "Описание")}
-      <label class="catalog-field"><span>Тип услуги</span><select data-service-index="${index}" data-service-field="kind"><option value="base" ${service.kind === "base" ? "selected" : ""}>Основная</option><option value="addon" ${service.kind === "addon" ? "selected" : ""}>Дополнение</option></select></label>
-      <label class="catalog-field"><span>Тип цены</span><select data-service-index="${index}" data-service-field="price_type"><option value="fixed" ${service.price_type === "fixed" ? "selected" : ""}>Фиксированная</option><option value="range" ${service.price_type === "range" ? "selected" : ""}>Диапазон</option><option value="per_unit" ${service.price_type === "per_unit" ? "selected" : ""}>За единицу</option><option value="on_request" ${service.price_type === "on_request" ? "selected" : ""}>По запросу</option></select></label>
-      ${catalogField(service, index, "price_amount", "Цена", "number")}
-      ${catalogField(service, index, "price_min_amount", "Цена от", "number")}
-      ${catalogField(service, index, "price_max_amount", "Цена до", "number")}
-      ${catalogField(service, index, "price_unit", "Единица цены")}
-      ${catalogField(service, index, "duration_minutes", "Длительность, мин", "number")}
-      ${catalogField(service, index, "extra_minutes", "Доп. время, мин", "number")}
-      ${catalogField(service, index, "buffer_before_minutes", "Резерв до, мин", "number")}
-      ${catalogField(service, index, "buffer_after_minutes", "Резерв после, мин", "number")}
-      ${catalogField(service, index, "category", "Категория")}
-      ${catalogField(service, index, "sort_order", "Порядок", "number")}
+      ${catalogField(service, index, "public_name", "Название", "text", "Так услуга будет показана в кабинете и записях.")}
+      ${catalogField(service, index, "public_description", "Описание", "text", "Короткое пояснение для мастера.", true)}
+      ${catalogSelect(service, index, "kind", "Тип услуги", [["base", "Основная"], ["addon", "Дополнение"]], "Дополнение добавляется к основной услуге.")}
+      ${catalogSelect(service, index, "price_type", "Как указана цена", [["fixed", "Фиксированная"], ["range", "Диапазон"], ["per_unit", "За единицу"], ["on_request", "По запросу"]], "Поля цены появятся только когда они нужны.")}
+      ${servicePriceFields(service, index)}
+      ${timeFields}
+      ${catalogField(service, index, "category", "Категория", "text", "Помогает группировать услуги, например «Маникюр».", true)}
     </div>
   </article>`;
 }
@@ -83,7 +97,7 @@ function bindCatalogFields() {
         }
         renderServiceCatalogBody();
       }
-      if (field === "is_active") renderServiceCatalogBody();
+      if (field === "price_type" || field === "is_active") renderServiceCatalogBody();
     });
   });
 }
@@ -92,7 +106,7 @@ function renderServiceCatalogBody(message = "") {
   const content = document.querySelector("#page-content");
   if (!content) return;
   content.innerHTML = `${message ? `<div class="info-note" role="status">${escapeHtml(message)}</div>` : ""}
-    <div class="info-note">Сохранение применяется ко всему активному каталогу одной операцией. Архивные услуги остаются в истории и могут быть активированы снова.</div>
+    <div class="info-note">Обязательны только основные данные, нужные для выбранного типа услуги и цены. Поля с пометкой «необязательно» можно оставить пустыми. Сохранение применяется ко всему активному каталогу одной операцией.</div>
     <div class="catalog-actions"><button id="add-service" class="secondary-button" type="button">Добавить услугу</button><button id="save-catalog" class="primary-button" type="button">Проверить и сохранить</button></div>
     <div class="catalog-list">${serviceCatalogDraft.map(serviceEditorCard).join("")}</div>`;
   document.querySelector("#add-service").addEventListener("click", () => {
@@ -106,7 +120,7 @@ function renderServiceCatalogBody(message = "") {
 function normalizeCatalogService(service) {
   const kind = service.kind || "base";
   const priceType = service.price_type || "fixed";
-  const result = {
+  return {
     public_name: String(service.public_name || "").trim(),
     public_description: String(service.public_description || "").trim() || null,
     price_amount: priceType === "fixed" || priceType === "per_unit" ? catalogNullableNumber(service.price_amount) : null,
@@ -124,7 +138,6 @@ function normalizeCatalogService(service) {
     sort_order: catalogNumber(service.sort_order),
     extra_minutes: kind === "addon" ? catalogNumber(service.extra_minutes) : 0,
   };
-  return result;
 }
 
 function catalogDiffSummary(future) {
