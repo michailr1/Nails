@@ -1,6 +1,7 @@
 const TELEGRAM_BOT_USERNAME = "smartnails_bot";
 const LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge";
 let challengeRestoreInFlight = false;
+let appRenderWrapped = false;
 
 const replacements = new Map([
   [
@@ -33,6 +34,10 @@ function applyWeb001eCopy(root = document) {
     const replacement = replacements.get(node.nodeValue.trim());
     if (replacement) node.nodeValue = replacement;
   }
+}
+
+function releaseInitialSessionCheck() {
+  window.__nailsWebAuthBootstrap?.releaseSessionCheck();
 }
 
 function rememberCurrentChallenge() {
@@ -88,7 +93,20 @@ function bindChallengeReset(root = document) {
   const resetButton = root.querySelector?.("#cancel-login") || document.querySelector("#cancel-login");
   if (!resetButton || resetButton.dataset.challengeResetBound === "true") return;
   resetButton.dataset.challengeResetBound = "true";
-  resetButton.addEventListener("click", forgetStoredChallenge, { once: true });
+  resetButton.addEventListener("click", () => {
+    forgetStoredChallenge();
+    releaseInitialSessionCheck();
+  }, { once: true });
+}
+
+function wrapAuthenticatedRender() {
+  if (appRenderWrapped || typeof renderApp !== "function") return;
+  const originalRenderApp = renderApp;
+  renderApp = (...args) => {
+    releaseInitialSessionCheck();
+    return originalRenderApp(...args);
+  };
+  appRenderWrapped = true;
 }
 
 async function restoreStoredChallenge() {
@@ -97,6 +115,7 @@ async function restoreStoredChallenge() {
 
   const stored = readStoredChallenge();
   if (!stored) {
+    releaseInitialSessionCheck();
     if (state.challenge) {
       clearPoll();
       pollChallenge();
@@ -104,11 +123,12 @@ async function restoreStoredChallenge() {
     return;
   }
 
+  state.challenge = stored;
+  renderConfirmation("Проверяем подтверждение в диалоге с Нэйли…");
   challengeRestoreInFlight = true;
   try {
     const current = await api(`/web/api/auth/challenges/${encodeURIComponent(stored.challenge_id)}`);
     if (["pending", "approved"].includes(current.status)) {
-      state.challenge = stored;
       renderConfirmation(
         current.status === "approved"
           ? "Подтверждение получено. Открываем кабинет…"
@@ -119,8 +139,14 @@ async function restoreStoredChallenge() {
       return;
     }
     forgetStoredChallenge();
+    state.challenge = null;
+    releaseInitialSessionCheck();
   } catch (error) {
-    if (error.status === 404) forgetStoredChallenge();
+    if (error.status === 404) {
+      forgetStoredChallenge();
+      state.challenge = null;
+      releaseInitialSessionCheck();
+    }
   } finally {
     challengeRestoreInFlight = false;
   }
@@ -132,8 +158,9 @@ function applyLoginEnhancements(root = document) {
   bindChallengeReset(root);
 }
 
+wrapAuthenticatedRender();
 applyLoginEnhancements();
-window.setTimeout(restoreStoredChallenge, 400);
+restoreStoredChallenge();
 window.addEventListener("focus", restoreStoredChallenge);
 window.addEventListener("pageshow", restoreStoredChallenge);
 window.addEventListener("storage", restoreStoredChallenge);
