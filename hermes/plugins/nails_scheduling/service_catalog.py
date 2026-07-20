@@ -86,6 +86,22 @@ def _currency(value: Any) -> str:
     return result
 
 
+def _service_names(args: dict[str, Any], action: str) -> tuple[str, str | None]:
+    service_name = args.get("service_name")
+    current_service_name = args.get("current_service_name")
+    if action == "update_service":
+        if service_name is None:
+            service_name = current_service_name
+        if current_service_name is None:
+            current_service_name = service_name
+    return (
+        _text(service_name, "service_name", 160),
+        None
+        if action == "create_service"
+        else _text(current_service_name, "current_service_name", 160),
+    )
+
+
 def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     action = args.get("action")
     if action not in {"create_service", "update_service"}:
@@ -99,6 +115,7 @@ def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, 
     if args.get("confirmed") is not True:
         raise ToolInputError("explicit confirmation is required")
 
+    service_name, current_service_name = _service_names(args, action)
     supplied_catalog_fields = set(args) & _CATALOG_FIELDS
     kind = args.get("kind", "base")
     if kind not in _SERVICE_KINDS:
@@ -163,7 +180,7 @@ def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, 
         duration = None
 
     values = {
-        "service_name": _text(args.get("service_name"), "service_name", 160),
+        "service_name": service_name,
         "service_description": _optional_text(
             args.get("service_description"),
             "service_description",
@@ -186,11 +203,7 @@ def validate_service_catalog_args(args: dict[str, Any]) -> tuple[str, dict[str, 
         "supplied_catalog_fields": supplied_catalog_fields,
     }
     if action == "update_service":
-        values["current_service_name"] = _text(
-            args.get("current_service_name"),
-            "current_service_name",
-            160,
-        )
+        values["current_service_name"] = current_service_name
     return action, values
 
 
