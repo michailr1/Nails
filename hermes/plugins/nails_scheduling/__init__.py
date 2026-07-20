@@ -8,6 +8,14 @@ from .web_login_schema import WEB_LOGIN
 from .web_login_tool import web_login
 
 
+PORTAL_URL = "https://de.funti.cc"
+
+
+def open_master_portal(raw_args: str) -> str:
+    del raw_args
+    return f"Личный кабинет мастера: {PORTAL_URL}"
+
+
 def register(ctx):
     ctx.register_tool(
         name="nails_scheduling",
@@ -20,6 +28,11 @@ def register(ctx):
         toolset="nails_scheduling",
         schema=SAVE_FEEDBACK,
         handler=save_feedback,
+    )
+    ctx.register_command(
+        "portal",
+        handler=open_master_portal,
+        description="Личный кабинет мастера",
     )
     if os.getenv("NAILS_WEB_LOGIN_TOOL_ENABLED", "").strip().lower() == "true":
         ctx.register_tool(
