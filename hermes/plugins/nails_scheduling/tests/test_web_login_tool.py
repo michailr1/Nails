@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from nails_scheduling import register, web_login_tool
+from nails_scheduling.web_login_schema import WEB_LOGIN
 
 
 def _set_identity(monkeypatch, user_id="700000001"):
@@ -24,6 +25,14 @@ def test_web_login_tool_registers_only_when_enabled(monkeypatch):
     registered = {call["name"]: call for call in calls}
     assert set(registered) == {"nails_scheduling", "save_feedback", "web_login"}
     assert registered["web_login"]["handler"] is web_login_tool.web_login
+
+
+def test_schema_treats_deep_link_message_as_explicit_approval():
+    description = WEB_LOGIN["description"]
+
+    assert "Нэйли, подтверждаю вход: NNNNNN" in description
+    assert "call action=approve immediately" in description
+    assert "do not ask 'Подтвердить вход?' again" in description
 
 
 def test_read_uses_trusted_identity_and_allowlisted_endpoint(monkeypatch):
