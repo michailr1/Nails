@@ -40,6 +40,8 @@ def test_web_assets_are_served(client, clean_database):
     assert "gatedSessionRequest" in bootstrap.text
     assert "releaseSessionCheck()" in bootstrap.text
     assert "nativeFetch(input, options).then(resolve, reject)" in bootstrap.text
+    assert "return false;" in bootstrap.text
+    assert "return true;" in bootstrap.text
     assert "fetch(path" in script.text
     assert 'calendarMode: "day"' in script.text
     assert '["week", "Неделя"]' in script.text
@@ -68,7 +70,11 @@ def test_web_assets_are_served(client, clean_database):
     assert "wrapAuthenticatedRender()" in login_enhancements.text
     assert "challengePollInFlight" in login_enhancements.text
     assert "pollChallenge = pollPersistedChallenge" in login_enhancements.text
-    assert 'location.replace("/web/")' in login_enhancements.text
+    assert "const resumedInitialRender = releaseInitialSessionCheck();" in (
+        login_enhancements.text
+    )
+    assert "if (!resumedInitialRender) renderApp();" in login_enhancements.text
+    assert 'location.replace("/web/")' not in login_enhancements.text
     assert "forgetStoredChallenge();" in login_enhancements.text
     assert "window.setTimeout(restoreStoredChallenge" not in login_enhancements.text
     assert 'window.addEventListener("focus", restoreStoredChallenge)' in (
