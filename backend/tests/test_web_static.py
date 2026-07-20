@@ -13,19 +13,33 @@ def test_web_master_interface_is_served(client, clean_database):
     assert "default-src 'self'" in response.headers["content-security-policy"]
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     assert "Нэйли — кабинет мастера" in response.text
+    assert "/web/web-auth-bootstrap.js" in response.text
     assert "/web/app.js" in response.text
     assert "/web/web001e-copy.js" in response.text
+    assert 'type="module"' not in response.text
+    assert response.text.index("/web/web-auth-bootstrap.js") < response.text.index("/web/app.js")
+    assert response.text.index("/web/app.js") < response.text.index("/web/web001e-copy.js")
     assert "prototype" not in response.text.lower()
 
 
 def test_web_assets_are_served(client, clean_database):
+    bootstrap = client.get("/web/web-auth-bootstrap.js")
     script = client.get("/web/app.js")
     login_enhancements = client.get("/web/web001e-copy.js")
     stylesheet = client.get("/web/styles.css")
 
+    assert bootstrap.status_code == 200
     assert script.status_code == 200
     assert login_enhancements.status_code == 200
     assert stylesheet.status_code == 200
+    assert 'LOGIN_CHALLENGE_BOOTSTRAP_KEY = "nails.web-login.pending-challenge"' in (
+        bootstrap.text
+    )
+    assert "gateSessionBootstrap" in bootstrap.text
+    assert 'pathname === "/web/api/auth/session"' in bootstrap.text
+    assert "gatedSessionRequest" in bootstrap.text
+    assert "releaseSessionCheck()" in bootstrap.text
+    assert "nativeFetch(input, options).then(resolve, reject)" in bootstrap.text
     assert "fetch(path" in script.text
     assert 'calendarMode: "day"' in script.text
     assert '["week", "Неделя"]' in script.text
@@ -49,6 +63,10 @@ def test_web_assets_are_served(client, clean_database):
     assert "localStorage.removeItem(LOGIN_CHALLENGE_STORAGE_KEY)" in login_enhancements.text
     assert "async function restoreStoredChallenge()" in login_enhancements.text
     assert '["pending", "approved"].includes(current.status)' in login_enhancements.text
+    assert 'renderConfirmation("Проверяем подтверждение' in login_enhancements.text
+    assert "releaseInitialSessionCheck()" in login_enhancements.text
+    assert "wrapAuthenticatedRender()" in login_enhancements.text
+    assert "window.setTimeout(restoreStoredChallenge" not in login_enhancements.text
     assert 'window.addEventListener("focus", restoreStoredChallenge)' in (
         login_enhancements.text
     )
