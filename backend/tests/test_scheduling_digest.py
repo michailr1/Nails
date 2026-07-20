@@ -46,7 +46,7 @@ def _claim(
 
 
 @pytest.mark.usefixtures("clean_database")
-def test_digest_claim_selects_only_ended_scheduled_owner_bookings_once(
+def test_digest_claim_selects_only_ended_scheduled_owner_bookings_for_local_day_once(
     client: TestClient,
     create_user: Callable,
     create_service: Callable,
@@ -67,21 +67,28 @@ def test_digest_claim_selects_only_ended_scheduled_owner_bookings_once(
         client,
         first_headers,
         client_name="Анна",
-        starts_at="2026-07-17T11:00:00+03:00",
+        starts_at="2026-07-19T11:00:00+03:00",
         request_suffix="ended",
     )
     _create_booking(
         client,
         first_headers,
+        client_name="Старая",
+        starts_at="2026-07-17T11:00:00+03:00",
+        request_suffix="stale-other-day",
+    )
+    _create_booking(
+        client,
+        first_headers,
         client_name="Будущая",
-        starts_at="2099-07-17T11:00:00+03:00",
+        starts_at="2099-07-19T11:00:00+03:00",
         request_suffix="future",
     )
     _create_booking(
         client,
         first_headers,
         client_name="Отменённая",
-        starts_at="2026-07-17T15:00:00+03:00",
+        starts_at="2026-07-19T15:00:00+03:00",
         request_suffix="cancelled",
     )
     cancelled = client.put(
@@ -90,7 +97,7 @@ def test_digest_claim_selects_only_ended_scheduled_owner_bookings_once(
         json={
             "client_public_name": "Отменённая",
             "service_name": "Маникюр",
-            "starts_at": "2026-07-17T15:00:00+03:00",
+            "starts_at": "2026-07-19T15:00:00+03:00",
         },
     )
     assert cancelled.status_code == 200, cancelled.text
@@ -99,7 +106,7 @@ def test_digest_claim_selects_only_ended_scheduled_owner_bookings_once(
         client,
         first_headers,
         client_name="Закрытая",
-        starts_at="2026-07-17T18:00:00+03:00",
+        starts_at="2026-07-19T18:00:00+03:00",
         request_suffix="completed",
     )
     finalized = client.put(
@@ -108,7 +115,7 @@ def test_digest_claim_selects_only_ended_scheduled_owner_bookings_once(
         json={
             "client_public_name": "Закрытая",
             "service_name": "Маникюр",
-            "starts_at": "2026-07-17T18:00:00+03:00",
+            "starts_at": "2026-07-19T18:00:00+03:00",
             "outcome": "completed",
             "price_amount": None,
         },
@@ -119,7 +126,7 @@ def test_digest_claim_selects_only_ended_scheduled_owner_bookings_once(
         client,
         second_headers,
         client_name="Чужая",
-        starts_at="2026-07-17T12:00:00+03:00",
+        starts_at="2026-07-19T12:00:00+03:00",
         request_suffix="other-owner",
     )
 
@@ -170,7 +177,7 @@ def test_digest_ack_sent_is_idempotent_and_prevents_future_prompt(
         client,
         auth_headers,
         client_name="Анна",
-        starts_at="2026-07-17T11:00:00+03:00",
+        starts_at="2026-07-19T11:00:00+03:00",
         request_suffix="ack-sent",
     )
     claim = _claim(client, auth_headers(request_id="digest-claim-sent"))
@@ -218,7 +225,7 @@ def test_known_send_failure_releases_claim_for_same_day_retry(
         client,
         auth_headers,
         client_name="Анна",
-        starts_at="2026-07-17T11:00:00+03:00",
+        starts_at="2026-07-19T11:00:00+03:00",
         request_suffix="release",
     )
     first = _claim(client, auth_headers(request_id="digest-claim-release"))
