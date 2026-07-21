@@ -86,7 +86,6 @@ function serviceEditorCard(service, index) {
     </div>
     <div class="catalog-grid">
       ${catalogField(service, index, "public_name", "Название", "text", "Так позиция будет показана в прайсе и записях.")}
-      ${catalogField(service, index, "public_description", "Описание", "text", "Короткое пояснение для мастера.", true)}
       ${catalogSelect(service, index, "kind", "Позиция в записи", [["base", "Основная процедура"], ["addon", "Дополнение"]], "Дополнение добавляется к основной процедуре.")}
       ${catalogSelect(service, index, "price_type", "Как указана цена", [["fixed", "Фиксированная"], ["range", "Диапазон"], ["per_unit", "За единицу"], ["on_request", "По запросу"]], "Поля цены появятся только когда они нужны.")}
       ${servicePriceFields(service, index)}
