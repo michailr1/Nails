@@ -86,3 +86,53 @@ class WebClientCreateResponse(BaseModel):
     client: WebClientCard
     created: bool
     contact_added: bool = False
+
+
+class WebClientReplaceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    public_name: str = Field(min_length=1, max_length=160)
+    phone: str | None = Field(default=None, max_length=32)
+    contact_channel: str | None = Field(default=None, max_length=64)
+    birthday: date | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+    nail_skin_notes: str | None = Field(default=None, max_length=4000)
+    sensitivity_notes: str | None = Field(default=None, max_length=4000)
+    style_preferences: str | None = Field(default=None, max_length=4000)
+    communication_preferences: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("public_name")
+    @classmethod
+    def normalize_required_name(cls, value: str) -> str:
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("public_name must not be empty")
+        return candidate
+
+    @field_validator("phone", "contact_channel")
+    @classmethod
+    def normalize_short_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = " ".join(value.split())
+        return candidate or None
+
+    @field_validator(
+        "notes",
+        "nail_skin_notes",
+        "sensitivity_notes",
+        "style_preferences",
+        "communication_preferences",
+    )
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = value.strip()
+        return candidate or None
+
+
+class WebClientReplaceResponse(BaseModel):
+    client: WebClientCard
+    changed: bool
+    changed_fields: list[str]

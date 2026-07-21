@@ -81,6 +81,23 @@ def get_active_client(
     return client
 
 
+def get_active_client_by_id(
+    session: Session,
+    owner_user_id: uuid.UUID,
+    client_id: uuid.UUID,
+) -> Client:
+    client = session.scalar(
+        select(Client).where(
+            Client.id == client_id,
+            Client.owner_user_id == owner_user_id,
+            Client.profile_status == ClientProfileStatus.active,
+        )
+    )
+    if client is None:
+        raise SchedulingDomainError("client_not_found", status_code=404)
+    return client
+
+
 def list_active_services(
     session: Session,
     identity: RequestIdentity,
