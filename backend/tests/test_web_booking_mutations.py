@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from conftest import WEB_ORIGIN_HEADERS
 
@@ -144,10 +145,7 @@ def test_web_booking_mutations_require_same_origin(client, create_user):
 
 def test_booking_edit_assets_expose_only_future_active_actions():
     script = (
-        __import__("pathlib").Path(__file__).parents[1]
-        / "app"
-        / "web_static"
-        / "web-booking-edit.js"
+        Path(__file__).parents[1] / "app" / "web_static" / "web-booking-edit.js"
     ).read_text(encoding="utf-8")
 
     assert 'booking.status === "scheduled"' in script
