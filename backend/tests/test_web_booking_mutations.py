@@ -5,14 +5,13 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from conftest import WEB_ORIGIN_HEADERS
-
 from app.config import get_settings
 from app.db import get_session_factory
 from app.models import Booking, Service
 from app.services.normalization import normalize_public_name
 from app.services.web_auth import _keyed_hash
 from app.web_auth_models import WebSession
+from conftest import WEB_ORIGIN_HEADERS
 
 
 def _authenticate(client, user_id: uuid.UUID) -> None:
