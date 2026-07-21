@@ -40,6 +40,7 @@ Alembic: 0013 (head)
 - каждая мутация требует подтверждения;
 - успех определяется только подтверждённым tool-результатом;
 - PR-кандидат до merge запускается только из `origin/pr/<number>` и не меняет production checkout;
+- отдельного finalize entrypoint нет;
 - production release выполняется единым `NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>`;
 - deploy выполняется только через `ops/deploy/deploy.sh <exact-SHA>`; ручное разделение его шагов запрещено;
 - пользовательские ссылки на кабинет используют внешний TLS endpoint `https://de.funti.cc:8446/web/`.
