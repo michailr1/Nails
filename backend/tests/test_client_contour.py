@@ -4,9 +4,28 @@ from decimal import Decimal
 from sqlalchemy import func, select
 
 from app.client_models import ClientTelegramIdentity, ClientTelegramIdentityStatus
-from app.db import get_session_factory
+from app.db import clear_runtime_caches, get_session_factory
 from app.models import AuditEvent, Client, Service
 from app.services.normalization import normalize_public_name
+
+
+def test_client_surface_is_hidden_when_disabled(
+    client,
+    create_user,
+    client_auth_headers,
+    monkeypatch,
+):
+    create_user()
+    monkeypatch.setenv("CLIENT_API_ENABLED", "false")
+    clear_runtime_caches()
+
+    response = client.get(
+        "/api/v1/client/catalog",
+        headers=client_auth_headers(),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "not_found"
 
 
 def test_client_and_master_keys_are_separated(
@@ -39,6 +58,7 @@ def test_public_catalog_is_owner_scoped_and_hides_internal_fields(
     owner = create_user()
     other_owner = create_user(telegram_user_id=100000002)
     create_service(owner.id, public_name="Маникюр")
+    create_service(owner.id, public_name="Скрытая позиция", is_active=False)
     create_service(other_owner.id, public_name="Чужой прайс")
 
     response = client.get(
@@ -192,6 +212,33 @@ def test_identity_registration_does_not_auto_link_existing_client(
         assert "Анна" not in serialized
         assert audit.actor_user_id is None
         assert audit.safe_changes["actor_type"] == "client_bot"
+
+
+def test_identity_body_cannot_choose_owner_client_or_role(
+    client,
+    create_user,
+    client_auth_headers,
+):
+    create_user()
+
+    response = client.put(
+        "/api/v1/client/identity",
+        headers=client_auth_headers(),
+        json={
+            "requested_public_name": "Анна",
+            "requested_phone": None,
+            "contact_user_id": None,
+            "confirmed": True,
+            "owner_user_id": "00000000-0000-4000-8000-000000000001",
+            "client_id": "00000000-0000-4000-8000-000000000002",
+            "role": "admin",
+        },
+    )
+
+    assert response.status_code == 422
+    with get_session_factory()() as session:
+        count = session.scalar(select(func.count()).select_from(ClientTelegramIdentity))
+        assert count == 0
 
 
 def test_identity_contact_must_belong_to_transport_user(
