@@ -1,7 +1,11 @@
 const TELEGRAM_BOT_USERNAME = "smartnails_bot";
 const LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge";
+const CHALLENGE_POLL_INTERVAL_MS = 4500;
+const CONSUME_RETRY_INTERVAL_MS = 5000;
+const MAX_CONSUME_RATE_LIMIT_RETRIES = 4;
 let challengeRestoreInFlight = false;
 let challengePollInFlight = false;
+let consumeRateLimitRetries = 0;
 let appRenderWrapped = false;
 
 const replacements = new Map([
@@ -79,6 +83,7 @@ function bindChallengeReset(root = document) {
   if (!button || button.dataset.challengeResetBound === "true") return;
   button.dataset.challengeResetBound = "true";
   button.addEventListener("click", () => {
+    consumeRateLimitRetries = 0;
     forgetStoredChallenge();
     releaseInitialSessionCheck();
   }, { once: true });
@@ -95,6 +100,7 @@ function wrapAuthenticatedRender() {
 }
 
 function finishAuthenticatedLogin() {
+  consumeRateLimitRetries = 0;
   forgetStoredChallenge();
   state.challenge = null;
   clearPoll();
@@ -105,27 +111,42 @@ function finishAuthenticatedLogin() {
 async function pollPersistedChallenge() {
   if (!state.challenge || challengePollInFlight) return;
   challengePollInFlight = true;
+  let stage = "poll";
   try {
     const current = await api(`/web/api/auth/challenges/${encodeURIComponent(state.challenge.challenge_id)}`);
     if (current.status === "approved") {
       renderConfirmation("Подтверждение получено. Открываем кабинет…");
+      stage = "consume";
       const result = await api("/web/api/auth/challenges/consume", {
         method: "POST",
         body: JSON.stringify({ challenge_id: state.challenge.challenge_id }),
       });
+      consumeRateLimitRetries = 0;
       if (result.authenticated) return finishAuthenticatedLogin();
     }
     if (["expired", "locked", "denied", "consumed"].includes(current.status)) {
       forgetStoredChallenge();
       return renderLogin("Запрос больше не действует. Начните вход заново.");
     }
-    state.pollTimer = window.setTimeout(pollChallenge, 1800);
+    state.pollTimer = window.setTimeout(pollChallenge, CHALLENGE_POLL_INTERVAL_MS);
   } catch (error) {
     if (error.status === 404) {
       forgetStoredChallenge();
       return renderLogin("Запрос больше не действует. Начните вход заново.");
     }
-    state.pollTimer = window.setTimeout(pollChallenge, 3000);
+    if (stage === "consume" && [429, 503].includes(error.status)) {
+      consumeRateLimitRetries += 1;
+      if (consumeRateLimitRetries > MAX_CONSUME_RATE_LIMIT_RETRIES) {
+        return renderLogin("Не удалось завершить вход из-за временной нагрузки. Начните вход заново.");
+      }
+      renderConfirmation("Сервер занят. Повторяем открытие кабинета…");
+      state.pollTimer = window.setTimeout(pollChallenge, CONSUME_RETRY_INTERVAL_MS);
+      return;
+    }
+    const retryDelay = [429, 503].includes(error.status)
+      ? CHALLENGE_POLL_INTERVAL_MS
+      : 5000;
+    state.pollTimer = window.setTimeout(pollChallenge, retryDelay);
   } finally {
     challengePollInFlight = false;
   }
