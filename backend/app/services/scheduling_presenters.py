@@ -86,7 +86,14 @@ def _presented_price(booking: Booking):
         or booking.price_source == "final_price_unknown"
     ):
         return None
-    return booking.price_amount
+    if booking.price_source == "final_range_lower_bound_unconfirmed":
+        return booking.price_amount
+    if (
+        booking.price_confirmed_at is not None
+        or booking.price_source in {"service_snapshot", "catalog_fixed", "manual_override"}
+    ):
+        return booking.price_amount
+    return None
 
 
 def _presented_price_source(booking: Booking) -> str:
