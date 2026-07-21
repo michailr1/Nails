@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.auth import ClientRequestIdentity
@@ -17,7 +17,7 @@ from app.schemas.client_contour import (
     ClientPublicCatalogResponse,
     ClientPublicSlotsResponse,
 )
-from app.services.scheduling_common import SchedulingDomainError, lock_owner_schedule
+from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_queries import find_free_slots_for_owner
 
 
@@ -74,8 +74,6 @@ def find_public_slots(
         day,
         service_name,
     )
-    if result.service.kind != "base":
-        raise SchedulingDomainError("client_base_service_required")
     return ClientPublicSlotsResponse(
         day=result.day,
         timezone=result.timezone,
@@ -99,6 +97,24 @@ def find_public_slots(
             sort_order=result.service.sort_order,
         ),
         starts_at=result.starts_at,
+    )
+
+
+def _lock_client_identity(
+    session: Session,
+    identity: ClientRequestIdentity,
+) -> None:
+    session.execute(
+        text(
+            "SELECT pg_advisory_xact_lock("
+            "hashtextextended(:identity_key, 1)"
+            ")"
+        ),
+        {
+            "identity_key": (
+                f"{identity.owner_user_id}:{identity.telegram_user_id}"
+            )
+        },
     )
 
 
@@ -160,7 +176,7 @@ def upsert_client_identity(
     if body.contact_user_id is not None and body.contact_user_id != identity.telegram_user_id:
         raise SchedulingDomainError("client_contact_mismatch", status_code=400)
 
-    lock_owner_schedule(session, identity.owner_user_id)
+    _lock_client_identity(session, identity)
     row = _get_identity(session, identity, lock=True)
     created = row is None
     changed_fields: list[str] = []
