@@ -218,8 +218,11 @@ class RetentionTest(unittest.TestCase):
         self.assertIn("location ^~ /web/api/", nginx)
         self.assertIn("resolver 127.0.0.11 valid=10s ipv6=off;", nginx)
         self.assertIn("set $api_upstream http://nails-api:8000;", nginx)
-        self.assertEqual(nginx.count("proxy_pass $api_upstream;"), 2)
-        self.assertNotIn("proxy_pass http://nails-api:8000;", nginx)
+        self.assertNotIn("proxy_pass http://", nginx)
+        self.assertEqual(
+            nginx.count("proxy_pass "),
+            nginx.count("proxy_pass $api_upstream;"),
+        )
         self.assertNotIn("/api/v1/", nginx)
         self.assertIn("client_max_body_size 16k;", nginx)
         self.assertIn("limit_req zone=web_auth", nginx)
