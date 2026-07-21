@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.config import get_settings
-from app.models import Booking, Client, Service
+from app.models import Booking, Client, ClientProfileStatus, Service
 from app.schemas.scheduling_catalog_bookings import CatalogBookingSummary
 from app.schemas.web_read import (
     WebCalendarBooking,
@@ -128,7 +128,10 @@ def list_clients(
 ) -> WebClientListResponse:
     clients = session.scalars(
         select(Client)
-        .where(Client.owner_user_id == identity.user_id)
+        .where(
+            Client.owner_user_id == identity.user_id,
+            Client.profile_status == ClientProfileStatus.active,
+        )
         .order_by(Client.public_name, Client.id)
     ).all()
     return WebClientListResponse(
