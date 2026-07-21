@@ -116,19 +116,14 @@ async function verifyFreshSession() {
 async function finishAuthenticatedLogin() {
   if (loginCompletionInFlight) return;
   loginCompletionInFlight = true;
-  forgetStoredChallenge();
-  state.challenge = null;
   clearPoll();
   renderConfirmation("Проверяем вход…");
+  forgetStoredChallenge();
+  state.challenge = null;
   const verified = await verifyFreshSession();
-  if (verified) {
-    window.__nailsWebAuthBootstrap?.discardSessionCheck();
-    window.location.replace("/web/");
-    return;
-  }
-  loginCompletionInFlight = false;
-  releaseInitialSessionCheck();
-  renderLogin("Подтверждение получено, но браузер не открыл кабинет. Нажмите «Получить число» и повторите вход.");
+  if (!verified) await wait(300);
+  window.__nailsWebAuthBootstrap?.discardSessionCheck();
+  window.location.replace("/web/");
 }
 
 async function pollPersistedChallenge() {
