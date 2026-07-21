@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -175,3 +177,37 @@ def replace_client(
         changed=bool(changed_fields),
         changed_fields=sorted(changed_fields),
     )
+
+
+def archive_client(
+    session: Session,
+    identity: RequestIdentity,
+    client_id: uuid.UUID,
+) -> Client:
+    lock_owner_schedule(session, identity.user_id)
+    client = session.scalar(
+        select(Client)
+        .where(
+            Client.id == client_id,
+            Client.owner_user_id == identity.user_id,
+            Client.profile_status == ClientProfileStatus.active,
+        )
+        .with_for_update()
+    )
+    if client is None:
+        raise SchedulingDomainError("client_not_found", status_code=404)
+
+    client.profile_status = ClientProfileStatus.archived
+    session.add(
+        AuditEvent(
+            owner_user_id=identity.user_id,
+            actor_user_id=identity.user_id,
+            action="client.archived",
+            object_type="client",
+            object_id=client.id,
+            request_id=identity.request_id,
+            safe_changes={"changed_fields": ["profile_status"]},
+        )
+    )
+    session.commit()
+    return client

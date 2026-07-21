@@ -19,6 +19,7 @@ from app.schemas.scheduling_management import ClientCreateRequest, ClientReplace
 from app.schemas.web_read import (
     WebBookingCreateResponse,
     WebCalendarResponse,
+    WebClientArchiveResponse,
     WebClientCard,
     WebClientCreateRequest,
     WebClientCreateResponse,
@@ -29,7 +30,11 @@ from app.schemas.web_read import (
 from app.schemas.web_statistics import WebStatisticsResponse
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_catalog_replace import replace_catalog
-from app.services.scheduling_clients import create_or_reuse_client, replace_client
+from app.services.scheduling_clients import (
+    archive_client,
+    create_or_reuse_client,
+    replace_client,
+)
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_lookup import get_active_client, get_active_client_by_id
 from app.services.scheduling_services import list_services
@@ -200,6 +205,21 @@ def client_replace(
         changed=result.changed,
         changed_fields=result.changed_fields,
     )
+
+
+@router.post("/clients/{client_id}/archive", response_model=WebClientArchiveResponse)
+def client_archive(
+    client_id: uuid.UUID,
+    request: Request,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> WebClientArchiveResponse:
+    validate_web_boundary(request)
+    try:
+        archived = archive_client(session, identity, client_id)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+    return WebClientArchiveResponse(client_id=archived.id, archived=True)
 
 
 @router.get("/services", response_model=ServiceListResponse)
