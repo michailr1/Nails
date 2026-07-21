@@ -62,18 +62,40 @@ def test_web_assets_are_served(client, clean_database):
     assert 'state.view !== "services"' in catalog_editor.text
     assert 'api("/web/api/services")' in catalog_editor.text
     assert 'api("/web/api/services/catalog"' in catalog_editor.text
-    assert "Сохранить весь каталог?" in catalog_editor.text
+    assert "Сохранить прайс?" in catalog_editor.text
     assert "result.verified !== true" in catalog_editor.text
     assert "current → future" not in catalog_editor.text
     assert "Поля цены появятся только когда они нужны." in catalog_editor.text
-    assert "Поля с пометкой «необязательно» можно оставить пустыми." in (
-        catalog_editor.text
-    )
     assert '"sort_order", "Порядок"' not in catalog_editor.text
     assert 'service.price_type === "per_unit"' in catalog_editor.text
     assert 'service.price_type === "range"' in catalog_editor.text
     assert "За что цена" in catalog_editor.text
-    assert "Помогает группировать услуги" in catalog_editor.text
+    assert "SERVICE_CATEGORY_PRESETS" in catalog_editor.text
+    assert '"Маникюр"' in catalog_editor.text
+    assert '"Педикюр"' in catalog_editor.text
+    assert '"Дополнительно"' in catalog_editor.text
+    assert '"Дизайн"' in catalog_editor.text
+    assert '"Парафинотерапия"' in catalog_editor.text
+    assert "Раздел прайса" in catalog_editor.text
+    assert "Выберите раздел или напишите свой" in catalog_editor.text
+    assert "Можно выбрать готовый раздел или написать свой." in catalog_editor.text
+    assert 'appShell("Мой прайс"' in catalog_editor.text
+    assert 'button.textContent = "Мой прайс"' in catalog_editor.text
+    assert "Добавить в прайс" in catalog_editor.text
+    assert "Убрать из прайса" in catalog_editor.text
+    assert "data-remove-service" in catalog_editor.text
+    assert "serviceCatalogDraft.unshift(emptyCatalogService())" in catalog_editor.text
+    assert "scrollIntoView" in catalog_editor.text
+    assert "data-edit-service" in catalog_editor.text
+    assert "renderCatalogList" in catalog_editor.text
+    assert "service.is_active" in catalog_editor.text
+    assert "Добавить услугу" not in catalog_editor.text
+    assert 'button.textContent = "Услуги"' not in catalog_editor.text
+    assert "Резерв до" not in catalog_editor.text
+    assert "Оставить время после" in catalog_editor.text
+    assert "услуга" not in catalog_editor.text.lower()
+    assert "Категория <em>" not in catalog_editor.text
+    assert "Можно выбрать готовую категорию" not in catalog_editor.text
     assert 'TELEGRAM_BOT_USERNAME = "smartnails_bot"' in login_enhancements.text
     assert 'LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge"' in (
         login_enhancements.text
@@ -120,6 +142,8 @@ def test_web_assets_are_served(client, clean_database):
     assert "min-height: 52px" in stylesheet.text
     assert ".mobile-logout" in stylesheet.text
     assert ".catalog-grid" in stylesheet.text
+    assert ".catalog-card-summary" in stylesheet.text
+    assert ".catalog-section" in stylesheet.text
     assert "repeat(3, 1fr)" in stylesheet.text
     assert "display: inline-flex" in stylesheet.text
     assert "--primary" in stylesheet.text

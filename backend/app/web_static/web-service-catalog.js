@@ -1,5 +1,14 @@
 let serviceCatalogDraft = [];
 let serviceCatalogOriginal = [];
+let expandedServiceIndex = null;
+
+const SERVICE_CATEGORY_PRESETS = [
+  "Маникюр",
+  "Педикюр",
+  "Дополнительно",
+  "Дизайн",
+  "Парафинотерапия",
+];
 
 function cloneCatalog(services) {
   return services.map((service) => ({ ...service }));
@@ -16,7 +25,7 @@ function catalogNullableNumber(value) {
 
 function emptyCatalogService() {
   return {
-    public_name: "Новая услуга",
+    public_name: "",
     public_description: null,
     price_amount: 0,
     currency: "RUB",
@@ -46,6 +55,12 @@ function catalogSelect(service, index, name, label, options, help = "") {
   return `<label class="catalog-field"><span>${escapeHtml(label)}</span><select data-service-index="${index}" data-service-field="${name}">${items}</select>${help ? `<small>${escapeHtml(help)}</small>` : ""}</label>`;
 }
 
+function catalogCategoryField(service, index) {
+  const listId = `service-category-${index}`;
+  const options = SERVICE_CATEGORY_PRESETS.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
+  return `<label class="catalog-field"><span>Раздел прайса <em>необязательно</em></span><input data-service-index="${index}" data-service-field="category" type="text" list="${listId}" value="${escapeHtml(service.category ?? "")}" placeholder="Выберите раздел или напишите свой"><datalist id="${listId}">${options}</datalist><small>Помогает собрать позиции в понятные разделы. Можно выбрать готовый раздел или написать свой.</small></label>`;
+}
+
 function servicePriceFields(service, index) {
   if (service.price_type === "range") {
     return `${catalogField(service, index, "price_min_amount", "Цена от, ₽", "number", "Нижняя граница стоимости.")}${catalogField(service, index, "price_max_amount", "Цена до, ₽", "number", "Верхняя граница стоимости.")}`;
@@ -54,7 +69,7 @@ function servicePriceFields(service, index) {
     return `${catalogField(service, index, "price_amount", "Цена, ₽", "number", "Стоимость одной единицы.")}${catalogField(service, index, "price_unit", "За что цена", "text", "Например: за ноготь или за минуту.")}`;
   }
   if (service.price_type === "fixed") {
-    return catalogField(service, index, "price_amount", "Цена, ₽", "number", "Полная стоимость услуги.");
+    return catalogField(service, index, "price_amount", "Цена, ₽", "number", "Полная стоимость позиции.");
   }
   return "";
 }
@@ -62,22 +77,78 @@ function servicePriceFields(service, index) {
 function serviceEditorCard(service, index) {
   const timeFields = service.kind === "addon"
     ? catalogField(service, index, "extra_minutes", "Доп. время, мин", "number", "Насколько дополнение увеличивает запись.", true)
-    : `${catalogField(service, index, "duration_minutes", "Длительность, мин", "number", "Сколько обычно занимает услуга.")}${catalogField(service, index, "buffer_before_minutes", "Резерв до, мин", "number", "Свободное время перед записью.", true)}${catalogField(service, index, "buffer_after_minutes", "Резерв после, мин", "number", "Свободное время после записи.", true)}`;
-  return `<article class="panel catalog-card ${service.is_active ? "" : "catalog-archived"}">
+    : `${catalogField(service, index, "duration_minutes", "Сколько обычно занимает, мин", "number", "Ориентировочное время процедуры.")}${catalogField(service, index, "buffer_after_minutes", "Оставить время после, мин", "number", "На уборку, подготовку или перерыв.", true)}`;
+  return `<article class="panel catalog-card catalog-card-editing" data-service-card="${index}">
     <div class="panel-header">
-      <strong>${escapeHtml(service.public_name || "Новая услуга")}</strong>
-      <label class="catalog-active"><input data-service-index="${index}" data-service-field="is_active" type="checkbox" ${service.is_active ? "checked" : ""}> Активна</label>
+      <strong>${escapeHtml(service.public_name || "Новая позиция")}</strong>
+      <button class="ghost-button catalog-remove" data-remove-service="${index}" type="button">${service.is_new ? "Удалить" : "Убрать из прайса"}</button>
     </div>
     <div class="catalog-grid">
-      ${catalogField(service, index, "public_name", "Название", "text", "Так услуга будет показана в кабинете и записях.")}
+      ${catalogField(service, index, "public_name", "Название", "text", "Так позиция будет показана в прайсе и записях.")}
       ${catalogField(service, index, "public_description", "Описание", "text", "Короткое пояснение для мастера.", true)}
-      ${catalogSelect(service, index, "kind", "Тип услуги", [["base", "Основная"], ["addon", "Дополнение"]], "Дополнение добавляется к основной услуге.")}
+      ${catalogSelect(service, index, "kind", "Позиция в записи", [["base", "Основная процедура"], ["addon", "Дополнение"]], "Дополнение добавляется к основной процедуре.")}
       ${catalogSelect(service, index, "price_type", "Как указана цена", [["fixed", "Фиксированная"], ["range", "Диапазон"], ["per_unit", "За единицу"], ["on_request", "По запросу"]], "Поля цены появятся только когда они нужны.")}
       ${servicePriceFields(service, index)}
       ${timeFields}
-      ${catalogField(service, index, "category", "Категория", "text", "Помогает группировать услуги, например «Маникюр».", true)}
+      ${catalogCategoryField(service, index)}
     </div>
   </article>`;
+}
+
+function catalogPriceSummary(service) {
+  const amount = (value) => `${Number(value || 0).toLocaleString("ru-RU")} ₽`;
+  if (service.price_type === "range") return `${amount(service.price_min_amount)}–${amount(service.price_max_amount)}`;
+  if (service.price_type === "on_request") return "Цена после уточнения";
+  if (service.price_type === "per_unit") return `${amount(service.price_amount)}${service.price_unit ? ` / ${escapeHtml(service.price_unit)}` : ""}`;
+  return amount(service.price_amount);
+}
+
+function catalogTimeSummary(service) {
+  const minutes = service.kind === "addon" ? service.extra_minutes : service.duration_minutes;
+  if (!minutes) return "Время не указано";
+  const hours = Math.floor(Number(minutes) / 60);
+  const remainder = Number(minutes) % 60;
+  if (!hours) return `${remainder} мин`;
+  return remainder ? `${hours} ч ${remainder} мин` : `${hours} ч`;
+}
+
+function serviceSummaryCard(service, index) {
+  return `<article class="panel catalog-card catalog-card-summary" data-service-card="${index}">
+    <div class="catalog-summary-main">
+      <strong>${escapeHtml(service.public_name)}</strong>
+      <span>${catalogPriceSummary(service)}</span>
+      <small>${catalogTimeSummary(service)}${service.kind === "addon" ? " · дополнение" : ""}</small>
+    </div>
+    <div class="catalog-summary-actions">
+      <button class="secondary-button" data-edit-service="${index}" type="button">Изменить</button>
+      <button class="ghost-button catalog-remove" data-remove-service="${index}" type="button">Убрать из прайса</button>
+    </div>
+  </article>`;
+}
+
+function catalogGroups() {
+  const groups = new Map();
+  serviceCatalogDraft.forEach((service, index) => {
+    const category = String(service.category || "").trim() || "Без раздела";
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push({ service, index });
+  });
+  const order = new Map(SERVICE_CATEGORY_PRESETS.map((category, index) => [category, index]));
+  return [...groups.entries()].sort(([left], [right]) => {
+    const leftOrder = left === "Без раздела" ? -1 : (order.get(left) ?? SERVICE_CATEGORY_PRESETS.length);
+    const rightOrder = right === "Без раздела" ? -1 : (order.get(right) ?? SERVICE_CATEGORY_PRESETS.length);
+    return leftOrder - rightOrder || left.localeCompare(right, "ru");
+  });
+}
+
+function renderCatalogList() {
+  if (!serviceCatalogDraft.length) return '<div class="panel empty">В прайсе пока нет позиций.</div>';
+  return catalogGroups().map(([category, items]) => `<section class="catalog-section">
+    <h2>${escapeHtml(category)}</h2>
+    <div class="catalog-section-list">${items.map(({ service, index }) => (
+      index === expandedServiceIndex ? serviceEditorCard(service, index) : serviceSummaryCard(service, index)
+    )).join("")}</div>
+  </section>`).join("");
 }
 
 function bindCatalogFields() {
@@ -106,14 +177,33 @@ function renderServiceCatalogBody(message = "") {
   const content = document.querySelector("#page-content");
   if (!content) return;
   content.innerHTML = `${message ? `<div class="info-note" role="status">${escapeHtml(message)}</div>` : ""}
-    <div class="info-note">Обязательны только основные данные, нужные для выбранного типа услуги и цены. Поля с пометкой «необязательно» можно оставить пустыми. Сохранение применяется ко всему активному каталогу одной операцией.</div>
-    <div class="catalog-actions"><button id="add-service" class="secondary-button" type="button">Добавить услугу</button><button id="save-catalog" class="primary-button" type="button">Проверить и сохранить</button></div>
-    <div class="catalog-list">${serviceCatalogDraft.map(serviceEditorCard).join("")}</div>`;
+    <div class="info-note">Здесь только позиции, которые сейчас входят в прайс. Изменения применяются после проверки и подтверждения.</div>
+    <div class="catalog-actions"><button id="add-service" class="secondary-button" type="button">Добавить в прайс</button><button id="save-catalog" class="primary-button" type="button">Проверить и сохранить</button></div>
+    <div class="catalog-list">${renderCatalogList()}</div>`;
   document.querySelector("#add-service").addEventListener("click", () => {
-    serviceCatalogDraft.push(emptyCatalogService());
+    serviceCatalogDraft.unshift(emptyCatalogService());
+    expandedServiceIndex = 0;
     renderServiceCatalogBody();
+    const nameInput = document.querySelector('[data-service-index="0"][data-service-field="public_name"]');
+    nameInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+    nameInput?.focus({ preventScroll: true });
   });
   document.querySelector("#save-catalog").addEventListener("click", saveServiceCatalog);
+  document.querySelectorAll("[data-edit-service]").forEach((button) => {
+    button.addEventListener("click", () => {
+      expandedServiceIndex = Number(button.dataset.editService);
+      renderServiceCatalogBody();
+      document.querySelector(`[data-service-card="${expandedServiceIndex}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+  document.querySelectorAll("[data-remove-service]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.removeService);
+      serviceCatalogDraft.splice(index, 1);
+      expandedServiceIndex = null;
+      renderServiceCatalogBody(serviceCatalogDraft.length ? "Позиция убрана. Проверьте изменения и сохраните прайс." : "Прайс пуст. Добавьте хотя бы одну позицию перед сохранением.");
+    });
+  });
   bindCatalogFields();
 }
 
@@ -152,18 +242,18 @@ function catalogDiffSummary(future) {
   return [
     created.length ? `Добавить: ${created.join(", ")}` : null,
     changed.length ? `Изменить: ${changed.join(", ")}` : null,
-    archived.length ? `Архивировать: ${archived.join(", ")}` : null,
+    archived.length ? `Убрать из прайса: ${archived.join(", ")}` : null,
   ].filter(Boolean).join("\n") || "Изменений нет.";
 }
 
 async function saveServiceCatalog() {
   document.querySelectorAll("[data-service-field]").forEach((control) => control.dispatchEvent(new Event("change")));
   const activeServices = serviceCatalogDraft.filter((service) => service.is_active).map(normalizeCatalogService);
-  if (!activeServices.length) return window.alert("В каталоге должна остаться хотя бы одна активная услуга.");
-  if (activeServices.some((service) => !service.public_name)) return window.alert("У каждой услуги должно быть название.");
+  if (!activeServices.length) return window.alert("В прайсе должна остаться хотя бы одна позиция.");
+  if (activeServices.some((service) => !service.public_name)) return window.alert("У каждой позиции должно быть название.");
   const summary = catalogDiffSummary(activeServices);
   if (summary === "Изменений нет.") return window.alert(summary);
-  if (!window.confirm(`${summary}\n\nСохранить весь каталог?`)) return;
+  if (!window.confirm(`${summary}\n\nСохранить прайс?`)) return;
   const button = document.querySelector("#save-catalog");
   button.disabled = true;
   button.textContent = "Сохраняем…";
@@ -173,25 +263,26 @@ async function saveServiceCatalog() {
       body: JSON.stringify({ services: activeServices }),
     });
     if (result.verified !== true) throw new Error("unverified_catalog");
-    await renderServices("Каталог сохранён и проверен.");
+    await renderServices("Прайс сохранён и проверен.");
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
-    window.alert("Не удалось сохранить каталог. Проверьте поля и попробуйте ещё раз.");
+    window.alert("Не удалось сохранить прайс. Проверьте поля и попробуйте ещё раз.");
     button.disabled = false;
     button.textContent = "Проверить и сохранить";
   }
 }
 
 async function renderServices(message = "") {
-  appShell("Услуги", `<div class="loading-state">Загружаем каталог…</div>`);
+  appShell("Мой прайс", `<div class="loading-state">Загружаем прайс…</div>`);
   try {
     const data = await api("/web/api/services");
     serviceCatalogOriginal = cloneCatalog(data.services);
-    serviceCatalogDraft = cloneCatalog(data.services);
+    serviceCatalogDraft = cloneCatalog(data.services.filter((service) => service.is_active));
+    expandedServiceIndex = null;
     renderServiceCatalogBody(message);
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
-    document.querySelector("#page-content").innerHTML = `<div class="panel error-state"><strong>Не удалось загрузить услуги</strong><button id="retry-services" class="secondary-button">Повторить</button></div>`;
+    document.querySelector("#page-content").innerHTML = `<div class="panel error-state"><strong>Не удалось загрузить прайс</strong><button id="retry-services" class="secondary-button">Повторить</button></div>`;
     document.querySelector("#retry-services").addEventListener("click", () => renderServices());
   }
 }
@@ -204,7 +295,7 @@ appShell = function catalogAppShell(title, body) {
   const button = document.createElement("button");
   button.className = `tab-button ${state.view === "services" ? "active" : ""}`;
   button.dataset.view = "services";
-  button.textContent = "Услуги";
+  button.textContent = "Мой прайс";
   button.addEventListener("click", () => {
     state.view = "services";
     renderApp();
