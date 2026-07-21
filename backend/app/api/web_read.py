@@ -10,16 +10,25 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity
 from app.db import get_db_session
 from app.schemas.scheduling import ServiceListResponse
+from app.schemas.scheduling_catalog_bookings import CatalogBookingCreateRequest
 from app.schemas.scheduling_catalog_replace import (
     CatalogReplaceRequest,
     CatalogReplaceResponse,
 )
-from app.schemas.web_read import WebCalendarResponse, WebClientCard, WebClientListResponse
+from app.schemas.web_read import (
+    WebBookingCreateResponse,
+    WebCalendarResponse,
+    WebClientCard,
+    WebClientListResponse,
+)
+from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_catalog_replace import replace_catalog
+from app.services.scheduling_common import SchedulingDomainError
+from app.services.scheduling_lookup import get_active_client
 from app.services.scheduling_services import list_services
 from app.services.web_auth import require_web_session_identity, validate_web_boundary
 from app.services.web_export import export_all_calendar, export_calendar, export_clients
-from app.services.web_read import list_calendar, list_clients
+from app.services.web_read import list_calendar, list_clients, web_booking_summary
 
 router = APIRouter(prefix="/web/api", tags=["web-read"])
 SessionDependency = Annotated[Session, Depends(get_db_session)]
@@ -34,6 +43,13 @@ def require_web_identity(
 
 IdentityDependency = Annotated[RequestIdentity, Depends(require_web_identity)]
 ExportFormat = Literal["csv", "xlsx"]
+
+
+def _translate_domain_error(exc: SchedulingDomainError) -> HTTPException:
+    detail: dict[str, object] = {"code": exc.code}
+    if exc.details is not None:
+        detail["details"] = exc.details
+    return HTTPException(status_code=exc.status_code, detail=detail)
 
 
 def _calendar(
@@ -107,6 +123,29 @@ def service_catalog_replace(
 ) -> CatalogReplaceResponse:
     validate_web_boundary(request)
     return replace_catalog(session, identity, body)
+
+
+@router.post("/bookings", response_model=WebBookingCreateResponse)
+def booking_create(
+    body: CatalogBookingCreateRequest,
+    request: Request,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> WebBookingCreateResponse:
+    validate_web_boundary(request)
+    try:
+        client = get_active_client(
+            session,
+            identity.user_id,
+            body.client_public_name,
+        )
+        result = create_booking(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+    return WebBookingCreateResponse(
+        booking=web_booking_summary(result.booking, client_id=client.id),
+        created=result.created,
+    )
 
 
 @router.post("/exports/calendar")
