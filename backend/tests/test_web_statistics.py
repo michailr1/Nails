@@ -18,11 +18,13 @@ class _Rows:
 
 
 class _Session:
-    def __init__(self, rows):
-        self._rows = rows
+    def __init__(self, rows, history_rows=()):
+        self._responses = iter((rows, history_rows))
+        self.statements = []
 
-    def execute(self, _statement):
-        return _Rows(self._rows)
+    def execute(self, statement):
+        self.statements.append(statement)
+        return _Rows(next(self._responses))
 
 
 def _booking(
@@ -93,9 +95,12 @@ def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
             service,
         ),
     ]
+    history_rows = [
+        (client_id, "Анна", 3, datetime(2026, 7, 21, 11, 0, tzinfo=UTC))
+    ]
 
     result = web_statistics.get_statistics(
-        _Session(rows),
+        _Session(rows, history_rows),
         SimpleNamespace(user_id=owner_id),
         date_from=datetime(2026, 7, 21).date(),
         date_to=datetime(2026, 7, 21).date(),
@@ -113,6 +118,8 @@ def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
     assert result.procedures[0].visits_count == 2
     assert result.addons[0].name == "Снятие"
     assert result.clients[0].revenue_amount == Decimal("5800.00")
+    assert result.clients[0].last_visit_date.isoformat() == "2026-07-21"
+    assert result.long_absent_clients == []
 
 
 def test_statistics_excludes_cancelled_and_no_show_and_keeps_unknown_price_visible(
@@ -175,3 +182,46 @@ def test_statistics_excludes_cancelled_and_no_show_and_keeps_unknown_price_visib
     assert result.summary.no_show_count == 1
     assert result.summary.unknown_price_count == 1
     assert result.summary.average_check_amount is None
+
+
+def test_long_absent_list_is_rhythm_based_and_self_cleaning(monkeypatch):
+    monkeypatch.setattr(
+        web_statistics,
+        "get_settings",
+        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
+    )
+    current = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
+    eligible_id = uuid.uuid4()
+    one_visit_id = uuid.uuid4()
+    recent_id = uuid.uuid4()
+    faded_id = uuid.uuid4()
+    boundary_id = uuid.uuid4()
+    history_rows = [
+        (eligible_id, "Анна", 2, datetime(2026, 5, 20, 9, 0, tzinfo=UTC)),
+        (one_visit_id, "Разовая", 1, datetime(2026, 5, 20, 9, 0, tzinfo=UTC)),
+        (recent_id, "Недавно", 4, datetime(2026, 6, 20, 9, 0, tzinfo=UTC)),
+        (faded_id, "Давно ушла", 8, datetime(2026, 3, 1, 9, 0, tzinfo=UTC)),
+        (boundary_id, "На пороге", 3, datetime(2026, 6, 10, 9, 0, tzinfo=UTC)),
+    ]
+    session = _Session([], history_rows)
+
+    result = web_statistics.get_statistics(
+        session,
+        SimpleNamespace(user_id=uuid.uuid4()),
+        date_from=current.date(),
+        date_to=current.date(),
+        now=current,
+    )
+
+    assert result.long_absent_after_days == 42
+    assert result.long_absent_decay_days == 120
+    assert [item.client_id for item in result.long_absent_clients] == [eligible_id]
+    assert result.long_absent_clients[0].last_visit_date.isoformat() == "2026-05-20"
+    assert result.long_absent_clients[0].days_since_last_visit == 63
+    assert result.long_absent_clients[0].visits_count == 2
+
+    history_sql = str(session.statements[1])
+    assert "clients.profile_status" in history_sql
+    assert "clients.owner_user_id" in history_sql
+    assert "bookings.owner_user_id" in history_sql
+    assert "bookings.status" in history_sql
