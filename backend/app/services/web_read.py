@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.config import get_settings
-from app.models import Booking, Client, Service
+from app.models import Booking, BookingStatus, Client, Service
 from app.schemas.scheduling_catalog_bookings import CatalogBookingSummary
 from app.schemas.web_read import (
     WebCalendarBooking,
@@ -67,6 +67,21 @@ def web_booking_summary(
     )
 
 
+def _web_calendar_summary(
+    booking: Booking,
+    client: Client,
+    service: Service,
+    timezone: ZoneInfo,
+) -> CatalogBookingSummary:
+    summary = booking_summary(booking, client, service, timezone)
+    if (
+        booking.status == BookingStatus.no_show
+        or booking.price_source == "final_price_unknown"
+    ):
+        return summary
+    return summary.model_copy(update={"price_amount": booking.price_amount})
+
+
 def web_client_card(client: Client) -> WebClientCard:
     return WebClientCard(
         client_id=client.id,
@@ -114,7 +129,7 @@ def list_calendar(
         timezone=timezone_name,
         bookings=[
             web_booking_summary(
-                booking_summary(booking, client, service, timezone),
+                _web_calendar_summary(booking, client, service, timezone),
                 client_id=client.id,
             )
             for booking, client, service in rows
