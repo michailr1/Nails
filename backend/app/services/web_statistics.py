@@ -174,7 +174,11 @@ def get_statistics(
             client_value["revenue"] += amount
             client_value["priced_visits"] += 1
 
-    average_check = _money(revenue / (visits_count - unknown_price_count)) if visits_count > unknown_price_count else None
+    average_check = (
+        _money(revenue / (visits_count - unknown_price_count))
+        if visits_count > unknown_price_count
+        else None
+    )
 
     days: list[WebStatisticsDay] = []
     day = date_from
@@ -214,7 +218,13 @@ def get_statistics(
                 ),
             )
         )
-    clients.sort(key=lambda item: (-item.revenue_amount, -item.visits_count, item.client_name.casefold()))
+    clients.sort(
+        key=lambda item: (
+            -item.revenue_amount,
+            -item.visits_count,
+            item.client_name.casefold(),
+        )
+    )
 
     return WebStatisticsResponse(
         date_from=date_from,
