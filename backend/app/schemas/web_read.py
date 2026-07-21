@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.scheduling import ServicePriceTypeValue
 
@@ -57,3 +57,32 @@ class WebClientCard(BaseModel):
 
 class WebClientListResponse(BaseModel):
     clients: list[WebClientCard]
+
+
+class WebClientCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    public_name: str = Field(min_length=1, max_length=160)
+    phone: str | None = Field(default=None, max_length=32)
+
+    @field_validator("public_name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("public_name must not be empty")
+        return candidate
+
+    @field_validator("phone")
+    @classmethod
+    def normalize_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = " ".join(value.split())
+        return candidate or None
+
+
+class WebClientCreateResponse(BaseModel):
+    client: WebClientCard
+    created: bool
+    contact_added: bool = False
