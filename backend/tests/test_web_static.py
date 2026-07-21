@@ -83,12 +83,21 @@ def test_web_assets_are_served(client, clean_database):
     assert 'button.textContent = "Мой прайс"' in catalog_editor.text
     assert "Добавить в прайс" in catalog_editor.text
     assert "Убрать из прайса" in catalog_editor.text
+    assert "Убрано из прайса" in catalog_editor.text
+    assert "Вернуть в прайс" in catalog_editor.text
     assert "data-remove-service" in catalog_editor.text
+    assert "data-restore-service" in catalog_editor.text
+    assert "removedCatalogServices" in catalog_editor.text
+    assert "removedCatalogExpanded" in catalog_editor.text
     assert "serviceCatalogDraft.unshift(emptyCatalogService())" in catalog_editor.text
+    assert "serviceCatalogDraft.unshift({ ...original, is_active: true })" in (
+        catalog_editor.text
+    )
     assert "scrollIntoView" in catalog_editor.text
     assert "data-edit-service" in catalog_editor.text
     assert "renderCatalogList" in catalog_editor.text
     assert "service.is_active" in catalog_editor.text
+    assert 'restored.length ? `Вернуть в прайс:' in catalog_editor.text
     assert "Добавить услугу" not in catalog_editor.text
     assert 'button.textContent = "Услуги"' not in catalog_editor.text
     assert "Резерв до" not in catalog_editor.text
