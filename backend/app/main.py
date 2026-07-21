@@ -14,6 +14,7 @@ from app.api.scheduling_catalog_batch import router as scheduling_catalog_batch_
 from app.api.scheduling_digest import router as scheduling_digest_router
 from app.api.web_auth import router as web_auth_router
 from app.api.web_auth_conversation import router as web_auth_conversation_router
+from app.api.web_booking_mutations import router as web_booking_mutations_router
 from app.api.web_read import router as web_read_router
 from app.config import get_settings
 from app.db import get_engine
@@ -89,6 +90,7 @@ app.include_router(feedback_router)
 app.include_router(web_auth_router)
 app.include_router(web_auth_conversation_router)
 app.include_router(web_read_router)
+app.include_router(web_booking_mutations_router)
 app.mount(
     "/web",
     StaticFiles(directory=_WEB_STATIC_DIR, html=True),
