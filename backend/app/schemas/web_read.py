@@ -88,6 +88,11 @@ class WebClientCreateResponse(BaseModel):
     contact_added: bool = False
 
 
+class WebClientArchiveResponse(BaseModel):
+    client_id: uuid.UUID
+    archived: bool
+
+
 class WebClientReplaceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
