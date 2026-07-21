@@ -15,7 +15,7 @@ from app.schemas.scheduling_catalog_replace import (
     CatalogReplaceRequest,
     CatalogReplaceResponse,
 )
-from app.schemas.scheduling_management import ClientCreateRequest
+from app.schemas.scheduling_management import ClientCreateRequest, ClientReplaceRequest
 from app.schemas.web_read import (
     WebBookingCreateResponse,
     WebCalendarResponse,
@@ -23,12 +23,14 @@ from app.schemas.web_read import (
     WebClientCreateRequest,
     WebClientCreateResponse,
     WebClientListResponse,
+    WebClientReplaceRequest,
+    WebClientReplaceResponse,
 )
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_catalog_replace import replace_catalog
-from app.services.scheduling_clients import create_or_reuse_client
+from app.services.scheduling_clients import create_or_reuse_client, replace_client
 from app.services.scheduling_common import SchedulingDomainError
-from app.services.scheduling_lookup import get_active_client
+from app.services.scheduling_lookup import get_active_client, get_active_client_by_id
 from app.services.scheduling_services import list_services
 from app.services.web_auth import require_web_session_identity, validate_web_boundary
 from app.services.web_export import export_all_calendar, export_calendar, export_clients
@@ -132,13 +134,48 @@ def client_card(
     session: SessionDependency,
     identity: IdentityDependency,
 ) -> WebClientCard:
-    data = list_clients(session, identity)
-    for client in data.clients:
-        if client.client_id == client_id:
-            return client
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail={"code": "client_not_found"},
+    try:
+        client = get_active_client_by_id(session, identity.user_id, client_id)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+    return web_client_card(client)
+
+
+@router.put("/clients/{client_id}", response_model=WebClientReplaceResponse)
+def client_replace(
+    client_id: uuid.UUID,
+    body: WebClientReplaceRequest,
+    request: Request,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> WebClientReplaceResponse:
+    validate_web_boundary(request)
+    try:
+        current = get_active_client_by_id(session, identity.user_id, client_id)
+        result = replace_client(
+            session,
+            identity,
+            ClientReplaceRequest(
+                current_public_name=current.public_name,
+                public_name=body.public_name,
+                phone=body.phone,
+                private_alias=current.private_alias,
+                contact_channel=body.contact_channel,
+                birthday=body.birthday,
+                notes=body.notes,
+                nail_skin_notes=body.nail_skin_notes,
+                sensitivity_notes=body.sensitivity_notes,
+                style_preferences=body.style_preferences,
+                communication_preferences=body.communication_preferences,
+            ),
+        )
+        updated = get_active_client_by_id(session, identity.user_id, client_id)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+    return WebClientReplaceResponse(
+        client=web_client_card(updated),
+        changed=result.changed,
+        changed_fields=result.changed_fields,
     )
 
 
