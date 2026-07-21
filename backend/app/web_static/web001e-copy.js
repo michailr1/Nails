@@ -2,6 +2,7 @@ const TELEGRAM_BOT_USERNAME = "smartnails_bot";
 const LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge";
 let challengeRestoreInFlight = false;
 let challengePollInFlight = false;
+let loginCompletionInFlight = false;
 let appRenderWrapped = false;
 
 const replacements = new Map([
@@ -94,12 +95,40 @@ function wrapAuthenticatedRender() {
   appRenderWrapped = true;
 }
 
-function finishAuthenticatedLogin() {
+function wait(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function verifyFreshSession() {
+  const verifySession = window.__nailsWebAuthBootstrap?.verifySession;
+  if (typeof verifySession !== "function") return false;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const response = await verifySession();
+      if (response.ok) return true;
+      if (response.status !== 401) return false;
+    } catch {}
+    await wait(250 * (attempt + 1));
+  }
+  return false;
+}
+
+async function finishAuthenticatedLogin() {
+  if (loginCompletionInFlight) return;
+  loginCompletionInFlight = true;
   forgetStoredChallenge();
   state.challenge = null;
   clearPoll();
-  const resumedInitialRender = releaseInitialSessionCheck();
-  if (!resumedInitialRender) renderApp();
+  renderConfirmation("Проверяем вход…");
+  const verified = await verifyFreshSession();
+  if (verified) {
+    window.__nailsWebAuthBootstrap?.discardSessionCheck();
+    window.location.replace("/web/");
+    return;
+  }
+  loginCompletionInFlight = false;
+  releaseInitialSessionCheck();
+  renderLogin("Подтверждение получено, но браузер не открыл кабинет. Нажмите «Получить число» и повторите вход.");
 }
 
 async function pollPersistedChallenge() {
