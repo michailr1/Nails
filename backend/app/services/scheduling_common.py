@@ -131,7 +131,7 @@ def ceil_to_step(value: datetime, step_minutes: int) -> datetime:
 
 def _booking_addon_names(booking: Booking) -> list[str]:
     addon_names: list[str] = []
-    for item in booking.catalog_items_snapshot:
+    for item in booking.catalog_items_snapshot or []:
         if not isinstance(item, dict) or item.get("kind") != "addon":
             continue
         public_name = item.get("public_name")
