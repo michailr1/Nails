@@ -12,6 +12,18 @@ window.__nailsWebAuthBootstrap = {
     nativeFetch(input, options).then(resolve, reject);
     return true;
   },
+  discardSessionCheck() {
+    gateSessionBootstrap = false;
+    gatedSessionRequest = null;
+  },
+  verifySession() {
+    return nativeFetch("/web/api/auth/session", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+  },
 };
 
 window.fetch = (input, options = {}) => {
