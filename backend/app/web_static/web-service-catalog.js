@@ -1,6 +1,7 @@
 let serviceCatalogDraft = [];
 let serviceCatalogOriginal = [];
 let expandedServiceIndex = null;
+let removedCatalogExpanded = false;
 
 const SERVICE_CATEGORY_PRESETS = [
   "Маникюр",
@@ -141,6 +142,23 @@ function catalogGroups() {
   });
 }
 
+function removedCatalogServices() {
+  const draftNames = new Set(serviceCatalogDraft.map((service) => service.public_name));
+  return serviceCatalogOriginal.filter((service) => !draftNames.has(service.public_name));
+}
+
+function renderRemovedCatalog() {
+  const removed = removedCatalogServices();
+  if (!removed.length) return "";
+  return `<details class="panel catalog-removed" ${removedCatalogExpanded ? "open" : ""}>
+    <summary>Убрано из прайса · ${removed.length}</summary>
+    <div class="catalog-removed-list">${removed.map((service) => `<div class="catalog-removed-item">
+      <div><strong>${escapeHtml(service.public_name)}</strong><small>${escapeHtml(service.category || "Без раздела")}</small></div>
+      <button class="secondary-button" data-restore-service="${escapeHtml(service.public_name)}" type="button">Вернуть в прайс</button>
+    </div>`).join("")}</div>
+  </details>`;
+}
+
 function renderCatalogList() {
   if (!serviceCatalogDraft.length) return '<div class="panel empty">В прайсе пока нет позиций.</div>';
   return catalogGroups().map(([category, items]) => `<section class="catalog-section">
@@ -179,7 +197,8 @@ function renderServiceCatalogBody(message = "") {
   content.innerHTML = `${message ? `<div class="info-note" role="status">${escapeHtml(message)}</div>` : ""}
     <div class="info-note">Здесь только позиции, которые сейчас входят в прайс. Изменения применяются после проверки и подтверждения.</div>
     <div class="catalog-actions"><button id="add-service" class="secondary-button" type="button">Добавить в прайс</button><button id="save-catalog" class="primary-button" type="button">Проверить и сохранить</button></div>
-    <div class="catalog-list">${renderCatalogList()}</div>`;
+    <div class="catalog-list">${renderCatalogList()}</div>
+    ${renderRemovedCatalog()}`;
   document.querySelector("#add-service").addEventListener("click", () => {
     serviceCatalogDraft.unshift(emptyCatalogService());
     expandedServiceIndex = 0;
@@ -202,6 +221,19 @@ function renderServiceCatalogBody(message = "") {
       serviceCatalogDraft.splice(index, 1);
       expandedServiceIndex = null;
       renderServiceCatalogBody(serviceCatalogDraft.length ? "Позиция убрана. Проверьте изменения и сохраните прайс." : "Прайс пуст. Добавьте хотя бы одну позицию перед сохранением.");
+    });
+  });
+  document.querySelector(".catalog-removed")?.addEventListener("toggle", (event) => {
+    removedCatalogExpanded = event.currentTarget.open;
+  });
+  document.querySelectorAll("[data-restore-service]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const original = serviceCatalogOriginal.find((service) => service.public_name === button.dataset.restoreService);
+      if (!original) return;
+      serviceCatalogDraft.unshift({ ...original, is_active: true });
+      expandedServiceIndex = null;
+      removedCatalogExpanded = true;
+      renderServiceCatalogBody("Позиция возвращена. Проверьте изменения и сохраните прайс.");
     });
   });
   bindCatalogFields();
@@ -236,13 +268,15 @@ function catalogDiffSummary(future) {
   const created = future.filter((item) => !originalByName.has(item.public_name)).map((item) => item.public_name);
   const changed = future.filter((item) => {
     const original = originalByName.get(item.public_name);
-    return original && JSON.stringify(normalizeCatalogService(original)) !== JSON.stringify(item);
+    return original && original.is_active && JSON.stringify(normalizeCatalogService(original)) !== JSON.stringify(item);
   }).map((item) => item.public_name);
   const archived = serviceCatalogOriginal.filter((item) => item.is_active && !futureNames.has(item.public_name)).map((item) => item.public_name);
+  const restored = serviceCatalogOriginal.filter((item) => !item.is_active && futureNames.has(item.public_name)).map((item) => item.public_name);
   return [
     created.length ? `Добавить: ${created.join(", ")}` : null,
     changed.length ? `Изменить: ${changed.join(", ")}` : null,
     archived.length ? `Убрать из прайса: ${archived.join(", ")}` : null,
+    restored.length ? `Вернуть в прайс: ${restored.join(", ")}` : null,
   ].filter(Boolean).join("\n") || "Изменений нет.";
 }
 
@@ -279,6 +313,7 @@ async function renderServices(message = "") {
     serviceCatalogOriginal = cloneCatalog(data.services);
     serviceCatalogDraft = cloneCatalog(data.services.filter((service) => service.is_active));
     expandedServiceIndex = null;
+    removedCatalogExpanded = false;
     renderServiceCatalogBody(message);
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
