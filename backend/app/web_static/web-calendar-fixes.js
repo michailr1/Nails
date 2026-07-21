@@ -15,6 +15,12 @@ function bookingDisplayPrice(booking) {
   return "Цена после уточнения";
 }
 
+function bookingStatusBadge(status) {
+  if (status === "cancelled") return '<span class="badge">Отменена</span>';
+  if (status === "no_show") return '<span class="badge">Не пришла</span>';
+  return "";
+}
+
 bookingCard = function bookingCardWithKnownPrice(booking, timezone) {
   const start = new Date(booking.starts_at);
   const end = new Date(booking.ends_at);
@@ -25,7 +31,7 @@ bookingCard = function bookingCardWithKnownPrice(booking, timezone) {
   });
   return `<article class="booking">
     <div class="time">${escapeHtml(format.format(start))}</div>
-    <div><h3>${escapeHtml(booking.client_name)}</h3><p>${escapeHtml(booking.service_name)} · до ${escapeHtml(format.format(end))}</p><span class="badge">${escapeHtml(booking.status)}</span></div>
+    <div><h3>${escapeHtml(booking.client_name)}</h3><p>${escapeHtml(booking.service_name)} · до ${escapeHtml(format.format(end))}</p>${bookingStatusBadge(booking.status)}</div>
     <div class="price">${escapeHtml(bookingDisplayPrice(booking))}</div>
   </article>`;
 };
