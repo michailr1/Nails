@@ -2,6 +2,7 @@ const statisticsState = {
   mode: "month",
   dateFrom: null,
   dateTo: null,
+  focusLongAbsent: false,
 };
 
 const originalAppShellForStatistics = appShell;
@@ -15,6 +16,7 @@ appShell = function appShellWithStatistics(title, body) {
   button.type = "button";
   button.textContent = "Статистика";
   button.addEventListener("click", () => {
+    statisticsState.focusLongAbsent = false;
     state.view = "statistics";
     renderApp();
   });
@@ -125,6 +127,22 @@ function clientRows(clients) {
     </div>`).join("")}</div>`;
 }
 
+function weeksSince(days) {
+  const weeks = Math.max(1, Math.floor(Number(days) / 7));
+  return `${weeks} ${weeks % 10 === 1 && weeks % 100 !== 11 ? "неделю" : weeks % 10 >= 2 && weeks % 10 <= 4 && (weeks % 100 < 10 || weeks % 100 >= 20) ? "недели" : "недель"}`;
+}
+
+function longAbsentRows(clients) {
+  if (!clients.length) {
+    return '<p class="muted statistics-empty">Сейчас таких клиенток нет.</p>';
+  }
+  return `<div class="long-absent-list">${clients.map((client) => `
+    <div class="long-absent-row">
+      <strong>${escapeHtml(client.client_name)}</strong>
+      <span>Последний раз ${escapeHtml(dateLabel(client.last_visit_date, { day: "numeric", month: "long", year: "numeric" }))} · ${escapeHtml(weeksSince(client.days_since_last_visit))} назад</span>
+    </div>`).join("")}</div>`;
+}
+
 function statisticsNotice(summary) {
   const parts = [];
   if (summary.assumed_visits_count) parts.push(`${summary.assumed_visits_count} визит(а) учтены автоматически`);
@@ -133,6 +151,42 @@ function statisticsNotice(summary) {
   return `<p class="statistics-notice">${escapeHtml(parts.join(" · "))}</p>`;
 }
 
+function longAbsentInsightText(clients) {
+  if (!clients.length) return "";
+  const count = clients.length;
+  const noun = count === 1 ? "клиентка давно не была" : count >= 2 && count <= 4 ? "клиентки давно не были" : "клиенток давно не были";
+  return `${count} ${noun} — посмотреть`;
+}
+
+async function addLongAbsentCalendarInsight() {
+  const page = document.querySelector("#page-content");
+  if (!page || state.view !== "calendar") return;
+  const today = todayInTimezone(APP_TIMEZONE);
+  try {
+    const payload = await api(`/web/api/statistics?date_from=${today}&date_to=${today}`);
+    const clients = payload.long_absent_clients || [];
+    if (!clients.length || state.view !== "calendar") return;
+    const insight = document.createElement("button");
+    insight.className = "naily-insight";
+    insight.type = "button";
+    insight.innerHTML = `<span class="naily-insight-label">Нэйли заметила</span><strong>${escapeHtml(longAbsentInsightText(clients))}</strong><span aria-hidden="true">→</span>`;
+    insight.addEventListener("click", () => {
+      statisticsState.focusLongAbsent = true;
+      state.view = "statistics";
+      renderApp();
+    });
+    page.prepend(insight);
+  } catch (error) {
+    if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
+  }
+}
+
+const originalRenderCalendarForStatistics = renderCalendar;
+renderCalendar = async function renderCalendarWithStatisticsInsight() {
+  await originalRenderCalendarForStatistics();
+  await addLongAbsentCalendarInsight();
+};
+
 async function renderStatistics() {
   const range = statisticsRange();
   appShell("Статистика", `<div class="loading-state">Загружаем статистику…</div>`);
@@ -140,6 +194,7 @@ async function renderStatistics() {
   actions.innerHTML = statisticsModeSwitch();
   document.querySelectorAll("[data-statistics-mode]").forEach((button) => {
     button.addEventListener("click", () => {
+      statisticsState.focusLongAbsent = false;
       statisticsState.mode = button.dataset.statisticsMode;
       if (statisticsState.mode === "custom" && !statisticsState.dateFrom) {
         statisticsState.dateFrom = addDays(todayInTimezone(APP_TIMEZONE), -30);
@@ -153,6 +208,10 @@ async function renderStatistics() {
     const payload = await api(`/web/api/statistics?date_from=${range.dateFrom}&date_to=${range.dateTo}`);
     const summary = payload.summary;
     document.querySelector("#page-content").innerHTML = `
+      <section id="long-absent" class="panel statistics-panel statistics-panel-wide long-absent-panel" tabindex="-1">
+        <div class="statistics-section-title"><span>Нэйли подсказывает</span><h2>Давно не были</h2></div>
+        ${longAbsentRows(payload.long_absent_clients || [])}
+      </section>
       ${statisticsCustomRange(range)}
       <p class="statistics-period">${escapeHtml(dateLabel(range.dateFrom, { day: "numeric", month: "long", year: "numeric" }))} — ${escapeHtml(dateLabel(range.dateTo, { day: "numeric", month: "long", year: "numeric" }))}</p>
       <section class="statistics-cards">
@@ -179,6 +238,12 @@ async function renderStatistics() {
       }
       renderStatistics();
     });
+    if (statisticsState.focusLongAbsent) {
+      statisticsState.focusLongAbsent = false;
+      const target = document.querySelector("#long-absent");
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      target?.focus({ preventScroll: true });
+    }
   } catch (error) {
     if (error.status === 401) return renderLogin();
     document.querySelector("#page-content").innerHTML = '<div class="empty-state"><h2>Не удалось загрузить статистику</h2><p class="muted">Попробуйте обновить страницу.</p></div>';
