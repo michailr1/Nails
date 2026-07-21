@@ -1,0 +1,209 @@
+.statistics-mode-switch {
+  flex-wrap: wrap;
+}
+
+.statistics-period {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.statistics-range-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.statistics-range-form label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.statistics-range-form input {
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  padding: 0 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.statistics-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.statistic-card {
+  min-height: 8.75rem;
+}
+
+.statistic-card > strong {
+  display: block;
+  margin: 0.5rem 0;
+  font-size: clamp(1.55rem, 3vw, 2.4rem);
+  line-height: 1;
+}
+
+.statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.statistics-panel {
+  min-width: 0;
+}
+
+.statistics-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.statistics-panel h2 {
+  margin: 0.25rem 0 0;
+}
+
+.statistics-bars {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.statistics-bar-row {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.statistics-bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.92rem;
+}
+
+.statistics-bar-label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statistics-bar-track {
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.statistics-bar-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #c4748a, #e3a4b4);
+}
+
+.revenue-chart {
+  display: flex;
+  min-height: 17rem;
+  gap: 0.55rem;
+  align-items: end;
+  overflow-x: auto;
+  padding: 2.75rem 0.25rem 0.25rem;
+}
+
+.revenue-column {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-items: end;
+  flex: 1 0 2.5rem;
+  height: 13rem;
+  text-align: center;
+}
+
+.revenue-column-bar {
+  display: block;
+  min-height: 0.25rem;
+  border-radius: 0.8rem 0.8rem 0.25rem 0.25rem;
+  background: linear-gradient(180deg, #c4748a, #e7b2bf);
+}
+
+.revenue-column-value {
+  position: absolute;
+  inset: -2rem 50% auto auto;
+  transform: translateX(50%);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.revenue-column-day {
+  margin-top: 0.45rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.statistics-client-list {
+  display: grid;
+}
+
+.statistics-client-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: center;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.statistics-client-row:last-child {
+  border-bottom: 0;
+}
+
+.statistics-client-row p {
+  margin: 0.2rem 0 0;
+}
+
+.statistics-rank {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-soft);
+  font-weight: 700;
+}
+
+@media (max-width: 980px) {
+  .statistics-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .statistics-range-form,
+  .statistics-cards,
+  .statistics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .statistics-panel-wide {
+    grid-column: auto;
+  }
+
+  .statistics-range-form .secondary-button {
+    width: 100%;
+  }
+
+  .statistics-client-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .statistics-client-row > strong:last-child {
+    grid-column: 2;
+  }
+}
