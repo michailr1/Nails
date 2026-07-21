@@ -24,14 +24,20 @@
 .client-card-field input:focus,
 .client-card-field textarea:focus { outline: 2px solid rgba(197,130,131,.28); border-color: var(--primary); }
 .client-card-status { min-height: 1.3em; margin: 0; color: var(--danger); font-size: .84rem; }
-.client-card-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.client-card-actions { display: flex; justify-content: flex-end; gap: 10px; align-items: center; }
 .client-card-actions .primary-button { width: auto; }
+.client-card-actions-spacer { flex: 1 1 auto; }
+.danger-button { min-height: 44px; padding: 0 16px; border: 1px solid rgba(169,61,61,.35); border-radius: 12px; background: transparent; color: var(--danger); font: inherit; font-weight: 650; }
+.danger-button:hover { background: rgba(169,61,61,.08); }
+.client-create-panel { border-color: rgba(197,130,131,.45); }
 
 @media (max-width: 760px) {
   .client-card-field-grid,
   .client-card-section-grid { grid-template-columns: 1fr; }
   .client-card-form { padding: 16px; }
   .client-card-actions { display: grid; grid-template-columns: 1fr 1.4fr; }
+  .client-card-actions-split { grid-template-columns: 1fr 1fr; }
+  .client-card-actions-spacer { display: none; }
   .client-card-actions .primary-button { width: 100%; }
   .client-card-open { min-height: 78px; padding: 15px 16px; }
 }
