@@ -1,10 +1,18 @@
 function bookingDisplayPrice(booking) {
-  if (booking.price_amount === null || booking.price_amount === undefined || booking.price_amount === "") {
-    return "Цена после уточнения";
+  const hasExactPrice = booking.price_amount !== null
+    && booking.price_amount !== undefined
+    && booking.price_amount !== "";
+  if (hasExactPrice) {
+    const formatted = formatMoney(booking.price_amount, booking.currency);
+    if (booking.price_confirmed || booking.price_type === "fixed") return formatted;
+    return `от ${formatted}`;
   }
-  const formatted = formatMoney(booking.price_amount, booking.currency);
-  if (booking.price_confirmed || booking.price_type === "fixed") return formatted;
-  return `от ${formatted}`;
+
+  const hasMinimum = booking.price_min_amount !== null
+    && booking.price_min_amount !== undefined
+    && booking.price_min_amount !== "";
+  if (hasMinimum) return `от ${formatMoney(booking.price_min_amount, booking.currency)}`;
+  return "Цена после уточнения";
 }
 
 bookingCard = function bookingCardWithKnownPrice(booking, timezone) {
