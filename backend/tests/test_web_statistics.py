@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
+import app.services.web_statistics as web_statistics
 from app.models import BookingStatus
-from app.services import web_statistics
 
 
 class _Rows:
