@@ -74,13 +74,14 @@ jobs:
           for phrase in required_context_phrases:
               assert phrase in context_text, f"missing current context fact: {phrase}"
 
-          # Structural status invariants only. Volatile SHAs, PRs, issues, dates and
-          # retired deployment markers must not be pinned by this contract.
+          # Structural status invariants only. Volatile SHAs, schema revisions,
+          # PRs, issues, dates and retired deployment markers are not pinned here.
           required_status_phrases = (
-              "Alembic | `0006`",
+              "Production application/runtime",
+              "Alembic",
               "context/current.md",
               "Active issue",
-              "До merge",
+              "Текущий этап",
           )
           for phrase in required_status_phrases:
               assert phrase in status_text, f"missing status fact: {phrase}"
