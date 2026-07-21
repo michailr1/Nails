@@ -57,7 +57,7 @@ function catalogSelect(service, index, name, label, options, help = "") {
 function catalogCategoryField(service, index) {
   const listId = `service-category-${index}`;
   const options = SERVICE_CATEGORY_PRESETS.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
-  return `<label class="catalog-field"><span>Категория <em>необязательно</em></span><input data-service-index="${index}" data-service-field="category" type="text" list="${listId}" value="${escapeHtml(service.category ?? "")}" placeholder="Выберите или введите свою"><datalist id="${listId}">${options}</datalist><small>Группирует услуги в прайсе. Можно выбрать готовую категорию или написать свою.</small></label>`;
+  return `<label class="catalog-field"><span>Раздел прайса <em>необязательно</em></span><input data-service-index="${index}" data-service-field="category" type="text" list="${listId}" value="${escapeHtml(service.category ?? "")}" placeholder="Выберите раздел или напишите свой"><datalist id="${listId}">${options}</datalist><small>Помогает собрать позиции в понятные разделы. Можно выбрать готовый раздел или написать свой.</small></label>`;
 }
 
 function servicePriceFields(service, index) {
