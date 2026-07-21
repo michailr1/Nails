@@ -9,7 +9,13 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import AvailabilityInterval, Booking, BookingStatus, Service
+from app.models import (
+    AvailabilityInterval,
+    Booking,
+    BookingStatus,
+    Client,
+    Service,
+)
 
 SLOT_STEP_MINUTES = 15
 DEFAULT_SUGGESTION_START = time(10)
@@ -123,6 +129,33 @@ def ceil_to_step(value: datetime, step_minutes: int) -> datetime:
     return base
 
 
+def _booking_addon_names(booking: Booking) -> list[str]:
+    addon_names: list[str] = []
+    for item in booking.catalog_items_snapshot:
+        if not isinstance(item, dict) or item.get("kind") != "addon":
+            continue
+        public_name = item.get("public_name")
+        if isinstance(public_name, str) and public_name.strip():
+            addon_names.append(public_name.strip())
+    return addon_names
+
+
+def _booking_conflict_details(
+    booking: Booking,
+    client: Client,
+    service: Service,
+) -> dict[str, object]:
+    return {
+        "client_name": client.public_name,
+        "service_name": service.public_name,
+        "addon_names": _booking_addon_names(booking),
+        "starts_at": booking.starts_at.astimezone(UTC).isoformat(),
+        "ends_at": booking.ends_at.astimezone(UTC).isoformat(),
+        "reserved_starts_at": booking.reserved_starts_at.astimezone(UTC).isoformat(),
+        "reserved_ends_at": booking.reserved_ends_at.astimezone(UTC).isoformat(),
+    }
+
+
 def ensure_reservation_available(
     session: Session,
     owner_user_id: uuid.UUID,
@@ -140,13 +173,30 @@ def ensure_reservation_available(
     if any(not interval.is_available for interval in availability):
         raise SchedulingDomainError("booking_on_day_off")
 
-    statement = select(Booking.id).where(
-        Booking.owner_user_id == owner_user_id,
-        Booking.status == BookingStatus.scheduled,
-        Booking.reserved_starts_at < reservation.reserved_ends_at,
-        Booking.reserved_ends_at > reservation.reserved_starts_at,
+    statement = (
+        select(Booking, Client, Service)
+        .join(Client, Client.id == Booking.client_id)
+        .join(Service, Service.id == Booking.service_id)
+        .where(
+            Booking.owner_user_id == owner_user_id,
+            Client.owner_user_id == owner_user_id,
+            Service.owner_user_id == owner_user_id,
+            Booking.status == BookingStatus.scheduled,
+            Booking.reserved_starts_at < reservation.reserved_ends_at,
+            Booking.reserved_ends_at > reservation.reserved_starts_at,
+        )
+        .order_by(Booking.starts_at, Booking.id)
     )
     if exclude_booking_id is not None:
         statement = statement.where(Booking.id != exclude_booking_id)
-    if session.scalar(statement.limit(1)) is not None:
-        raise SchedulingDomainError("booking_overlap")
+    conflicts = session.execute(statement).all()
+    if conflicts:
+        raise SchedulingDomainError(
+            "booking_overlap",
+            details={
+                "conflicts": [
+                    _booking_conflict_details(booking, client, service)
+                    for booking, client, service in conflicts
+                ]
+            },
+        )
