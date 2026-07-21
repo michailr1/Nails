@@ -67,6 +67,23 @@ def web_booking_summary(
     )
 
 
+def web_client_card(client: Client) -> WebClientCard:
+    return WebClientCard(
+        client_id=client.id,
+        public_name=client.public_name,
+        phone=client.phone,
+        contact_channel=client.contact_channel,
+        birthday=client.birthday,
+        notes=client.notes,
+        nail_skin_notes=client.nail_skin_notes,
+        sensitivity_notes=client.sensitivity_notes,
+        style_preferences=client.style_preferences,
+        communication_preferences=client.communication_preferences,
+        profile_status=client.profile_status.value,
+        updated_at=client.updated_at,
+    )
+
+
 def list_calendar(
     session: Session,
     identity: RequestIdentity,
@@ -115,21 +132,5 @@ def list_clients(
         .order_by(Client.public_name, Client.id)
     ).all()
     return WebClientListResponse(
-        clients=[
-            WebClientCard(
-                client_id=client.id,
-                public_name=client.public_name,
-                phone=client.phone,
-                contact_channel=client.contact_channel,
-                birthday=client.birthday,
-                notes=client.notes,
-                nail_skin_notes=client.nail_skin_notes,
-                sensitivity_notes=client.sensitivity_notes,
-                style_preferences=client.style_preferences,
-                communication_preferences=client.communication_preferences,
-                profile_status=client.profile_status.value,
-                updated_at=client.updated_at,
-            )
-            for client in clients
-        ]
+        clients=[web_client_card(client) for client in clients]
     )
