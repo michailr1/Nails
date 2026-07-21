@@ -1,6 +1,6 @@
 # Nails — текущий контекст
 
-Дата фиксации: **20 июля 2026 года**.
+Дата фиксации: **21 июля 2026 года**.
 
 Перед работой прочитать `AGENTS.md`, `docs/context/current.md`, `docs/product/product-principles.md`, `docs/operations/engineering-principles.md`, остальные operational-документы и принятые ADR. GitHub проверять по API, production — фактическим preflight. **Production state не предполагать**.
 
@@ -8,14 +8,13 @@
 
 ```text
 repository: michailr1/Nails
-GitHub main: всегда проверять через GitHub API; после production release может содержать более новые docs-only commits
+GitHub main: 4ac932bace27c67f31199dba52ad8f31a75cb04d на момент создания текущей ветки; всегда перепроверять через GitHub API
 production host: de.funti.cc
 public master portal: https://de.funti.cc:8446/web/
 production repo: /opt/nails/repo
 production branch: main
-production application release SHA: 01fe8547e9038c098b4f4ea22f449622d4b774ea
-runtime API SHA: 01fe8547e9038c098b4f4ea22f449622d4b774ea
-runtime WEB SHA: 01fe8547e9038c098b4f4ea22f449622d4b774ea
+production application release SHA: 4ac932bace27c67f31199dba52ad8f31a75cb04d
+runtime WEB SHA: 4ac932bace27c67f31199dba52ad8f31a75cb04d
 backend env: /opt/nails/.env
 internal API: http://127.0.0.1:8210
 loopback web: http://127.0.0.1:8220/web/
@@ -24,7 +23,6 @@ readiness: /ready
 timezone: Europe/Moscow
 Hermes plugins: nails-onboarding, nails-scheduling
 finalization digest timer: enabled, active
-last verified backup: /opt/nails/backups/nails-before-deploy-20260720T145208Z.sql.gz
 Alembic: 0013 (head)
 ```
 
@@ -42,73 +40,67 @@ Alembic: 0013 (head)
 - каждая мутация требует подтверждения;
 - успех определяется только подтверждённым tool-результатом;
 - PR-кандидат до merge запускается только из `origin/pr/<number>` и не меняет production checkout;
-- после merge отдельного finalize entrypoint нет: production release выполняется единым `NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>`;
-- штатный main deploy создаёт и валидирует backup, собирает и проверяет runtime, выполняет миграции и health/readiness, затем fast-forward’ит локальный checkout и возвращает `DEPLOY_OK=true`;
+- production release выполняется единым `NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>`;
 - deploy выполняется только через `ops/deploy/deploy.sh <exact-SHA>`; ручное разделение его шагов запрещено;
-- docs-only commits после release не означают, что application runtime отстал: сравнивать нужно последний production application release SHA и фактически работающие API/WEB SHA;
-- пользовательские ссылки на кабинет должны использовать внешний TLS endpoint `https://de.funti.cc:8446/web/`, а не внутренние порты 8210/8220 и не корень домена без порта.
+- пользовательские ссылки на кабинет используют внешний TLS endpoint `https://de.funti.cc:8446/web/`.
 
 ## Завершённый этап
 
-На production развернут application release SHA `01fe8547e9038c098b4f4ea22f449622d4b774ea`.
+На production развернут application release SHA `4ac932bace27c67f31199dba52ad8f31a75cb04d`.
 
-WEB-контур поддерживает календарь на день, неделю и месяц, полные XLSX-выгрузки, карточки клиенток, мобильный logout и устойчивый возврат из Telegram при входе.
+PR #164–166 завершили первый удобный слой «Моего прайса»:
 
-Telegram-редактирование существующей услуги без переименования принято в production: цена и длительность сохраняются после подтверждения, даже если модель передаёт только одно из эквивалентных полей имени.
+- компактный список по разделам;
+- раскрытие одной позиции для редактирования;
+- «Добавить в прайс», «Убрать из прайса» и «Вернуть в прайс»;
+- несохранённая случайная позиция удаляется полностью;
+- сохранённая позиция архивируется без потери истории;
+- необязательное поле «Описание» скрыто из формы, но `public_description` сохранено в backend/API и не затирается при других изменениях.
 
-Production verification: deploy `DEPLOY_OK=true`, checkout/runtime SHA совпадают, backup создан; живая Telegram-приёмка `update_service` пройдена.
+Production verification PR #166: `DEPLOY_OK=true`, checkout и runtime WEB совпадают с `4ac932bace27c67f31199dba52ad8f31a75cb04d`, working tree clean.
 
-WEB-002 реализовал подтверждённое owner-scoped web-редактирование каталога с atomic replace и verified readback. Последующие изменения упростили форму мастера и добавили редактируемые предустановленные разделы прайса.
+## Реальный прайс и модель
 
-## Зафиксированное продуктовое решение
+Получены фотографии реального прайса мастера с разделами «Маникюр», «Педикюр», «Дополнительно», «Дизайн» и «Парафинотерапия».
 
-Создан нормативный документ `docs/product/product-principles.md`.
+Зафиксировано:
 
-Ключевые решения:
-
-- продукт не позиционируется и не проектируется как CRM;
-- главные области — «Календарь», «Мой прайс», «Клиентки»;
-- «Услуги» в пользовательском интерфейсе заменяются на «Мой прайс»;
-- «категория» становится «разделом прайса»;
-- базовая форма содержит только название, раздел, цену, обычное время и необязательное описание;
-- сложные типы цены, дополнения, варианты и правила времени раскрываются только при необходимости;
-- время процедуры является ориентиром и может зависеть от клиентки и состояния ногтей;
-- Нэйли может предлагать лучшие практики, но не меняет данные без подтверждения мастера;
-- перенос реального прайса не блокирует дальнейшую разработку и может быть выполнен после ответов мастера.
+- текущая ADR-007-модель уже покрывает реальные данные: `base`, `addon`, фиксированная цена, диапазон, цена за единицу и цена после уточнения;
+- обозначения через `/` переносятся отдельными понятными позициями, а не новой технической моделью вариантов;
+- дизайн `50/100 за 1 ноготь` хранится как цена за единицу; количество ногтей остаётся вне текущего scope, а итог можно уточнить для конкретной записи;
+- зависимость цены от состояния стоп моделируется диапазоном;
+- матрица совместимости дополнений с конкретными процедурами пока не вводится;
+- следующий реальный пробел — web-сценарий записи «основная процедура + дополнения», а не новая схема БД.
 
 ## Текущая задача
 
-PR #164 — первый пользовательский слой «Моего прайса» и фиксация продуктовой философии. После первого candidate ручная проверка выявила, что одних подсказок раздела недостаточно: техническое название «Услуги», постоянно раскрытые формы и видимые архивные позиции не дают работать с реальным длинным прайсом. PR исправляется до повторного candidate.
+Ветка `feat/web-booking-composer` от production/main SHA `4ac932bace27c67f31199dba52ad8f31a75cb04d` реализует первый web write-slice создания записи:
 
-Границы текущего PR:
-
-- предустановленные, но редактируемые разделы прайса;
-- нормативный product-principles document;
-- обязательная ссылка на него из `AGENTS.md` и текущего контекста;
-- пользовательское название «Мой прайс» без переименования backend-сущностей;
-- компактные позиции, сгруппированные по разделам;
-- раскрытие только одной позиции для редактирования;
-- новая позиция сразу под управляющими кнопками с фокусом на названии;
-- удаление несохранённой позиции и «Убрать из прайса» для сохранённой;
-- отсутствие неактивных позиций в обычном рабочем списке;
-- без изменения backend-модели каталога;
-- без реализации дополнений, вариантов и импорта реального прайса.
+- owner-scoped `POST /web/api/bookings` поверх существующего доменного `create_booking`;
+- обязательные session и Origin/Host boundary;
+- idempotency key и server-side повторная проверка;
+- выбор существующей клиентки, основной процедуры и нескольких дополнений;
+- прогрессивно раскрываемые overrides итоговой цены и времени;
+- подтверждение полной сводки до мутации;
+- fresh verified response и повторное чтение календаря;
+- честное отображение диапазона и неизвестной/поединичной цены вместо ложных `0 ₽`;
+- browser получает только web-представление записи, без внутренних ID состава каталога;
+- миграций и изменения доменной booking-модели нет.
 
 ## Следующий приоритет
 
-1. Завершить PR #164: review → CI → merge → production release при наличии runtime-изменений.
-2. Следующим продуктовым slice упростить раскрытый редактор прогрессивным показом редких настроек, если ручная проверка текущей компактной формы подтвердит необходимость.
-3. Затем перейти к конструктору записи «основная процедура + дополнения» без ожидания ответов мастера.
-4. После получения ответов собрать и проверить первый реальный прайс отдельно.
+1. Завершить `feat/web-booking-composer`: PR → review → green CI → exact-head candidate → ручная проверка → merge → production deploy.
+2. Перенести реальный прайс мастера через уже существующий подтверждаемый batch replace, разделяя варианты через `/` на отдельные позиции.
+3. После живой работы уточнить только реальные пробелы: количество для цены за единицу и применимость дополнений.
 
 ## Точка продолжения
 
 ```text
-production_application_release_sha=01fe8547e9038c098b4f4ea22f449622d4b774ea
-active_pr=164
-active_branch=fix/web-service-category-presets
+production_application_release_sha=4ac932bace27c67f31199dba52ad8f31a75cb04d
+active_branch=feat/web-booking-composer
 product_source_of_truth=docs/product/product-principles.md
+pricing_source_of_truth=docs/decisions/ADR-007-service-catalog-and-pricing.md
 public_master_portal=https://de.funti.cc:8446/web/
-release_contract=PR candidate optional before merge; merged main uses one atomic deploy.sh flow, no separate finalize
-next=finish revised PR 164, repeat CI and exact-head candidate, then manually verify the compact grouped My Price flow
+release_contract=exact PR head candidate before merge; merged main uses one atomic deploy.sh flow
+next=open and review web booking composer PR, fix CI, then request only candidate/manual acceptance
 ```
