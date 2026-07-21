@@ -1,32 +1,36 @@
 # Фактическое состояние проекта
 
-Дата актуализации: **17 июля 2026 года**.
+Дата актуализации: **21 июля 2026 года**.
 
-Для продолжения сначала читать [`context/current.md`](context/current.md).
+Для продолжения сначала читать [`context/current.md`](context/current.md). GitHub `main` и production SHA там разделены: docs-only commits могут быть новее application runtime.
 
 ## 1. Сводка
 
 | Область | Состояние |
 |---|---|
-| GitHub `main` | `847a6342911b5bf32a9e6c0885065e161c6d2d06` |
+| Production application/runtime | `aae810ab0413a5a6448c2f4781380c83b2de28e1` |
 | Production API/PostgreSQL | healthy/ready |
 | API bind | `127.0.0.1:8210` |
+| Master web | `https://de.funti.cc:8446/web/` |
 | Health endpoints | `/health`, `/ready` |
-| Alembic | `0006` |
+| Alembic | `0013` |
 | Hermes gateway | active |
 | Shutdown/restart Telegram notification | disabled только для profile `nails` |
 | Backup/restore | NAILS-002F завершён и принят в production |
 | Pilot | завершён после живой проверки двумя мастерами |
 | NAILS-003 | завершён: preview, несколько окон и ADR-006 в production |
-| Active issue | отсутствует; следующий issue создаётся для web-интерфейса мастера |
-| Следующий этап | web-интерфейс мастера |
-| После web | клиентский контур ADR-004 |
+| Master Web UI | принят владельцем; отдельная приёмка пилотным мастером отложена |
+| ADR-007 | завершён; реальный прайс перенесён |
+| Active issue | #171 — ADR-004 client contour |
+| Текущий этап | backend foundation детерминированного клиентского Telegram-бота |
 
 ## 2. Что уже работает
 
+### Telegram-контур мастера
+
 - onboarding только для первичного заполнения;
 - изменение настроек мастера без повторного onboarding;
-- услуги: создание, изменение, архив и восстановление;
+- «Мой прайс»: создание, изменение, удаление из прайса и восстановление;
 - точное разрешение дат;
 - доступность по конкретным датам и несколько интервалов в день;
 - read-only preview изменения доступности;
@@ -35,39 +39,55 @@
 - просмотр дня и свободных окон;
 - клиентские карточки с расширенными private fields;
 - exact/candidate поиск и защита от случайных дублей;
-- создание записей с snapshots;
+- создание записей с snapshots и дополнениями;
 - корректный перенос без самоблокировки;
 - мягкая отмена;
+- финализация визита и вечерний дайджест;
 - fresh-read/readback и verified guarded mutations;
-- ежедневные backup + isolated restore-test + retention + Telegram archive;
 - защищённое сохранение негативного feedback.
 
-## 3. Завершённый NAILS-003
+### Кабинет мастера
 
-Фактический источник настройки окон — `availability_intervals`. Параллельные `schedule_rules` или `schedule_exceptions` не создавались.
+- вход с Telegram-подтверждением;
+- календарь дня, недели и месяца;
+- owner-scoped CSV/XLSX выгрузки;
+- компактный экран «Мой прайс» по разделам;
+- fixed/range/per-unit/on-request цены;
+- создание записи с основной процедурой и дополнениями;
+- быстрое добавление клиентки;
+- просмотр и редактирование полной пользовательской части карточки клиентки;
+- подтверждения мутаций, idempotency и fresh readback;
+- same-origin BFF без публикации внутреннего Booking API.
 
-Рабочий flow:
+### Надёжность
+
+- ежедневные backup;
+- isolated restore-test;
+- retention daily/weekly/monthly/runtime;
+- Telegram archive администратора;
+- backup перед мутирующим deploy;
+- exact PR-head candidate до merge;
+- единый main deploy через `ops/deploy/deploy.sh`;
+- rollback как deploy предыдущего SHA.
+
+## 3. Принятый реальный прайс
+
+Подтверждённый owner-scoped перенос:
 
 ```text
-resolve_date
-→ day_view
-→ preview_availability
-→ понятная сводка «сейчас → будет»
-→ явное подтверждение
-→ update_availability
-→ day_view readback
+payload_sha256=cfdff556d17ee2cf31781dac91fd7bf33023e668daabe28a26c5960babd0ba77
+created_count=33
+updated_count=0
+archived_count=1
+target_active_service_count=33
+non_target_catalogs_unchanged=true
+fresh_readback_verified=true
+backup_alembic=0013
+backup_verified=true
+NASTYA_PRICE_TRANSFER_OK=true
 ```
 
-`preview_availability` принимает тот же итоговый набор интервалов, что write, и возвращает текущее/предлагаемое состояние, `changed`, `can_apply` и конфликты. Preview read-only. Write owner-scoped, audited, подтверждаемый и идемпотентный.
-
-Частичное закрытие дня уже поддерживается как преобразование положительных окон, например:
-
-```text
-11:00–20:00
-→ 11:00–13:00 + 16:00–20:00
-```
-
-Исправление выполняется новой заменой итоговых окон; снятие настройки — `state=unknown`; целый выходной — `state=unavailable`.
+Отдельная ручная приёмка пилотным мастером отложена. Этап принят владельцем; новые пожелания оформляются отдельными follow-up задачами.
 
 ## 4. Семантика ADR-006
 
@@ -78,33 +98,21 @@ resolve_date
 - явно сохранённом целом выходном;
 - overlap с активной записью с учётом reserved intervals и buffers.
 
-Положительные интервалы и диапазон подсказок `10:00–23:00` не являются жёстким запретом. Они формируют только предлагаемые свободные окна. Поэтому жёсткие частичные блоки сознательно не входят в текущую модель.
+Положительные интервалы и диапазон подсказок не являются жёстким запретом. Они формируют только предлагаемые свободные окна.
 
-## 5. Production acceptance
+## 5. Следующий этап — ADR-004
 
-Для SHA `847a6342911b5bf32a9e6c0885065e161c6d2d06` подтверждено:
+Клиентский контур первой версии:
 
-```text
-running_sha=847a6342911b5bf32a9e6c0885065e161c6d2d06
-working_tree_clean=true
-nails-api=running
-container_health=healthy
-api_bind=127.0.0.1:8210
-GET /health=200
-GET /ready=200
-gateway_active=true
-```
+- отдельный deterministic Telegram bot без LLM и без публичного Hermes;
+- client identity отделена от доверенных `admin|master` users;
+- клиентка видит публичный прайс, свободные окна и только свои заявки/записи;
+- отправленная клиенткой заявка не резервирует время;
+- мастер подтверждает или отклоняет заявку;
+- подтверждение создаёт обычный Booking через существующий доменный `create_booking` и повторно проверяет overlap;
+- private aliases и notes наружу не выводятся;
+- первый запуск рассчитан на одного мастера.
 
-## 6. Следующий этап
+Implementation issue: **#171**.
 
-Web-интерфейс мастера начинается до клиентского контура.
-
-Сначала нужно сверить ADR-005 с текущими backend-инвариантами, определить минимальный implementation issue и не дублировать бизнес-логику Telegram-контура в web.
-
-## 7. До merge документационного PR
-
-1. Получить зелёные CI и contract-workflow на точном PR-head.
-2. Проверить отсутствие незакрытых review threads и fast-forward от актуального `main`.
-3. Fast-forward merge без production deploy: меняется только документация.
-4. Закрыть issue #104 как completed.
-5. Перейти к ревью ADR-005 и web-интерфейсу мастера.
+Первый рабочий срез — backend foundation и security contracts до подключения bot runtime.
