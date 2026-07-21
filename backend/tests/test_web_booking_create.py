@@ -168,6 +168,67 @@ def test_web_booking_requires_origin_and_creates_verified_composition(client, cr
     assert booking["price_amount"] == "1500.00"
 
 
+def test_web_booking_overlap_returns_full_conflicting_booking(client, create_user):
+    owner = create_user(telegram_user_id=100000205)
+    _seed_client(owner.id, "Анна")
+    _seed_client(owner.id, "Виолетта Буратиновна")
+    _seed_service(
+        owner.id,
+        "Маникюр",
+        kind="base",
+        price_amount="1200",
+        duration_minutes=90,
+    )
+    _seed_service(
+        owner.id,
+        "Френч",
+        kind="addon",
+        price_amount="300",
+        extra_minutes=20,
+    )
+    _authenticate(client, owner.id)
+
+    existing = _payload(
+        key="web-booking-conflict-existing",
+        addons=["Френч"],
+        starts_at="2026-07-22T14:00:00+03:00",
+    )
+    existing["client_public_name"] = "Виолетта Буратиновна"
+    created = client.post(
+        "/web/api/bookings",
+        headers=WEB_ORIGIN_HEADERS,
+        json=existing,
+    )
+    assert created.status_code == 200
+
+    conflicting = _payload(
+        key="web-booking-conflict-new",
+        starts_at="2026-07-22T15:00:00+03:00",
+    )
+    response = client.post(
+        "/web/api/bookings",
+        headers=WEB_ORIGIN_HEADERS,
+        json=conflicting,
+    )
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "booking_overlap"
+    assert detail["details"] == {
+        "conflicts": [
+            {
+                "client_name": "Виолетта Буратиновна",
+                "service_name": "Маникюр",
+                "addon_names": ["Френч"],
+                "starts_at": "2026-07-22T11:00:00+00:00",
+                "ends_at": "2026-07-22T12:50:00+00:00",
+                "reserved_starts_at": "2026-07-22T11:00:00+00:00",
+                "reserved_ends_at": "2026-07-22T13:05:00+00:00",
+            }
+        ]
+    }
+
+
 def test_web_booking_keeps_mixed_per_unit_price_unknown_instead_of_zero(client, create_user):
     owner = create_user(telegram_user_id=100000202)
     _seed_client(owner.id, "Анна")
