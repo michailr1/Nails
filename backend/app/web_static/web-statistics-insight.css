@@ -1,0 +1,78 @@
+.naily-insight {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  width: 100%;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface-muted);
+  color: var(--text);
+  text-align: left;
+  box-shadow: none;
+}
+
+.naily-insight:hover {
+  background: var(--surface);
+  border-color: var(--primary);
+}
+
+.naily-insight-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.naily-insight strong {
+  min-width: 0;
+  font-size: 0.95rem;
+}
+
+.long-absent-panel {
+  margin-bottom: 1rem;
+  border-color: rgba(197, 130, 131, 0.45);
+}
+
+.long-absent-panel:focus {
+  outline: 3px solid rgba(197, 130, 131, 0.22);
+  outline-offset: 3px;
+}
+
+.long-absent-list {
+  display: grid;
+}
+
+.long-absent-row {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.long-absent-row:first-child {
+  padding-top: 0;
+}
+
+.long-absent-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.long-absent-row span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .naily-insight {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .naily-insight-label {
+    grid-column: 1 / -1;
+  }
+}
