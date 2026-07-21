@@ -98,6 +98,11 @@ def test_web_assets_are_served(client, clean_database):
     assert "renderCatalogList" in catalog_editor.text
     assert "service.is_active" in catalog_editor.text
     assert 'restored.length ? `Вернуть в прайс:' in catalog_editor.text
+    assert 'catalogField(service, index, "public_description"' not in catalog_editor.text
+    assert 'public_description: String(service.public_description || "").trim() || null' in (
+        catalog_editor.text
+    )
+    assert "Короткое пояснение для мастера." not in catalog_editor.text
     assert "Добавить услугу" not in catalog_editor.text
     assert 'button.textContent = "Услуги"' not in catalog_editor.text
     assert "Резерв до" not in catalog_editor.text
