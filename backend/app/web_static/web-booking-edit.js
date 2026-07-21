@@ -1,7 +1,7 @@
 const bookingCardWithoutEditing = bookingCard;
 
 function bookingCanChange(booking) {
-  return booking.status === "scheduled" && new Date(booking.starts_at).getTime() > Date.now();
+  return booking.status === "scheduled";
 }
 
 function bookingEditPayload(booking) {
@@ -14,8 +14,22 @@ function bookingEditPayload(booking) {
   }));
 }
 
+function bookingStatusLabel(status) {
+  const labels = {
+    cancelled: "Отменена",
+    completed: "Визит состоялся",
+    no_show: "Не пришла",
+  };
+  return labels[status] || "";
+}
+
 bookingCard = function editableBookingCard(booking, timezone) {
-  const card = bookingCardWithoutEditing(booking, timezone);
+  let card = bookingCardWithoutEditing(booking, timezone);
+  const statusLabel = bookingStatusLabel(booking.status);
+  card = card.replace(
+    `<span class="badge">${escapeHtml(booking.status)}</span>`,
+    statusLabel ? `<span class="badge">${escapeHtml(statusLabel)}</span>` : "",
+  );
   if (!bookingCanChange(booking)) return card;
   return card.replace(
     '<article class="booking">',
@@ -23,7 +37,7 @@ bookingCard = function editableBookingCard(booking, timezone) {
   ).replace("</article>", '<span class="booking-edit-hint">Открыть</span></article>');
 };
 
-function localInputValue(iso) {
+function localBookingParts(iso) {
   const date = new Date(iso);
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: APP_TIMEZONE,
@@ -35,11 +49,28 @@ function localInputValue(iso) {
     hourCycle: "h23",
   }).formatToParts(date);
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${value.year}-${value.month}-${value.day}T${value.hour}:${value.minute}`;
+  return {
+    day: `${value.year}-${value.month}-${value.day}`,
+    time: `${value.hour}:${value.minute}`,
+  };
 }
 
-function moscowIso(localValue) {
-  return `${localValue}:00+03:00`;
+function bookingTimeOptions(selected = "11:00") {
+  const values = [];
+  for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
+    const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
+    const mins = String(minutes % 60).padStart(2, "0");
+    const value = `${hours}:${mins}`;
+    values.push(`<option value="${value}" ${value === selected ? "selected" : ""}>${value}</option>`);
+  }
+  if (!values.some((option) => option.includes(`value="${selected}" selected`))) {
+    values.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
+  }
+  return values.join("");
+}
+
+function moscowIso(day, time) {
+  return `${day}T${time}:00+03:00`;
 }
 
 function bookingErrorText(error) {
@@ -47,7 +78,8 @@ function bookingErrorText(error) {
     booking_not_found: "Запись не найдена или принадлежит другому мастеру.",
     booking_not_active: "Эту запись уже нельзя изменить.",
     booking_already_cancelled: "Запись уже отменена.",
-    booking_already_completed: "Завершённую запись нельзя перенести или отменить.",
+    booking_already_completed: "Результат завершённого визита нужно исправлять отдельно.",
+    booking_not_scheduled: "Эта запись уже получила итоговый результат.",
     booking_overlap: "Новое время пересекается с другой записью.",
     availability_closed: "В этот день мастер не работает.",
     outside_availability: "Новое время находится вне рабочего времени.",
@@ -62,6 +94,7 @@ function closeBookingDialog() {
 
 function openBookingDialog(booking) {
   closeBookingDialog();
+  const current = localBookingParts(booking.starts_at);
   const dialog = document.createElement("dialog");
   dialog.id = "booking-edit-dialog";
   dialog.className = "booking-edit-dialog";
@@ -72,9 +105,14 @@ function openBookingDialog(booking) {
         <button class="ghost-button" value="close" aria-label="Закрыть" type="submit">×</button>
       </div>
       <p class="muted">${escapeHtml(booking.service_name)}</p>
-      <label class="booking-edit-field">Новая дата и время
-        <input id="booking-new-start" type="datetime-local" value="${localInputValue(booking.starts_at)}" required />
-      </label>
+      <div class="booking-edit-date-time">
+        <label class="booking-edit-field">Новая дата
+          <input id="booking-new-day" type="date" value="${escapeHtml(current.day)}" required />
+        </label>
+        <label class="booking-edit-field">Новое время
+          <select id="booking-new-time" required>${bookingTimeOptions(current.time)}</select>
+        </label>
+      </div>
       <p id="booking-edit-error" class="booking-edit-error" role="alert"></p>
       <div class="booking-edit-actions">
         <button id="booking-reschedule" class="primary-button" type="button">Перенести</button>
@@ -88,8 +126,9 @@ function openBookingDialog(booking) {
   document.querySelector("#booking-reschedule").addEventListener("click", async () => {
     const button = document.querySelector("#booking-reschedule");
     const errorLine = document.querySelector("#booking-edit-error");
-    const localValue = document.querySelector("#booking-new-start").value;
-    if (!localValue) return;
+    const day = document.querySelector("#booking-new-day").value;
+    const time = document.querySelector("#booking-new-time").value;
+    if (!day || !time) return;
     button.disabled = true;
     errorLine.textContent = "";
     try {
@@ -99,7 +138,7 @@ function openBookingDialog(booking) {
           client_public_name: booking.client_public_name,
           service_name: booking.service_name,
           starts_at: booking.starts_at,
-          new_starts_at: moscowIso(localValue),
+          new_starts_at: moscowIso(day, time),
         }),
       });
       closeBookingDialog();
