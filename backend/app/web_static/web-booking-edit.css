@@ -22,6 +22,9 @@
   border: 0;
   border-radius: 1.25rem;
   padding: 0;
+  background: #fffdfb;
+  color: #332d2a;
+  color-scheme: light;
   box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 22%);
 }
 
@@ -43,18 +46,30 @@
   gap: 0.75rem;
 }
 
+.booking-edit-date-time {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(7.5rem, 0.8fr);
+  gap: 0.75rem;
+}
+
 .booking-edit-field {
   display: grid;
   gap: 0.45rem;
+  min-width: 0;
   font-weight: 700;
 }
 
-.booking-edit-field input {
+.booking-edit-field input,
+.booking-edit-field select {
   width: 100%;
+  min-height: 3rem;
   box-sizing: border-box;
   border: 1px solid #d8cec7;
   border-radius: 0.8rem;
   padding: 0.8rem;
+  background: #fff;
+  color: #332d2a;
+  color-scheme: light;
   font: inherit;
 }
 
@@ -78,6 +93,10 @@
 @media (max-width: 640px) {
   .booking-edit-dialog {
     width: calc(100vw - 1rem);
+  }
+
+  .booking-edit-date-time {
+    grid-template-columns: 1fr;
   }
 
   .booking-edit-actions {
