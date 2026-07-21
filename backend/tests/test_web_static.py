@@ -50,6 +50,11 @@ def test_web_assets_are_served(client, clean_database):
     assert "gatedSessionRequest" in bootstrap.text
     assert "releaseSessionCheck()" in bootstrap.text
     assert "nativeFetch(input, options).then(resolve, reject)" in bootstrap.text
+    assert "discardSessionCheck()" in bootstrap.text
+    assert "verifySession()" in bootstrap.text
+    assert 'nativeFetch("/web/api/auth/session"' in bootstrap.text
+    assert 'credentials: "same-origin"' in bootstrap.text
+    assert 'cache: "no-store"' in bootstrap.text
     assert "return false;" in bootstrap.text
     assert "return true;" in bootstrap.text
     assert "fetch(path" in script.text
@@ -130,12 +135,18 @@ def test_web_assets_are_served(client, clean_database):
     assert "releaseInitialSessionCheck()" in login_enhancements.text
     assert "wrapAuthenticatedRender()" in login_enhancements.text
     assert "challengePollInFlight" in login_enhancements.text
+    assert "loginCompletionInFlight" in login_enhancements.text
     assert "pollChallenge = pollPersistedChallenge" in login_enhancements.text
-    assert "const resumedInitialRender = releaseInitialSessionCheck();" in (
+    assert "async function verifyFreshSession()" in login_enhancements.text
+    assert "for (let attempt = 0; attempt < 5; attempt += 1)" in (
         login_enhancements.text
     )
-    assert "if (!resumedInitialRender) renderApp();" in login_enhancements.text
-    assert 'location.replace("/web/")' not in login_enhancements.text
+    assert "discardSessionCheck()" in login_enhancements.text
+    assert 'window.location.replace("/web/")' in login_enhancements.text
+    assert "const resumedInitialRender = releaseInitialSessionCheck();" not in (
+        login_enhancements.text
+    )
+    assert "if (!resumedInitialRender) renderApp();" not in login_enhancements.text
     assert "forgetStoredChallenge();" in login_enhancements.text
     assert "window.setTimeout(restoreStoredChallenge" not in login_enhancements.text
     assert 'window.addEventListener("focus", restoreStoredChallenge)' in (
