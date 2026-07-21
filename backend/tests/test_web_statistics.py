@@ -45,7 +45,9 @@ def _booking(
     )
 
 
-def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(monkeypatch):
+def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
+    monkeypatch,
+):
     monkeypatch.setattr(
         web_statistics,
         "get_settings",
