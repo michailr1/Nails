@@ -41,6 +41,15 @@ class WebStatisticsClient(BaseModel):
     revenue_amount: Decimal
     visits_count: int
     average_check_amount: Decimal | None
+    last_visit_date: date | None
+
+
+class WebStatisticsLongAbsentClient(BaseModel):
+    client_id: uuid.UUID
+    client_name: str
+    last_visit_date: date
+    days_since_last_visit: int
+    visits_count: int
 
 
 class WebStatisticsResponse(BaseModel):
@@ -48,8 +57,11 @@ class WebStatisticsResponse(BaseModel):
     date_to: date
     timezone: str
     generated_through: date
+    long_absent_after_days: int
+    long_absent_decay_days: int
     summary: WebStatisticsSummary
     days: list[WebStatisticsDay]
     procedures: list[WebStatisticsCatalogItem]
     addons: list[WebStatisticsCatalogItem]
     clients: list[WebStatisticsClient]
+    long_absent_clients: list[WebStatisticsLongAbsentClient]

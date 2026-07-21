@@ -5,21 +5,24 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.config import get_settings
-from app.models import Booking, BookingStatus, Client, Service
+from app.models import Booking, BookingStatus, Client, ClientProfileStatus, Service
 from app.schemas.web_statistics import (
     WebStatisticsCatalogItem,
     WebStatisticsClient,
     WebStatisticsDay,
+    WebStatisticsLongAbsentClient,
     WebStatisticsResponse,
     WebStatisticsSummary,
 )
 
 _MAX_STATISTICS_DAYS = 366
+_LONG_ABSENT_AFTER_DAYS = 42
+_LONG_ABSENT_DECAY_DAYS = 120
 _ZERO = Decimal("0.00")
 _MONEY_STEP = Decimal("0.01")
 
@@ -66,6 +69,75 @@ def _catalog_items(booking: Booking, service: Service) -> list[tuple[str, str]]:
     return items
 
 
+def _visit_history_rows(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    current: datetime,
+):
+    visit_is_finished = or_(
+        Booking.status == BookingStatus.completed,
+        (Booking.status == BookingStatus.scheduled) & (Booking.ends_at <= current),
+    )
+    return session.execute(
+        select(
+            Client.id,
+            Client.public_name,
+            func.count(Booking.id),
+            func.max(Booking.starts_at),
+        )
+        .join(Booking, Booking.client_id == Client.id)
+        .where(
+            Client.owner_user_id == identity.user_id,
+            Booking.owner_user_id == identity.user_id,
+            Client.profile_status == ClientProfileStatus.active,
+            visit_is_finished,
+        )
+        .group_by(Client.id, Client.public_name)
+    ).all()
+
+
+def _long_absent_clients(
+    history_rows,
+    *,
+    timezone: ZoneInfo,
+    generated_day: date,
+) -> tuple[dict[object, date], list[WebStatisticsLongAbsentClient]]:
+    last_visit_dates: dict[object, date] = {}
+    long_absent: list[WebStatisticsLongAbsentClient] = []
+    for client_id, client_name, visits_count, last_visit_at in history_rows:
+        if last_visit_at is None:
+            continue
+        if last_visit_at.tzinfo is None:
+            last_visit_at = last_visit_at.replace(tzinfo=UTC)
+        last_visit_date = last_visit_at.astimezone(timezone).date()
+        last_visit_dates[client_id] = last_visit_date
+        days_since = (generated_day - last_visit_date).days
+        if (
+            int(visits_count) < 2
+            or days_since <= _LONG_ABSENT_AFTER_DAYS
+            or days_since > _LONG_ABSENT_DECAY_DAYS
+        ):
+            continue
+        long_absent.append(
+            WebStatisticsLongAbsentClient(
+                client_id=client_id,
+                client_name=str(client_name),
+                last_visit_date=last_visit_date,
+                days_since_last_visit=days_since,
+                visits_count=int(visits_count),
+            )
+        )
+    long_absent.sort(
+        key=lambda item: (
+            -item.days_since_last_visit,
+            item.client_name.casefold(),
+            str(item.client_id),
+        )
+    )
+    return last_visit_dates, long_absent
+
+
 def get_statistics(
     session: Session,
     identity: RequestIdentity,
@@ -79,6 +151,7 @@ def get_statistics(
     if current.tzinfo is None:
         current = current.replace(tzinfo=UTC)
     current = current.astimezone(UTC)
+    generated_day = current.astimezone(timezone).date()
 
     rows = session.execute(
         select(Booking, Client, Service)
@@ -93,6 +166,11 @@ def get_statistics(
         )
         .order_by(Booking.starts_at, Booking.id)
     ).all()
+    last_visit_dates, long_absent_clients = _long_absent_clients(
+        _visit_history_rows(session, identity, current=current),
+        timezone=timezone,
+        generated_day=generated_day,
+    )
 
     revenue = _ZERO
     confirmed_revenue = _ZERO
@@ -216,6 +294,7 @@ def get_statistics(
                 average_check_amount=(
                     _money(client_revenue / priced_visits) if priced_visits else None
                 ),
+                last_visit_date=last_visit_dates.get(client_id),
             )
         )
     clients.sort(
@@ -230,7 +309,9 @@ def get_statistics(
         date_from=date_from,
         date_to=date_to,
         timezone=timezone_name,
-        generated_through=current.astimezone(timezone).date(),
+        generated_through=generated_day,
+        long_absent_after_days=_LONG_ABSENT_AFTER_DAYS,
+        long_absent_decay_days=_LONG_ABSENT_DECAY_DAYS,
         summary=WebStatisticsSummary(
             revenue_amount=_money(revenue),
             confirmed_revenue_amount=_money(confirmed_revenue),
@@ -248,4 +329,5 @@ def get_statistics(
         procedures=catalog_items("base"),
         addons=catalog_items("addon"),
         clients=clients,
+        long_absent_clients=long_absent_clients,
     )
