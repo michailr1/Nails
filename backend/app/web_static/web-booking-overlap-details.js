@@ -15,6 +15,12 @@ function bookingConflictDateTime(value) {
   };
 }
 
+function bookingConflictInterval(start, end) {
+  return start.date === end.date
+    ? `${start.date}, ${start.time}–${end.time}`
+    : `${start.date}, ${start.time} — ${end.date}, ${end.time}`;
+}
+
 function bookingConflictMessage(error) {
   const conflicts = Array.isArray(error.details?.conflicts)
     ? error.details.conflicts
@@ -34,7 +40,6 @@ function bookingConflictMessage(error) {
     const addons = Array.isArray(conflict.addon_names) && conflict.addon_names.length
       ? ` + ${conflict.addon_names.join(", ")}`
       : "";
-    const actualInterval = `${start.date}, ${start.time}–${end.time}`;
     const hasReservedDifference = new Date(conflict.reserved_starts_at).getTime() !== new Date(conflict.starts_at).getTime()
       || new Date(conflict.reserved_ends_at).getTime() !== new Date(conflict.ends_at).getTime();
 
@@ -42,12 +47,9 @@ function bookingConflictMessage(error) {
     if (conflicts.length > 1) lines.push(`${index + 1}.`);
     lines.push(`Клиентка: ${conflict.client_name}`);
     lines.push(`Процедура: ${conflict.service_name}${addons}`);
-    lines.push(`Запись: ${actualInterval}`);
+    lines.push(`Запись: ${bookingConflictInterval(start, end)}`);
     if (hasReservedDifference) {
-      const reservedDate = reservedStart.date === reservedEnd.date
-        ? reservedStart.date
-        : `${reservedStart.date} — ${reservedEnd.date}`;
-      lines.push(`С учётом времени до/после занято: ${reservedDate}, ${reservedStart.time}–${reservedEnd.time}`);
+      lines.push(`С учётом времени до/после занято: ${bookingConflictInterval(reservedStart, reservedEnd)}`);
     }
   });
 
