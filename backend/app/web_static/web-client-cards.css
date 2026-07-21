@@ -1,0 +1,37 @@
+.client-card-list { align-items: start; }
+.client-card-summary { overflow: hidden; padding: 0; }
+.client-card-summary.active { border-color: var(--primary); box-shadow: 0 12px 32px rgba(141,75,85,.12); }
+.client-card-open { display: flex; width: 100%; min-height: 88px; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border: 0; background: transparent; color: var(--text); text-align: left; }
+.client-card-open:hover { background: var(--surface-muted); }
+.client-card-summary-main { display: grid; min-width: 0; gap: 6px; }
+.client-card-summary-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.client-card-summary-main small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.client-card-edit-label { flex: 0 0 auto; color: var(--primary-dark); font-size: .82rem; font-weight: 650; }
+.client-card-editor { margin-bottom: 18px; overflow: hidden; }
+.client-card-editor-header h2 { margin: 2px 0 0; text-transform: none; }
+.client-card-editor-header .eyebrow { margin: 0; }
+.client-card-form { display: grid; gap: 18px; padding: 22px; }
+.client-card-section { display: grid; gap: 12px; }
+.client-card-section h3 { margin: 0; font-size: .95rem; }
+.client-card-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.client-card-section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.client-card-field { display: grid; gap: 6px; min-width: 0; }
+.client-card-field span { color: var(--muted); font-size: .76rem; font-weight: 620; }
+.client-card-field input,
+.client-card-field textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.45; }
+.client-card-field input { min-height: 44px; }
+.client-card-field textarea { min-height: 98px; resize: vertical; }
+.client-card-field input:focus,
+.client-card-field textarea:focus { outline: 2px solid rgba(197,130,131,.28); border-color: var(--primary); }
+.client-card-status { min-height: 1.3em; margin: 0; color: var(--danger); font-size: .84rem; }
+.client-card-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.client-card-actions .primary-button { width: auto; }
+
+@media (max-width: 760px) {
+  .client-card-field-grid,
+  .client-card-section-grid { grid-template-columns: 1fr; }
+  .client-card-form { padding: 16px; }
+  .client-card-actions { display: grid; grid-template-columns: 1fr 1.4fr; }
+  .client-card-actions .primary-button { width: 100%; }
+  .client-card-open { min-height: 78px; padding: 15px 16px; }
+}
