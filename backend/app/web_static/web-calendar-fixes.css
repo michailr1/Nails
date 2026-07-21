@@ -1,0 +1,16 @@
+@media (max-width: 760px) {
+  .calendar-toolbar .mode-switch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .calendar-toolbar .mode-button {
+    min-width: 0;
+    min-height: 2.9rem;
+    padding: 0.7rem 0.5rem;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.15;
+  }
+}
