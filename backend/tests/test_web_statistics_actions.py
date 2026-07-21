@@ -21,9 +21,11 @@ def test_long_absent_actions_open_client_card_and_only_offer_manual_call(
     assert "await renderClients()" in response.text
     assert "webClientCardOpenId = clientId" in response.text
     assert 'api("/web/api/clients")' in response.text
-    assert 'link.href = `tel:${client.phone.replace(/[^+\\d]/g, "")}`' in response.text
+    assert "function longAbsentPhoneUri(phone)" in response.text
+    assert "/^\\+?\\d{5,15}$/" in response.text
+    assert "link.href = phoneUri" in response.text
     assert 'link.textContent = "Позвонить"' in response.text
-    assert "if (!client?.phone) return" in response.text
+    assert "if (!client || !phoneUri) return" in response.text
     assert "sendMessage" not in response.text
     assert "POST" not in response.text
 
