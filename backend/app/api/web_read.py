@@ -26,6 +26,7 @@ from app.schemas.web_read import (
     WebClientReplaceRequest,
     WebClientReplaceResponse,
 )
+from app.schemas.web_statistics import WebStatisticsResponse
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_catalog_replace import replace_catalog
 from app.services.scheduling_clients import create_or_reuse_client, replace_client
@@ -40,6 +41,7 @@ from app.services.web_read import (
     web_booking_summary,
     web_client_card,
 )
+from app.services.web_statistics import get_statistics
 
 router = APIRouter(prefix="/web/api", tags=["web-read"])
 SessionDependency = Annotated[Session, Depends(get_db_session)]
@@ -91,6 +93,27 @@ def calendar(
     date_to: date,
 ) -> WebCalendarResponse:
     return _calendar(session, identity, date_from, date_to)
+
+
+@router.get("/statistics", response_model=WebStatisticsResponse)
+def statistics(
+    session: SessionDependency,
+    identity: IdentityDependency,
+    date_from: date,
+    date_to: date,
+) -> WebStatisticsResponse:
+    try:
+        return get_statistics(
+            session,
+            identity,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": str(exc)},
+        ) from exc
 
 
 @router.get("/clients", response_model=WebClientListResponse)
