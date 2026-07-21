@@ -14,6 +14,14 @@ function longAbsentRows(clients) {
     </div>`).join("")}</div>`;
 }
 
+function longAbsentPhoneUri(phone) {
+  const normalized = String(phone || "")
+    .trim()
+    .replace(/[^+\d]/g, "")
+    .replace(/(?!^)\+/g, "");
+  return /^\+?\d{5,15}$/.test(normalized) ? `tel:${normalized}` : null;
+}
+
 async function openLongAbsentClient(clientId) {
   state.view = "clients";
   await renderClients();
@@ -38,11 +46,12 @@ async function enhanceLongAbsentActions() {
     const directory = new Map((payload.clients || []).map((client) => [client.client_id, client]));
     rows.forEach((row) => {
       const client = directory.get(row.dataset.longAbsentClientId);
-      if (!client?.phone) return;
+      const phoneUri = longAbsentPhoneUri(client?.phone);
+      if (!client || !phoneUri) return;
       const actions = row.querySelector(".long-absent-actions");
       const link = document.createElement("a");
       link.className = "secondary-button long-absent-call";
-      link.href = `tel:${client.phone.replace(/[^+\d]/g, "")}`;
+      link.href = phoneUri;
       link.textContent = "Позвонить";
       link.setAttribute("aria-label", `Позвонить ${client.public_name}`);
       actions?.prepend(link);
