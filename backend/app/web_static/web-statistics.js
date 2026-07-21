@@ -60,7 +60,7 @@ function formatMoney(value) {
 
 function statisticsModeSwitch() {
   return `<div class="mode-switch statistics-mode-switch" role="group" aria-label="Период статистики">
-    ${[["day", "День"], ["week", "Неделя"], ["month", "Месяц"], ["custom", "Свой период"]]
+    ${[["day", "День"], ["week", "Неделя"], ["month", "Месяц"], ["custom", "Период"]]
       .map(([mode, label]) => `<button class="mode-button ${statisticsState.mode === mode ? "active" : ""}" data-statistics-mode="${mode}" type="button">${label}</button>`)
       .join("")}
   </div>`;
@@ -77,53 +77,65 @@ function statisticsCustomRange(range) {
 
 function statisticCard(label, value, note = "") {
   return `<article class="panel statistic-card">
-    <p class="eyebrow">${escapeHtml(label)}</p>
+    <span class="statistic-label">${escapeHtml(label)}</span>
     <strong>${escapeHtml(value)}</strong>
-    ${note ? `<p class="muted small">${escapeHtml(note)}</p>` : ""}
+    ${note ? `<span class="statistic-note">${escapeHtml(note)}</span>` : ""}
   </article>`;
 }
 
 function barRows(items, valueLabel) {
-  if (!items.length) return '<p class="muted">Пока нет данных.</p>';
+  if (!items.length) return '<p class="muted statistics-empty">Пока нет данных.</p>';
   const max = Math.max(...items.map((item) => item.visits_count || 0), 1);
-  return `<div class="statistics-bars">${items.slice(0, 8).map((item) => `
+  return `<div class="statistics-bars">${items.slice(0, 6).map((item) => `
     <div class="statistics-bar-row">
       <div class="statistics-bar-label"><span>${escapeHtml(item.name)}</span><strong>${escapeHtml(valueLabel(item))}</strong></div>
-      <div class="statistics-bar-track" aria-hidden="true"><span style="width:${Math.max(6, Math.round((item.visits_count / max) * 100))}%"></span></div>
+      <div class="statistics-bar-track" aria-hidden="true"><span style="width:${Math.max(8, Math.round((item.visits_count / max) * 100))}%"></span></div>
     </div>`).join("")}</div>`;
 }
 
 function revenueChart(days) {
-  if (!days.some((day) => Number(day.revenue_amount) > 0)) {
-    return '<p class="muted">Выручка появится после завершившихся записей.</p>';
+  const nonZero = days.filter((day) => Number(day.revenue_amount) > 0);
+  if (!nonZero.length) {
+    return '<p class="muted statistics-empty">За выбранный период выручки пока нет.</p>';
   }
   const max = Math.max(...days.map((day) => Number(day.revenue_amount)), 1);
-  return `<div class="revenue-chart" role="img" aria-label="Выручка по дням">
-    ${days.map((day) => {
+  const labelStep = days.length > 20 ? 5 : days.length > 10 ? 2 : 1;
+  return `<div class="revenue-chart-scroll"><div class="revenue-chart" role="img" aria-label="Выручка по дням">
+    ${days.map((day, index) => {
       const amount = Number(day.revenue_amount);
-      const height = Math.max(amount > 0 ? 8 : 2, Math.round((amount / max) * 100));
+      const height = Math.max(amount > 0 ? 10 : 2, Math.round((amount / max) * 100));
+      const showLabel = index % labelStep === 0 || index === days.length - 1;
       return `<div class="revenue-column" title="${escapeHtml(day.day)} — ${escapeHtml(formatMoney(amount))}">
-        <span class="revenue-column-value">${amount ? escapeHtml(formatMoney(amount)) : ""}</span>
         <span class="revenue-column-bar" style="height:${height}%"></span>
-        <span class="revenue-column-day">${escapeHtml(day.day.slice(8))}</span>
+        <span class="revenue-column-day">${showLabel ? escapeHtml(day.day.slice(8)) : ""}</span>
       </div>`;
     }).join("")}
-  </div>`;
+  </div></div>`;
 }
 
 function clientRows(clients) {
-  if (!clients.length) return '<p class="muted">Пока нет завершившихся визитов.</p>';
-  return `<div class="statistics-client-list">${clients.slice(0, 10).map((client, index) => `
+  if (!clients.length) return '<p class="muted statistics-empty">Пока нет завершившихся визитов.</p>';
+  return `<div class="statistics-client-list">${clients.slice(0, 8).map((client) => `
     <div class="statistics-client-row">
-      <span class="statistics-rank">${index + 1}</span>
-      <div><strong>${escapeHtml(client.client_name)}</strong><p class="muted small">${client.visits_count} визит(а) · средний чек ${client.average_check_amount === null ? "не определён" : escapeHtml(formatMoney(client.average_check_amount))}</p></div>
-      <strong>${escapeHtml(formatMoney(client.revenue_amount))}</strong>
+      <div class="statistics-client-main">
+        <strong>${escapeHtml(client.client_name)}</strong>
+        <span>${client.visits_count} визит(а) · средний чек ${client.average_check_amount === null ? "—" : escapeHtml(formatMoney(client.average_check_amount))}</span>
+      </div>
+      <strong class="statistics-client-total">${escapeHtml(formatMoney(client.revenue_amount))}</strong>
     </div>`).join("")}</div>`;
+}
+
+function statisticsNotice(summary) {
+  const parts = [];
+  if (summary.assumed_visits_count) parts.push(`${summary.assumed_visits_count} визит(а) учтены автоматически`);
+  if (summary.unknown_price_count) parts.push(`${summary.unknown_price_count} визит(а) без известной цены`);
+  if (!parts.length) return "";
+  return `<p class="statistics-notice">${escapeHtml(parts.join(" · "))}</p>`;
 }
 
 async function renderStatistics() {
   const range = statisticsRange();
-  appShell("Статистика", `<div class="loading-state">Собираем понятную картину…</div>`);
+  appShell("Статистика", `<div class="loading-state">Загружаем статистику…</div>`);
   const actions = document.querySelector("#page-actions");
   actions.innerHTML = statisticsModeSwitch();
   document.querySelectorAll("[data-statistics-mode]").forEach((button) => {
@@ -144,16 +156,17 @@ async function renderStatistics() {
       ${statisticsCustomRange(range)}
       <p class="statistics-period">${escapeHtml(dateLabel(range.dateFrom, { day: "numeric", month: "long", year: "numeric" }))} — ${escapeHtml(dateLabel(range.dateTo, { day: "numeric", month: "long", year: "numeric" }))}</p>
       <section class="statistics-cards">
-        ${statisticCard("Выручка", formatMoney(summary.revenue_amount), summary.estimated_revenue_amount > 0 ? `Из неё предварительно ${formatMoney(summary.estimated_revenue_amount)}` : "По завершившимся записям")}
-        ${statisticCard("Визиты", String(summary.visits_count), summary.assumed_visits_count ? `Без ручного уточнения: ${summary.assumed_visits_count}` : "Все результаты уточнены")}
-        ${statisticCard("Средний чек", summary.average_check_amount === null ? "—" : formatMoney(summary.average_check_amount), summary.unknown_price_count ? `Без цены: ${summary.unknown_price_count}` : "По записям с известной ценой")}
-        ${statisticCard("Клиентки", String(summary.unique_clients_count), `Отмены: ${summary.cancelled_count} · неявки: ${summary.no_show_count}`)}
+        ${statisticCard("Выручка", formatMoney(summary.revenue_amount))}
+        ${statisticCard("Визиты", String(summary.visits_count))}
+        ${statisticCard("Средний чек", summary.average_check_amount === null ? "—" : formatMoney(summary.average_check_amount))}
+        ${statisticCard("Клиентки", String(summary.unique_clients_count))}
       </section>
+      ${statisticsNotice(summary)}
       <section class="statistics-grid">
-        <article class="panel statistics-panel statistics-panel-wide"><div class="panel-header"><div><p class="eyebrow">Динамика</p><h2>Выручка по дням</h2></div></div>${revenueChart(payload.days)}</article>
-        <article class="panel statistics-panel"><div class="panel-header"><div><p class="eyebrow">Чаще выбирают</p><h2>Процедуры</h2></div></div>${barRows(payload.procedures, (item) => `${item.visits_count} раз`)}</article>
-        <article class="panel statistics-panel"><div class="panel-header"><div><p class="eyebrow">Дополняют запись</p><h2>Дополнения</h2></div></div>${barRows(payload.addons, (item) => `${item.visits_count} раз`)}</article>
-        <article class="panel statistics-panel statistics-panel-wide"><div class="panel-header"><div><p class="eyebrow">Постоянные клиентки</p><h2>Клиентки по выручке</h2></div></div>${clientRows(payload.clients)}</article>
+        <article class="panel statistics-panel statistics-panel-wide"><div class="statistics-section-title"><span>Динамика</span><h2>Выручка по дням</h2></div>${revenueChart(payload.days)}</article>
+        <article class="panel statistics-panel"><div class="statistics-section-title"><span>Популярность</span><h2>Процедуры</h2></div>${barRows(payload.procedures, (item) => `${item.visits_count}`)}</article>
+        <article class="panel statistics-panel"><div class="statistics-section-title"><span>К записям</span><h2>Дополнения</h2></div>${barRows(payload.addons, (item) => `${item.visits_count}`)}</article>
+        <article class="panel statistics-panel statistics-panel-wide"><div class="statistics-section-title"><span>Клиентки</span><h2>По выручке</h2></div>${clientRows(payload.clients)}</article>
       </section>`;
     document.querySelector("#statistics-range-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
