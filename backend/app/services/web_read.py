@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -9,12 +10,14 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity
 from app.config import get_settings
 from app.models import Booking, Client, Service
+from app.schemas.scheduling_catalog_bookings import CatalogBookingSummary
 from app.schemas.web_read import (
     WebCalendarBooking,
     WebCalendarResponse,
     WebClientCard,
     WebClientListResponse,
 )
+from app.services.scheduling_presenters import booking_summary
 
 _MAX_CALENDAR_DAYS = 31
 
@@ -39,6 +42,31 @@ def _calendar_window(
     )
 
 
+def web_booking_summary(
+    summary: CatalogBookingSummary,
+    *,
+    client_id: uuid.UUID,
+) -> WebCalendarBooking:
+    return WebCalendarBooking(
+        booking_id=summary.id,
+        client_id=client_id,
+        client_name=summary.client_public_name,
+        service_name=summary.service_name,
+        addon_names=summary.addon_names,
+        starts_at=summary.starts_at,
+        ends_at=summary.ends_at,
+        status=summary.status.value,
+        price_amount=summary.price_amount,
+        currency=summary.currency,
+        price_type=summary.price_type,
+        price_min_amount=summary.price_min_amount,
+        price_max_amount=summary.price_max_amount,
+        price_unit=summary.price_unit,
+        price_confirmed=summary.price_confirmed,
+        duration_minutes=summary.duration_minutes,
+    )
+
+
 def list_calendar(
     session: Session,
     identity: RequestIdentity,
@@ -51,7 +79,7 @@ def list_calendar(
         date_to,
     )
     rows = session.execute(
-        select(Booking, Client.public_name, Service.public_name)
+        select(Booking, Client, Service)
         .join(Client, Client.id == Booking.client_id)
         .join(Service, Service.id == Booking.service_id)
         .where(
@@ -68,18 +96,11 @@ def list_calendar(
         date_to=date_to,
         timezone=timezone_name,
         bookings=[
-            WebCalendarBooking(
-                booking_id=booking.id,
-                client_id=booking.client_id,
-                client_name=client_name,
-                service_name=service_name,
-                starts_at=booking.starts_at.astimezone(timezone),
-                ends_at=booking.ends_at.astimezone(timezone),
-                status=booking.status.value,
-                price_amount=booking.price_amount,
-                currency=booking.currency,
+            web_booking_summary(
+                booking_summary(booking, client, service, timezone),
+                client_id=client.id,
             )
-            for booking, client_name, service_name in rows
+            for booking, client, service in rows
         ],
     )
 
