@@ -1,5 +1,6 @@
-from pathlib import Path
+from __future__ import annotations
 
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,9 +28,9 @@ def test_caddy_replaces_forwarded_client_address() -> None:
 
 
 def test_login_polling_is_slow_and_consume_retries_are_bounded() -> None:
-    script = (
-        ROOT / "backend/app/web_static/web001e-copy.js"
-    ).read_text(encoding="utf-8")
+    script = (ROOT / "backend/app/web_static/web001e-copy.js").read_text(
+        encoding="utf-8"
+    )
 
     assert "CHALLENGE_POLL_INTERVAL_MS = 4500" in script
     assert "MAX_CONSUME_RATE_LIMIT_RETRIES = 4" in script
