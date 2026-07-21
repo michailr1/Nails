@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 TEST_INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "i" * 64)
+TEST_CLIENT_INTERNAL_API_KEY = "c" * 64
+TEST_CLIENT_OWNER_TELEGRAM_USER_ID = 100000001
 TEST_WEB_AUTH_HMAC_KEY = "w" * 64
 
 os.environ.setdefault("APP_TIMEZONE", "Europe/Berlin")
@@ -17,6 +19,12 @@ os.environ.setdefault(
     "postgresql+psycopg://nails_app:nails_test@127.0.0.1:55432/nails_test",
 )
 os.environ.setdefault("INTERNAL_API_KEY", TEST_INTERNAL_API_KEY)
+os.environ.setdefault("CLIENT_API_ENABLED", "true")
+os.environ.setdefault("CLIENT_INTERNAL_API_KEY", TEST_CLIENT_INTERNAL_API_KEY)
+os.environ.setdefault(
+    "CLIENT_OWNER_TELEGRAM_USER_ID",
+    str(TEST_CLIENT_OWNER_TELEGRAM_USER_ID),
+)
 os.environ.setdefault("WEB_AUTH_ENABLED", "true")
 os.environ.setdefault("WEB_AUTH_HMAC_KEY", TEST_WEB_AUTH_HMAC_KEY)
 os.environ.setdefault("WEB_ALLOWED_HOSTS", "testserver")
@@ -56,6 +64,7 @@ def clean_database():
         "master_preferences",
         "bookings",
         "availability_intervals",
+        "client_telegram_identities",
         "clients",
         "services",
         "users",
@@ -166,6 +175,23 @@ def auth_headers() -> Callable[..., dict[str, str]]:
     ) -> dict[str, str]:
         return {
             "X-Nails-Internal-Key": internal_key,
+            "X-Telegram-User-ID": str(telegram_user_id),
+            "X-Request-ID": request_id,
+        }
+
+    return factory
+
+
+@pytest.fixture
+def client_auth_headers() -> Callable[..., dict[str, str]]:
+    def factory(
+        telegram_user_id: int = 200000001,
+        *,
+        request_id: str = "client-request-001",
+        internal_key: str = TEST_CLIENT_INTERNAL_API_KEY,
+    ) -> dict[str, str]:
+        return {
+            "X-Nails-Client-Internal-Key": internal_key,
             "X-Telegram-User-ID": str(telegram_user_id),
             "X-Request-ID": request_id,
         }
