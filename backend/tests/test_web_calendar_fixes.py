@@ -14,6 +14,18 @@ def test_calendar_price_fix_shows_known_subtotal(client, clean_database):
     assert 'return "Цена после уточнения"' in response.text
 
 
+def test_calendar_hides_technical_statuses(client, clean_database):
+    response = client.get("/web/web-calendar-fixes.js")
+
+    assert response.status_code == 200
+    assert 'status === "cancelled"' in response.text
+    assert 'status === "no_show"' in response.text
+    assert ">Отменена<" in response.text
+    assert ">Не пришла<" in response.text
+    assert "escapeHtml(booking.status)" not in response.text
+    assert ">scheduled<" not in response.text
+
+
 def test_calendar_period_switch_uses_mobile_grid(client, clean_database):
     response = client.get("/web/web-calendar-fixes.css")
 
