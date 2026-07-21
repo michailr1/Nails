@@ -140,11 +140,13 @@ function bookingClientEnhanceComposer() {
     toggle.setAttribute("aria-expanded", "false");
   });
   document.querySelector("#booking-save-new-client").addEventListener("click", bookingClientCreate);
-  document.querySelector("#booking-new-client-name").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      bookingClientCreate();
-    }
+  ["#booking-new-client-name", "#booking-new-client-phone"].forEach((selector) => {
+    document.querySelector(selector).addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        bookingClientCreate();
+      }
+    });
   });
 }
 
