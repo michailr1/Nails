@@ -140,19 +140,37 @@ NASTYA_PRICE_TRANSFER_OK=true
 - диапазоны сохранены там, где стоимость зависит от состояния стоп;
 - итоговые цена и время конкретной записи могут быть уточнены мастером в форме записи.
 
+## Приёмка этапа
+
+Владелец проекта принял текущий web-контур и перенос реального прайса без отдельной ручной приёмки пилотным мастером. Такая приёмка отложена и не блокирует дальнейший roadmap. Новые пожелания по реальному прайсу или кабинету оформляются отдельными follow-up задачами, а не возвращают ADR-007 в активную разработку.
+
+Issue #122 закрыт как выполненный. PR #170 зафиксировал production-факты и точку продолжения.
+
 ## Текущая задача
 
-Провести ручную production-приёмку реального длинного прайса в мобильном web-интерфейсе:
+Начат ADR-004 — отдельный детерминированный клиентский Telegram-контур без LLM.
 
-1. проверить пять разделов и все 33 активные позиции;
-2. проверить компактный просмотр, раскрытие, сворачивание и редактирование одной позиции;
-3. проверить отображение фиксированной цены, диапазона и цены за единицу;
-4. создать одну сквозную тестовую запись с основной процедурой и дополнением;
-5. фиксировать только воспроизводимые UX-проблемы, не добавляя новые сущности заранее.
+Активный implementation issue: **#171**.
+
+Первый шаг:
+
+1. зафиксировать проверенную инвентаризацию существующего Booking API;
+2. определить минимальную owner-scoped клиентскую identity отдельно от операторских `users`;
+3. определить заявку как отдельную сущность, не резервирующую время;
+4. разбить реализацию на backend foundation, кабинет мастера, deterministic bot и управление своими заявками;
+5. не начинать runtime client bot до принятия backend security contract.
 
 ## Следующий приоритет
 
-После ручной приёмки продолжить живой пилот и исправлять только обнаруженные реальные пробелы. Из заранее известных отложенных вопросов остаются количество для цены за единицу и применимость дополнений к конкретным процедурам; отдельная модель для них вводится только при подтверждённой необходимости.
+ADR-004 Slice A — backend foundation:
+
+- owner-scoped привязка Telegram-клиентки к существующей карточке `Client`;
+- отдельная заявка со статусами `pending/approved/rejected/cancelled`;
+- публичное read-only представление прайса и свободных окон;
+- client create/list/cancel собственных заявок;
+- master list/approve/reject через существующий `create_booking`;
+- isolation, privacy, idempotency, audit и overlap regression tests;
+- expand-only миграция с включением новых таблиц в backup/restore contract.
 
 ## Точка продолжения
 
@@ -160,11 +178,14 @@ NASTYA_PRICE_TRANSFER_OK=true
 production_application_release_sha=aae810ab0413a5a6448c2f4781380c83b2de28e1
 runtime_web_sha=aae810ab0413a5a6448c2f4781380c83b2de28e1
 production_verification=DEPLOY_OK=true; PR169_PRODUCTION_OK=true
-price_transfer=NASTYA_PRICE_TRANSFER_OK=true; 33 active; 1 archived; other catalogs unchanged
-active_task=manual mobile web acceptance of the real pilot catalog
+price_transfer=accepted; NASTYA_PRICE_TRANSFER_OK=true; 33 active; 1 archived; other catalogs unchanged
+manual_pilot_master_acceptance=deferred; future wishes become follow-up issues
+completed_issue=122
+active_issue=171
+active_task=ADR-004 implementation plan and client backend foundation
+client_contour_source_of_truth=docs/decisions/ADR-004-client-contour-without-llm.md
 product_source_of_truth=docs/product/product-principles.md
-pricing_source_of_truth=docs/decisions/ADR-007-service-catalog-and-pricing.md
 public_master_portal=https://de.funti.cc:8446/web/
 release_contract=exact PR head candidate before merge; merged main uses one atomic deploy.sh flow
-next=mobile My Price review, then one end-to-end booking with a base procedure and addon
+next=merge ADR-004 implementation plan, then implement Slice A backend foundation
 ```
