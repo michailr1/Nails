@@ -82,7 +82,10 @@ function serviceEditorCard(service, index) {
   return `<article class="panel catalog-card catalog-card-editing" data-service-card="${index}">
     <div class="panel-header">
       <strong>${escapeHtml(service.public_name || "Новая позиция")}</strong>
-      <button class="ghost-button catalog-remove" data-remove-service="${index}" type="button">${service.is_new ? "Удалить" : "Убрать из прайса"}</button>
+      <div class="catalog-summary-actions">
+        <button class="secondary-button" data-collapse-service="${index}" type="button">Свернуть</button>
+        <button class="ghost-button catalog-remove" data-remove-service="${index}" type="button">${service.is_new ? "Удалить" : "Убрать из прайса"}</button>
+      </div>
     </div>
     <div class="catalog-grid">
       ${catalogField(service, index, "public_name", "Название", "text", "Так позиция будет показана в прайсе и записях.")}
@@ -212,6 +215,14 @@ function renderServiceCatalogBody(message = "") {
       expandedServiceIndex = Number(button.dataset.editService);
       renderServiceCatalogBody();
       document.querySelector(`[data-service-card="${expandedServiceIndex}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+  document.querySelectorAll("[data-collapse-service]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const collapsedIndex = Number(button.dataset.collapseService);
+      expandedServiceIndex = null;
+      renderServiceCatalogBody();
+      document.querySelector(`[data-service-card="${collapsedIndex}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   });
   document.querySelectorAll("[data-remove-service]").forEach((button) => {
