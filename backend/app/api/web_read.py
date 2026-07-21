@@ -15,20 +15,29 @@ from app.schemas.scheduling_catalog_replace import (
     CatalogReplaceRequest,
     CatalogReplaceResponse,
 )
+from app.schemas.scheduling_management import ClientCreateRequest
 from app.schemas.web_read import (
     WebBookingCreateResponse,
     WebCalendarResponse,
     WebClientCard,
+    WebClientCreateRequest,
+    WebClientCreateResponse,
     WebClientListResponse,
 )
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_catalog_replace import replace_catalog
+from app.services.scheduling_clients import create_or_reuse_client
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_lookup import get_active_client
 from app.services.scheduling_services import list_services
 from app.services.web_auth import require_web_session_identity, validate_web_boundary
 from app.services.web_export import export_all_calendar, export_calendar, export_clients
-from app.services.web_read import list_calendar, list_clients, web_booking_summary
+from app.services.web_read import (
+    list_calendar,
+    list_clients,
+    web_booking_summary,
+    web_client_card,
+)
 
 router = APIRouter(prefix="/web/api", tags=["web-read"])
 SessionDependency = Annotated[Session, Depends(get_db_session)]
@@ -88,6 +97,33 @@ def clients(
     identity: IdentityDependency,
 ) -> WebClientListResponse:
     return list_clients(session, identity)
+
+
+@router.post("/clients", response_model=WebClientCreateResponse)
+def client_create(
+    body: WebClientCreateRequest,
+    request: Request,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> WebClientCreateResponse:
+    validate_web_boundary(request)
+    try:
+        result = create_or_reuse_client(
+            session,
+            identity,
+            ClientCreateRequest(
+                public_name=body.public_name,
+                phone=body.phone,
+            ),
+        )
+        client = get_active_client(session, identity.user_id, body.public_name)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+    return WebClientCreateResponse(
+        client=web_client_card(client),
+        created=result.created,
+        contact_added=result.contact_added,
+    )
 
 
 @router.get("/clients/{client_id}", response_model=WebClientCard)
