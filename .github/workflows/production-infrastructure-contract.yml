@@ -112,14 +112,14 @@ jobs:
           for item in required_context:
               assert item in text["context"], f"missing current context fact: {item}"
 
-          # Structural status invariants only. Volatile SHAs, PRs, issues, dates and
-          # retired deployment markers are intentionally not pinned here.
+          # Structural status invariants only. Volatile SHAs, schema revisions,
+          # PRs, issues, dates and retired deployment markers are not pinned here.
           required_status = (
-              "Alembic | `0006`",
+              "Production application/runtime",
+              "Alembic",
               "context/current.md",
               "Active issue",
-              "Production API/PostgreSQL",
-              "До merge",
+              "Текущий этап",
           )
           for item in required_status:
               assert item in text["status"], f"missing status fact: {item}"
