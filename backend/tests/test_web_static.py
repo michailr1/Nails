@@ -79,10 +79,11 @@ def test_web_assets_are_served(client, clean_database):
     assert '"Дополнительно"' in catalog_editor.text
     assert '"Дизайн"' in catalog_editor.text
     assert '"Парафинотерапия"' in catalog_editor.text
-    assert "Выберите или введите свою" in catalog_editor.text
-    assert "Можно выбрать готовую категорию или написать свою." in (
-        catalog_editor.text
-    )
+    assert "Раздел прайса" in catalog_editor.text
+    assert "Выберите раздел или напишите свой" in catalog_editor.text
+    assert "Можно выбрать готовый раздел или написать свой." in catalog_editor.text
+    assert "Категория <em>" not in catalog_editor.text
+    assert "Можно выбрать готовую категорию" not in catalog_editor.text
     assert 'TELEGRAM_BOT_USERNAME = "smartnails_bot"' in login_enhancements.text
     assert 'LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge"' in (
         login_enhancements.text
