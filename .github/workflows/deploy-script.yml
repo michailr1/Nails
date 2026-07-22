@@ -115,9 +115,18 @@ jobs:
           assert "ARG GIT_SHA" in web_dockerfile
           assert "NAILS_GIT_SHA" in web_dockerfile
           assert "/web-health" in web_dockerfile
-          assert web_dockerfile.count("COPY --chown=101:101") == 2, (
-              "WEB image copies must remain readable under restrictive release umask"
+          required_web_copies = (
+              "COPY --chown=101:101 --chmod=0444 web/nginx.conf "
+              "/etc/nginx/conf.d/default.conf",
+              "COPY --chown=101:101 backend/app/web_static "
+              "/usr/share/nginx/html/web",
+              "COPY --chown=101:101 backend/app/landing_static "
+              "/usr/share/nginx/html/landing",
           )
+          for copy_instruction in required_web_copies:
+              assert copy_instruction in web_dockerfile, (
+                  f"WEB image lost required readable asset copy: {copy_instruction}"
+              )
 
           principles = Path("docs/operations/engineering-principles.md")
           assert principles.is_file(), "engineering principles are mandatory"
