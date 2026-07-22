@@ -11,7 +11,7 @@ def test_calendar_price_fix_shows_known_subtotal(client, clean_database):
 
     assert response.status_code == 200
     assert 'return `от ${formatted}`' in response.text
-    assert 'return "Цена после уточнения"' in response.text
+    assert 'bookingCatalogPrice(booking) || "Цена после уточнения"' in response.text
 
 
 def test_calendar_hides_technical_statuses(client, clean_database):
