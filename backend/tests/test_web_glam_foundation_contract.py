@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 WEB_STATIC = Path(__file__).resolve().parents[1] / "app" / "web_static"
-FONT_URL = 'url("/web/fonts/cormorant-garamond-cyrillic-500-normal.woff2")'
+FONT_PATH = "/web/fonts/cormorant-garamond-cyrillic-500-normal.woff2"
 
 
 def test_document_supports_light_and_dark_color_schemes() -> None:
@@ -48,7 +48,7 @@ def test_foundation_has_no_external_font_or_cdn_dependency() -> None:
     assert "http://" not in combined
     assert "fonts.googleapis" not in combined
     assert "fonts.gstatic" not in combined
-    assert FONT_URL in css
+    assert FONT_PATH in css
     assert "font-display: swap" in css
 
 
