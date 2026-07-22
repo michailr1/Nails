@@ -8,10 +8,10 @@ FONT_PATH = "/web/fonts/cormorant-garamond-cyrillic-500-normal.woff2"
 def test_document_supports_light_and_dark_color_schemes() -> None:
     html = (WEB_STATIC / "index.html").read_text(encoding="utf-8")
 
-    assert '<meta name="color-scheme" content="light dark" />' in html
-    assert 'media="(prefers-color-scheme: light)"' in html
-    assert 'media="(prefers-color-scheme: dark)"' in html
-    assert 'href="/web/design-system.css"' in html
+    assert "<meta name=\"color-scheme\" content=\"light dark\" />" in html
+    assert "media=\"(prefers-color-scheme: light)\"" in html
+    assert "media=\"(prefers-color-scheme: dark)\"" in html
+    assert "href=\"/web/design-system.css\"" in html
 
 
 def test_soft_glam_tokens_and_theme_overrides_are_present() -> None:
@@ -34,8 +34,8 @@ def test_soft_glam_tokens_and_theme_overrides_are_present() -> None:
         assert token in css
 
     assert "@media (prefers-color-scheme: dark)" in css
-    assert ':root[data-theme="dark"]' in css
-    assert ':root[data-theme="light"]' in css
+    assert ":root[data-theme=\"dark\"]" in css
+    assert ":root[data-theme=\"light\"]" in css
     assert "background-attachment: fixed" in css
 
 
