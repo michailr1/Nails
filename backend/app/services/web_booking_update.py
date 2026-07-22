@@ -14,9 +14,9 @@ from app.schemas.web_booking_update import (
     WebBookingUpdateResponse,
 )
 from app.services.scheduling_bookings import (
-    CatalogPriceSemantics,
     _catalog_item_snapshot,
     _ensure_money_range,
+    CatalogPriceSemantics,
 )
 from app.services.scheduling_common import (
     SchedulingDomainError,
