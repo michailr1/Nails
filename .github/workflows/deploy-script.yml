@@ -115,9 +115,10 @@ jobs:
           assert "ARG GIT_SHA" in web_dockerfile
           assert "NAILS_GIT_SHA" in web_dockerfile
           assert "/web-health" in web_dockerfile
-          assert web_dockerfile.count("COPY --chown=101:101") == 2, (
+          assert web_dockerfile.count("COPY --chown=101:101") == 3, (
               "WEB image copies must remain readable under restrictive release umask"
           )
+          assert "backend/app/landing_static /usr/share/nginx/html/landing" in web_dockerfile
 
           principles = Path("docs/operations/engineering-principles.md")
           assert principles.is_file(), "engineering principles are mandatory"
