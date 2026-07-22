@@ -32,11 +32,21 @@ class FinalizationDigestBooking(BaseModel):
     currency: str
 
 
+class FinalizationDigestLongAbsentClient(BaseModel):
+    client_name: str
+    last_visit_date: date
+    days_since_last_visit: int = Field(ge=0)
+    visits_count: int = Field(ge=2)
+
+
 class FinalizationDigestClaimResponse(BaseModel):
     claimed: bool
     claim_id: uuid.UUID | None = None
     local_day: date
     bookings: list[FinalizationDigestBooking]
+    long_absent_clients: list[FinalizationDigestLongAbsentClient] = Field(
+        default_factory=list
+    )
 
 
 class FinalizationDigestAckRequest(BaseModel):
