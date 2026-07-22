@@ -1,9 +1,7 @@
 name: Ruff diagnostic
 
 on:
-  push:
-    branches:
-      - feat/ux-205-glam-foundation
+  pull_request:
 
 permissions:
   contents: read
