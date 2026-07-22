@@ -22,7 +22,8 @@ def test_public_landing_has_honest_product_structure() -> None:
     html = (LANDING / "index.html").read_text(encoding="utf-8")
 
     for copy in (
-        "Личная помощница",
+        "Вы делаете ногти",
+        "Нэйли ведёт записи",
         "Календарь",
         "Клиентки",
         "Мой прайс",
@@ -32,8 +33,31 @@ def test_public_landing_has_honest_product_structure() -> None:
     ):
         assert copy in html
 
-    forbidden = ("тысяч мастеров", "бесплатный тариф", "отзыв", "оплатить")
+    forbidden = (
+        "crm",
+        "тысяч мастеров",
+        "бесплатный тариф",
+        "отзыв",
+        "оплатить",
+        "настройте рабочее время",
+        "обычный график",
+    )
     assert all(copy not in html.lower() for copy in forbidden)
+
+
+def test_public_landing_steps_follow_open_availability_contract() -> None:
+    html = (LANDING / "index.html").read_text(encoding="utf-8")
+
+    for step in (
+        "Соберите свой прайс",
+        "Записывайте клиенток",
+        "Держите клиенток под рукой",
+        "Смотрите результат",
+    ):
+        assert step in html
+
+    assert "Просто назовите время — Нэйли проверит день и сохранит." in html
+    assert "Контакты, заметки и кто давно не был." in html
 
 
 def test_public_root_and_private_cabinet_are_packaged_separately() -> None:
