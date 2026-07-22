@@ -1,0 +1,38 @@
+name: Bootstrap display font
+
+on:
+  push:
+    branches:
+      - feat/ux-205-glam-foundation
+
+permissions:
+  contents: write
+
+jobs:
+  add-font:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ux-205-glam-foundation
+      - name: Download and verify pinned font
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="backend/app/web_static/fonts/cormorant-garamond-cyrillic-500-normal.woff2"
+          mkdir -p "$(dirname "$target")"
+          curl --fail --location --silent --show-error \
+            "https://raw.githubusercontent.com/fontsource/font-files/1fdb61d90d0e5a234f14b562aebf3e2a7addf374/fonts/google/cormorant-garamond/files/cormorant-garamond-cyrillic-500-normal.woff2" \
+            --output "$target"
+          actual="$(git hash-object "$target")"
+          test "$actual" = "82c87bf51c1fc48480752e427eb9c9bcb3044b46"
+      - name: Commit font asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Claude"
+          git config user.email "noreply@anthropic.com"
+          git add backend/app/web_static/fonts/cormorant-garamond-cyrillic-500-normal.woff2
+          git commit -m "feat(web): self-host Cormorant Garamond display font" -m "Refs #205"
+          git push origin HEAD:feat/ux-205-glam-foundation
