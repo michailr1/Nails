@@ -1,0 +1,84 @@
+name: Consolidate soft-glam CSS
+
+on:
+  push:
+    branches:
+      - feat/ux-205-glam-foundation
+
+permissions:
+  contents: write
+
+jobs:
+  consolidate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ux-205-glam-foundation
+      - name: Consolidate into existing styles.css
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path("backend/app/web_static")
+          styles_path = root / "styles.css"
+          overlay_path = root / "design-system.css"
+          index_path = root / "index.html"
+          test_path = Path("backend/tests/test_web_glam_foundation_contract.py")
+
+          styles = styles_path.read_text(encoding="utf-8")
+          overlay = overlay_path.read_text(encoding="utf-8")
+
+          media_marker = "@media (prefers-color-scheme: dark)"
+          foundation, remainder = overlay.split(media_marker, 1)
+          old_root_end = styles.index("}\n", styles.index(":root")) + 2
+          consolidated = (
+              foundation.rstrip()
+              + "\n\n"
+              + styles[old_root_end:].lstrip("\n")
+              + "\n\n/* Soft-glam theme and global foundation. */\n"
+              + media_marker
+              + remainder
+          )
+          styles_path.write_text(consolidated.rstrip() + "\n", encoding="utf-8")
+          overlay_path.unlink()
+
+          index = index_path.read_text(encoding="utf-8")
+          index = index.replace(
+              '    <link rel="stylesheet" href="/web/design-system.css" />\n',
+              "",
+          )
+          index_path.write_text(index.rstrip() + "\n", encoding="utf-8")
+
+          test = test_path.read_text(encoding="utf-8")
+          test = test.replace('"design-system.css"', '"styles.css"')
+          test = test.replace(
+              '    assert "href=\\"/web/design-system.css\\"" in html\n',
+              '    assert "design-system.css" not in html\n',
+          )
+          test_path.write_text(test.rstrip() + "\n", encoding="utf-8")
+          PY
+      - name: Validate consolidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e backend/app/web_static/design-system.css
+          grep -q -- '--gold:' backend/app/web_static/styles.css
+          grep -q '@media (prefers-color-scheme: dark)' backend/app/web_static/styles.css
+          grep -q ':root\[data-theme="dark"\]' backend/app/web_static/styles.css
+          ! grep -q 'design-system.css' backend/app/web_static/index.html
+      - name: Commit consolidated CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Claude"
+          git config user.email "noreply@anthropic.com"
+          git add backend/app/web_static/styles.css \
+            backend/app/web_static/index.html \
+            backend/app/web_static/design-system.css \
+            backend/tests/test_web_glam_foundation_contract.py
+          git commit -m "refactor(web): consolidate soft-glam tokens into styles.css" -m "Refs #205"
+          git push origin HEAD:feat/ux-205-glam-foundation
