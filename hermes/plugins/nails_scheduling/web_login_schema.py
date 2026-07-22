@@ -2,11 +2,14 @@ WEB_LOGIN = {
     "name": "web_login",
     "description": (
         "Read or decide the current master's pending web-login request by the "
-        "six-digit number shown in the browser. Reading is safe. The exact Telegram "
-        "message 'Нэйли, подтверждаю вход: NNNNNN' is itself a separate explicit "
-        "confirmation from the master: call action=approve immediately and do not "
-        "ask 'Подтвердить вход?' again. For any other wording, approve or deny only "
-        "after a separate explicit conversational confirmation from the master."
+        "six-digit number shown in the browser. Reading is safe. Telegram messages "
+        "that explicitly approve the login, including 'Нэйли, подтверждаю вход: "
+        "NNNNNN', 'подтверждаю вход NNNNNN', and 'подтверди вход NNNNNN', are "
+        "themselves a separate explicit confirmation from the master: call "
+        "action=approve immediately and do not ask 'Подтвердить вход?' again. A "
+        "bare six-digit number or wording that only asks to inspect the request must "
+        "use action=read and requires a separate explicit conversational decision "
+        "before approve or deny."
     ),
     "parameters": {
         "type": "object",
