@@ -63,4 +63,4 @@ def test_working_price_rejects_mixed_currency() -> None:
 
 
 def test_only_scheduled_and_completed_bookings_are_editable() -> None:
-    assert _EDITABLE_STATUSES == {BookingStatus.scheduled, BookingStatus.completed}
+    assert {BookingStatus.scheduled, BookingStatus.completed} == _EDITABLE_STATUSES
