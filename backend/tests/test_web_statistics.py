@@ -47,6 +47,16 @@ def _booking(
     )
 
 
+def _fixed_item(kind: str, name: str, price: str):
+    return {
+        "kind": kind,
+        "public_name": name,
+        "price_type": "fixed",
+        "price_amount": price,
+        "price_min_amount": None,
+    }
+
+
 def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
     monkeypatch,
 ):
@@ -67,8 +77,8 @@ def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
                 ends_at=datetime(2026, 7, 21, 10, 0, tzinfo=UTC),
                 price="2700.00",
                 items=[
-                    {"kind": "base", "public_name": "Маникюр"},
-                    {"kind": "addon", "public_name": "Снятие"},
+                    _fixed_item("base", "Маникюр", "2400.00"),
+                    _fixed_item("addon", "Снятие", "300.00"),
                 ],
             ),
             client,
@@ -80,6 +90,7 @@ def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
                 starts_at=datetime(2026, 7, 21, 11, 0, tzinfo=UTC),
                 ends_at=datetime(2026, 7, 21, 13, 0, tzinfo=UTC),
                 price="3100.00",
+                items=[_fixed_item("base", "Маникюр", "3100.00")],
             ),
             client,
             service,
@@ -90,6 +101,7 @@ def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
                 starts_at=datetime(2026, 7, 21, 16, 0, tzinfo=UTC),
                 ends_at=datetime(2026, 7, 21, 18, 0, tzinfo=UTC),
                 price="2900.00",
+                items=[_fixed_item("base", "Маникюр", "2900.00")],
             ),
             client,
             service,
@@ -116,10 +128,100 @@ def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
     assert result.summary.average_check_amount == Decimal("2900.00")
     assert result.procedures[0].name == "Маникюр"
     assert result.procedures[0].visits_count == 2
+    assert result.procedures[0].priced_visits_count == 2
+    assert result.procedures[0].revenue_amount == Decimal("5500.00")
     assert result.addons[0].name == "Снятие"
+    assert result.addons[0].priced_visits_count == 1
+    assert result.addons[0].revenue_amount == Decimal("300.00")
     assert result.clients[0].revenue_amount == Decimal("5800.00")
     assert result.clients[0].last_visit_date.isoformat() == "2026-07-21"
     assert result.long_absent_clients == []
+
+
+def test_statistics_catalog_revenue_uses_snapshot_lower_bound(monkeypatch):
+    monkeypatch.setattr(
+        web_statistics,
+        "get_settings",
+        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
+    )
+    client = SimpleNamespace(id=uuid.uuid4(), public_name="Анна")
+    service = SimpleNamespace(public_name="Педикюр")
+    rows = [
+        (
+            _booking(
+                status=BookingStatus.completed,
+                starts_at=datetime(2026, 7, 20, 10, 0, tzinfo=UTC),
+                ends_at=datetime(2026, 7, 20, 12, 0, tzinfo=UTC),
+                price="3500.00",
+                source="catalog_range",
+                items=[
+                    {
+                        "kind": "base",
+                        "public_name": "Педикюр",
+                        "price_type": "range",
+                        "price_amount": None,
+                        "price_min_amount": "3000.00",
+                    },
+                    _fixed_item("addon", "Дизайн", "500.00"),
+                ],
+            ),
+            client,
+            service,
+        )
+    ]
+
+    result = web_statistics.get_statistics(
+        _Session(rows),
+        SimpleNamespace(user_id=uuid.uuid4()),
+        date_from=datetime(2026, 7, 20).date(),
+        date_to=datetime(2026, 7, 20).date(),
+        now=datetime(2026, 7, 21, 0, 0, tzinfo=UTC),
+    )
+
+    assert result.procedures[0].revenue_amount == Decimal("3000.00")
+    assert result.addons[0].revenue_amount == Decimal("500.00")
+
+
+def test_statistics_does_not_guess_manual_override_distribution(monkeypatch):
+    monkeypatch.setattr(
+        web_statistics,
+        "get_settings",
+        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
+    )
+    client = SimpleNamespace(id=uuid.uuid4(), public_name="Анна")
+    service = SimpleNamespace(public_name="Маникюр")
+    rows = [
+        (
+            _booking(
+                status=BookingStatus.completed,
+                starts_at=datetime(2026, 7, 20, 10, 0, tzinfo=UTC),
+                ends_at=datetime(2026, 7, 20, 12, 0, tzinfo=UTC),
+                price="2500.00",
+                source="manual_override",
+                items=[
+                    _fixed_item("base", "Маникюр", "2400.00"),
+                    _fixed_item("addon", "Снятие", "300.00"),
+                ],
+            ),
+            client,
+            service,
+        )
+    ]
+
+    result = web_statistics.get_statistics(
+        _Session(rows),
+        SimpleNamespace(user_id=uuid.uuid4()),
+        date_from=datetime(2026, 7, 20).date(),
+        date_to=datetime(2026, 7, 20).date(),
+        now=datetime(2026, 7, 21, 0, 0, tzinfo=UTC),
+    )
+
+    assert result.summary.revenue_amount == Decimal("2500.00")
+    assert result.procedures[0].visits_count == 1
+    assert result.procedures[0].priced_visits_count == 0
+    assert result.procedures[0].revenue_amount == Decimal("0.00")
+    assert result.addons[0].priced_visits_count == 0
+    assert result.addons[0].revenue_amount == Decimal("0.00")
 
 
 def test_statistics_excludes_cancelled_and_no_show_and_keeps_unknown_price_visible(
