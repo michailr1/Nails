@@ -88,25 +88,32 @@ def _money(value: Any, currency: str) -> str:
 def _price_text(item: dict[str, Any]) -> str:
     price_type = item.get("price_type")
     currency = str(item.get("currency") or "RUB")
-    if price_type == "fixed" and item.get("price_amount") is not None:
-        return f"Ориентир: {_money(item['price_amount'], currency)}"
-    if price_type == "range":
-        minimum = item.get("price_min_amount")
-        maximum = item.get("price_max_amount")
-        if minimum is not None and maximum is not None:
-            return (
-                f"Ориентир: {_money(minimum, currency)}–"
-                f"{_money(maximum, currency)}; без уточнения сохраню нижнюю границу "
-                "как неуточнённую"
-            )
-        return "Итоговая сумма не уточнена"
-    if price_type == "per_unit" and item.get("price_amount") is not None:
-        unit = str(item.get("price_unit") or "единицу")
-        return (
-            f"Ориентир: {_money(item['price_amount'], currency)} за {unit}; "
-            "итоговая сумма не указана"
-        )
-    return "Итоговая сумма не указана"
+    if item.get("price_amount") is not None:
+        prefix = "от " if price_type in {"range", "per_unit", "on_request"} else ""
+        return f"Ориентир: {prefix}{_money(item['price_amount'], currency)}"
+    minimum = item.get("price_min_amount")
+    if minimum is not None:
+        return f"Ориентир: от {_money(minimum, currency)}"
+    return "Индивидуальная цена"
+
+
+def _daily_earnings_line(bookings: list[dict[str, Any]]) -> str:
+    total = Decimal(0)
+    currency = "RUB"
+    estimated = False
+    for item in bookings:
+        currency = str(item.get("currency") or currency)
+        amount = item.get("price_amount")
+        if amount is None:
+            amount = item.get("price_min_amount")
+        if amount is None:
+            estimated = True
+            continue
+        total += Decimal(str(amount))
+        if item.get("price_type") != "fixed" or item.get("price_confirmed") is not True:
+            estimated = True
+    prefix = "от " if estimated else ""
+    return f"Заработок за день: {prefix}{_money(total, currency)}"
 
 
 def _long_absent_lines(items: list[dict[str, Any]]) -> list[str]:
@@ -133,7 +140,11 @@ def _message(
     local_day: date,
     long_absent_clients: list[dict[str, Any]] | None = None,
 ) -> str:
-    lines = [f"🌙 Итоги дня — {local_day:%d.%m.%Y}", ""]
+    lines = [
+        f"🌙 Итоги дня — {local_day:%d.%m.%Y}",
+        _daily_earnings_line(bookings),
+        "",
+    ]
     for index, item in enumerate(bookings, start=1):
         starts_at = datetime.fromisoformat(str(item["starts_at"])).astimezone(timezone)
         ends_at = datetime.fromisoformat(str(item["ends_at"])).astimezone(timezone)
@@ -151,10 +162,10 @@ def _message(
         )
     lines.extend(
         (
-            "Ответьте по номеру или имени: «1 — 1700», «у Марины 1700», "
+            "Нэйли уже посчитала день по сохранённым ценам из записей.",
+            "Если фактическая сумма отличалась, напишите по номеру или имени, "
+            "например: «1 — 1700» или «у Марины 1700». Неявку можно отметить: "
             "«2 — не пришла».",
-            "Если всё совпало: «всё по ориентиру». Нэйли покажет сводку и общую "
-            "подтверждённую сумму, затем попросит одно подтверждение перед сохранением.",
         )
     )
     lines.extend(_long_absent_lines(long_absent_clients or []))

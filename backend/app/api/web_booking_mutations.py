@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,9 +13,14 @@ from app.schemas.scheduling_management import (
     BookingMutationResponse,
     BookingRescheduleRequest,
 )
+from app.schemas.web_booking_update import (
+    WebBookingUpdateRequest,
+    WebBookingUpdateResponse,
+)
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_management import cancel_booking, reschedule_booking
 from app.services.web_auth import require_web_session_identity, validate_web_boundary
+from app.services.web_booking_update import update_booking
 
 router = APIRouter(prefix="/web/api/bookings", tags=["web-booking-mutations"])
 SessionDependency = Annotated[Session, Depends(get_db_session)]
@@ -61,5 +67,20 @@ def booking_cancel(
     validate_web_boundary(request)
     try:
         return cancel_booking(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
+@router.put("/{booking_id}", response_model=WebBookingUpdateResponse)
+def booking_update(
+    booking_id: uuid.UUID,
+    body: WebBookingUpdateRequest,
+    request: Request,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> WebBookingUpdateResponse:
+    validate_web_boundary(request)
+    try:
+        return update_booking(session, identity, booking_id, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
