@@ -27,12 +27,16 @@ def test_web_login_tool_registers_only_when_enabled(monkeypatch):
     assert registered["web_login"]["handler"] is web_login_tool.web_login
 
 
-def test_schema_treats_deep_link_message_as_explicit_approval():
+def test_schema_treats_explicit_login_commands_as_approval():
     description = WEB_LOGIN["description"]
 
     assert "Нэйли, подтверждаю вход: NNNNNN" in description
+    assert "подтверждаю вход NNNNNN" in description
+    assert "подтверди вход NNNNNN" in description
     assert "call action=approve immediately" in description
     assert "do not ask 'Подтвердить вход?' again" in description
+    assert "bare six-digit number" in description
+    assert "use action=read" in description
 
 
 def test_read_uses_trusted_identity_and_allowlisted_endpoint(monkeypatch):
