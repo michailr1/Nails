@@ -1,0 +1,39 @@
+.long-absent-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.long-absent-copy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.long-absent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.long-absent-actions .secondary-button {
+  min-height: 2.5rem;
+  padding: 0 0.85rem;
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .long-absent-row {
+    grid-template-columns: 1fr;
+  }
+
+  .long-absent-actions {
+    justify-content: stretch;
+  }
+
+  .long-absent-actions .secondary-button {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+}
