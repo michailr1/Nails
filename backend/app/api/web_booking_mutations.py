@@ -43,21 +43,6 @@ def _translate_domain_error(exc: SchedulingDomainError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=detail)
 
 
-@router.put("/{booking_id}", response_model=WebBookingUpdateResponse)
-def booking_update(
-    booking_id: uuid.UUID,
-    body: WebBookingUpdateRequest,
-    request: Request,
-    session: SessionDependency,
-    identity: IdentityDependency,
-) -> WebBookingUpdateResponse:
-    validate_web_boundary(request)
-    try:
-        return update_booking(session, identity, booking_id, body)
-    except SchedulingDomainError as exc:
-        raise _translate_domain_error(exc) from exc
-
-
 @router.put("/reschedule", response_model=BookingMutationResponse)
 def booking_reschedule(
     body: BookingRescheduleRequest,
@@ -82,5 +67,20 @@ def booking_cancel(
     validate_web_boundary(request)
     try:
         return cancel_booking(session, identity, body)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
+@router.put("/{booking_id}", response_model=WebBookingUpdateResponse)
+def booking_update(
+    booking_id: uuid.UUID,
+    body: WebBookingUpdateRequest,
+    request: Request,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> WebBookingUpdateResponse:
+    validate_web_boundary(request)
+    try:
+        return update_booking(session, identity, booking_id, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
