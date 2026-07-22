@@ -21,19 +21,19 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       - name: Install Ruff
         run: python -m pip install 'ruff>=0.9,<1'
-      - name: Capture Ruff output
+      - name: Capture Ruff fix
         shell: bash
         run: |
-          set +e
-          ruff check . > ../ruff-output.txt 2>&1
-          status=$?
-          cat ../ruff-output.txt
-          echo "$status" > ../ruff-status.txt
-          exit 0
+          cp tests/test_web_glam_foundation_contract.py ../before.py
+          ruff check --fix tests/test_web_glam_foundation_contract.py
+          cp tests/test_web_glam_foundation_contract.py ../after.py
+          diff -u ../before.py ../after.py > ../ruff-fix.diff || true
+          cat ../ruff-fix.diff
       - uses: actions/upload-artifact@v4
         with:
           name: ruff-diagnostic
           path: |
-            ruff-output.txt
-            ruff-status.txt
+            before.py
+            after.py
+            ruff-fix.diff
           if-no-files-found: error
