@@ -33,6 +33,8 @@ class WebStatisticsCatalogItem(BaseModel):
     name: str
     kind: str
     visits_count: int
+    priced_visits_count: int
+    revenue_amount: Decimal
 
 
 class WebStatisticsClient(BaseModel):

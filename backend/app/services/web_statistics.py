@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
@@ -25,6 +25,11 @@ _LONG_ABSENT_AFTER_DAYS = 42
 _LONG_ABSENT_DECAY_DAYS = 120
 _ZERO = Decimal("0.00")
 _MONEY_STEP = Decimal("0.01")
+_ATTRIBUTABLE_PRICE_SOURCES = {
+    "catalog_fixed",
+    "catalog_range",
+    "final_range_lower_bound_unconfirmed",
+}
 
 
 def _money(value: Decimal) -> Decimal:
@@ -67,6 +72,52 @@ def _catalog_items(booking: Booking, service: Service) -> list[tuple[str, str]]:
     if not any(kind == "base" for _, kind in items):
         items.insert(0, (service.public_name, "base"))
     return items
+
+
+def _decimal_snapshot_value(value: object) -> Decimal | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return _money(Decimal(str(value)))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _catalog_revenue_items(
+    booking: Booking,
+    amount: Decimal | None,
+) -> list[tuple[str, str, Decimal]]:
+    if amount is None or booking.price_source not in _ATTRIBUTABLE_PRICE_SOURCES:
+        return []
+
+    result: list[tuple[str, str, Decimal]] = []
+    has_base = False
+    for raw_item in booking.catalog_items_snapshot or []:
+        if not isinstance(raw_item, dict):
+            return []
+        name = raw_item.get("public_name")
+        kind = raw_item.get("kind")
+        price_type = raw_item.get("price_type")
+        if not isinstance(name, str) or not name.strip():
+            return []
+        if kind not in {"base", "addon"}:
+            return []
+        if price_type == "fixed":
+            item_amount = _decimal_snapshot_value(raw_item.get("price_amount"))
+        elif price_type == "range":
+            item_amount = _decimal_snapshot_value(raw_item.get("price_min_amount"))
+        else:
+            return []
+        if item_amount is None:
+            return []
+        has_base = has_base or kind == "base"
+        result.append((name.strip(), kind, item_amount))
+
+    if not result or not has_base:
+        return []
+    if _money(sum((item_amount for _, _, item_amount in result), _ZERO)) != amount:
+        return []
+    return result
 
 
 def _visit_history_rows(
@@ -191,7 +242,13 @@ def get_statistics(
             "assumed": 0,
         }
     )
-    catalog_counts: dict[tuple[str, str], int] = defaultdict(int)
+    catalog_values: dict[tuple[str, str], dict[str, Decimal | int]] = defaultdict(
+        lambda: {
+            "visits": 0,
+            "priced_visits": 0,
+            "revenue": _ZERO,
+        }
+    )
     client_values: dict[object, dict[str, object]] = {}
 
     for booking, client, service in rows:
@@ -236,7 +293,10 @@ def get_statistics(
                 estimated_revenue += amount
 
         for name, kind in _catalog_items(booking, service):
-            catalog_counts[(kind, name)] += 1
+            catalog_values[(kind, name)]["visits"] += 1
+        for name, kind, item_amount in _catalog_revenue_items(booking, amount):
+            catalog_values[(kind, name)]["priced_visits"] += 1
+            catalog_values[(kind, name)]["revenue"] += item_amount
 
         client_value = client_values.setdefault(
             client.id,
@@ -275,11 +335,24 @@ def get_statistics(
 
     def catalog_items(kind: str) -> list[WebStatisticsCatalogItem]:
         result = [
-            WebStatisticsCatalogItem(name=name, kind=kind, visits_count=count)
-            for (item_kind, name), count in catalog_counts.items()
+            WebStatisticsCatalogItem(
+                name=name,
+                kind=kind,
+                visits_count=int(values["visits"]),
+                priced_visits_count=int(values["priced_visits"]),
+                revenue_amount=_money(values["revenue"]),
+            )
+            for (item_kind, name), values in catalog_values.items()
             if item_kind == kind
         ]
-        return sorted(result, key=lambda item: (-item.visits_count, item.name.casefold()))
+        return sorted(
+            result,
+            key=lambda item: (
+                -item.revenue_amount,
+                -item.priced_visits_count,
+                item.name.casefold(),
+            ),
+        )
 
     clients: list[WebStatisticsClient] = []
     for client_id, values in client_values.items():
