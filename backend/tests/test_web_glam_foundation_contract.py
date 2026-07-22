@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 WEB_STATIC = Path(__file__).resolve().parents[1] / "app" / "web_static"
 FONT_PATH = "/web/fonts/cormorant-garamond-cyrillic-500-normal.woff2"
 GLAM_TOKENS = (
