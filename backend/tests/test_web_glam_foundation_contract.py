@@ -3,6 +3,20 @@ from pathlib import Path
 
 WEB_STATIC = Path(__file__).resolve().parents[1] / "app" / "web_static"
 FONT_PATH = "/web/fonts/cormorant-garamond-cyrillic-500-normal.woff2"
+GLAM_TOKENS = (
+    "--bg-2:",
+    "--surface-2:",
+    "--blush-deep:",
+    "--blush-tint:",
+    "--gold:",
+    "--gold-lite:",
+    "--blob-rose:",
+    "--blob-peach:",
+    "--blob-gold:",
+    "--serif:",
+    "--ring:",
+    "--shadow-soft:",
+)
 
 
 def test_document_supports_light_and_dark_color_schemes() -> None:
@@ -17,22 +31,7 @@ def test_document_supports_light_and_dark_color_schemes() -> None:
 def test_soft_glam_tokens_and_theme_overrides_are_present() -> None:
     css = (WEB_STATIC / "design-system.css").read_text(encoding="utf-8")
 
-    for token in (
-        "--bg-2:",
-        "--surface-2:",
-        "--blush-deep:",
-        "--blush-tint:",
-        "--gold:",
-        "--gold-lite:",
-        "--blob-rose:",
-        "--blob-peach:",
-        "--blob-gold:",
-        "--serif:",
-        "--ring:",
-        "--shadow-soft:",
-    ):
-        assert token in css
-
+    assert all(token in css for token in GLAM_TOKENS)
     assert "@media (prefers-color-scheme: dark)" in css
     assert ":root[data-theme=\"dark\"]" in css
     assert ":root[data-theme=\"light\"]" in css
@@ -42,7 +41,7 @@ def test_soft_glam_tokens_and_theme_overrides_are_present() -> None:
 def test_foundation_has_no_external_font_or_cdn_dependency() -> None:
     css = (WEB_STATIC / "design-system.css").read_text(encoding="utf-8")
     html = (WEB_STATIC / "index.html").read_text(encoding="utf-8")
-    combined = f"{css}\n{html}".lower()
+    combined = (css + "\n" + html).lower()
 
     assert "https://" not in combined
     assert "http://" not in combined
