@@ -10,7 +10,7 @@ def test_internal_scheduled_status_is_not_rendered_to_master() -> None:
 
     assert 'scheduled: "Запланирована"' not in source
     assert 'statusLabel ? `<span class="badge">' in source
-    assert 'return booking.status === "scheduled";' in source
+    assert 'booking.status === "scheduled" || booking.status === "completed"' in source
 
 
 def test_past_scheduled_booking_remains_editable() -> None:
@@ -18,7 +18,7 @@ def test_past_scheduled_booking_remains_editable() -> None:
 
     assert "Date.now()" not in source
     assert 'booking.status === "scheduled"' in source
-    assert "/web/api/bookings/reschedule" in source
+    assert "/web/api/bookings/${booking.booking_id}" in source
     assert "/web/api/bookings/cancel" in source
 
 
