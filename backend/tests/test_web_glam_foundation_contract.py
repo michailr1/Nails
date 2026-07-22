@@ -24,11 +24,11 @@ def test_document_supports_light_and_dark_color_schemes() -> None:
     assert "<meta name=\"color-scheme\" content=\"light dark\" />" in html
     assert "media=\"(prefers-color-scheme: light)\"" in html
     assert "media=\"(prefers-color-scheme: dark)\"" in html
-    assert "href=\"/web/design-system.css\"" in html
+    assert "design-system.css" not in html
 
 
 def test_soft_glam_tokens_and_theme_overrides_are_present() -> None:
-    css = (WEB_STATIC / "design-system.css").read_text(encoding="utf-8")
+    css = (WEB_STATIC / "styles.css").read_text(encoding="utf-8")
 
     assert all(token in css for token in GLAM_TOKENS)
     assert "@media (prefers-color-scheme: dark)" in css
@@ -38,7 +38,7 @@ def test_soft_glam_tokens_and_theme_overrides_are_present() -> None:
 
 
 def test_foundation_has_no_external_font_or_cdn_dependency() -> None:
-    css = (WEB_STATIC / "design-system.css").read_text(encoding="utf-8")
+    css = (WEB_STATIC / "styles.css").read_text(encoding="utf-8")
     html = (WEB_STATIC / "index.html").read_text(encoding="utf-8")
     combined = (css + "\n" + html).lower()
 
@@ -51,7 +51,7 @@ def test_foundation_has_no_external_font_or_cdn_dependency() -> None:
 
 
 def test_mobile_accessibility_contract_is_present() -> None:
-    css = (WEB_STATIC / "design-system.css").read_text(encoding="utf-8")
+    css = (WEB_STATIC / "styles.css").read_text(encoding="utf-8")
 
     assert "overflow-x: clip" in css
     assert "env(safe-area-inset-bottom)" in css
