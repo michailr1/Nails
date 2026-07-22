@@ -2,7 +2,7 @@ const TELEGRAM_BOT_USERNAME = "smartnails_bot";
 const LOGIN_CHALLENGE_STORAGE_KEY = "nails.web-login.pending-challenge";
 const CHALLENGE_POLL_INTERVAL_MS = 4500;
 const CONSUME_RETRY_INTERVAL_MS = 5000;
-const MAX_CONSUME_RATE_LIMIT_RETRIES = 4;
+const MAX_CONSUME_RATE_LIMIT_RETRIES = 3;
 let challengeRestoreInFlight = false;
 let challengePollInFlight = false;
 let consumeRateLimitRetries = 0;
@@ -108,6 +108,15 @@ function finishAuthenticatedLogin() {
   if (!resumedInitialRender) renderApp();
 }
 
+function failConsumeLogin() {
+  consumeRateLimitRetries = 0;
+  forgetStoredChallenge();
+  state.challenge = null;
+  clearPoll();
+  releaseInitialSessionCheck();
+  renderLogin("Не удалось открыть кабинет. Получите новое число и войдите заново.");
+}
+
 async function pollPersistedChallenge() {
   if (!state.challenge || challengePollInFlight) return;
   challengePollInFlight = true;
@@ -136,8 +145,8 @@ async function pollPersistedChallenge() {
     }
     if (stage === "consume" && [429, 503].includes(error.status)) {
       consumeRateLimitRetries += 1;
-      if (consumeRateLimitRetries > MAX_CONSUME_RATE_LIMIT_RETRIES) {
-        return renderLogin("Не удалось завершить вход из-за временной нагрузки. Начните вход заново.");
+      if (consumeRateLimitRetries >= MAX_CONSUME_RATE_LIMIT_RETRIES) {
+        return failConsumeLogin();
       }
       renderConfirmation("Сервер занят. Повторяем открытие кабинета…");
       state.pollTimer = window.setTimeout(pollChallenge, CONSUME_RETRY_INTERVAL_MS);
