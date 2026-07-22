@@ -1,7 +1,8 @@
 from pathlib import Path
 
 WEB_STATIC = Path(__file__).resolve().parents[1] / "app" / "web_static"
-FONT_PATH = "/web/fonts/cormorant-garamond-cyrillic-500-normal.woff2"
+FONT_NAME = "cormorant-garamond-cyrillic-500-normal.woff2"
+FONT_PATH = f"/web/fonts/{FONT_NAME}"
 GLAM_TOKENS = (
     "--bg-2:",
     "--surface-2:",
@@ -35,6 +36,8 @@ def test_soft_glam_tokens_and_theme_overrides_are_present() -> None:
     assert ":root[data-theme=\"dark\"]" in css
     assert ":root[data-theme=\"light\"]" in css
     assert "background-attachment: fixed" in css
+    assert css.count(":root {") == 1
+    assert "font-family: Georgia" not in css
 
 
 def test_foundation_has_no_external_font_or_cdn_dependency() -> None:
@@ -48,6 +51,10 @@ def test_foundation_has_no_external_font_or_cdn_dependency() -> None:
     assert "fonts.gstatic" not in combined
     assert FONT_PATH in css
     assert "font-display: swap" in css
+
+    font = WEB_STATIC / "fonts" / FONT_NAME
+    assert font.stat().st_size > 10_000
+    assert font.read_bytes()[:4] == b"wOF2"
 
 
 def test_mobile_accessibility_contract_is_present() -> None:
