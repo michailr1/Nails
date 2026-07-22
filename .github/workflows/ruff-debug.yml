@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   ruff:
@@ -14,5 +15,18 @@ jobs:
         with:
           show-progress: false
       - uses: astral-sh/ruff-action@v3
+        id: ruff
+        continue-on-error: true
         with:
-          args: check backend/app backend/tests
+          args: check backend/app backend/tests --output-format=concise
+      - name: Publish failure
+        if: steps.ruff.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          output="$(cd backend && ruff check app tests --output-format=concise 2>&1 || true)"
+          gh pr comment "${{ github.event.pull_request.number }}" --body "<!-- ruff-debug -->
+          \`\`\`text
+          ${output}
+          \`\`\`"
+          exit 1
