@@ -24,9 +24,11 @@ from app.schemas.scheduling_digest import (
     FinalizationDigestBooking,
     FinalizationDigestClaimRequest,
     FinalizationDigestClaimResponse,
+    FinalizationDigestLongAbsentClient,
     FinalizationDigestOwnersResponse,
 )
 from app.services.scheduling_common import app_timezone, lock_owner_schedule
+from app.services.web_statistics import _long_absent_clients, _visit_history_rows
 
 
 def list_digest_owners(session: Session) -> FinalizationDigestOwnersResponse:
@@ -81,6 +83,29 @@ def _digest_booking(
         price_unit=booking.catalog_price_unit_snapshot,
         currency=booking.currency,
     )
+
+
+def _digest_long_absent_clients(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    current: datetime,
+    generated_day,
+) -> list[FinalizationDigestLongAbsentClient]:
+    _, clients = _long_absent_clients(
+        _visit_history_rows(session, identity, current=current),
+        timezone=app_timezone(),
+        generated_day=generated_day,
+    )
+    return [
+        FinalizationDigestLongAbsentClient(
+            client_name=item.client_name,
+            last_visit_date=item.last_visit_date,
+            days_since_last_visit=item.days_since_last_visit,
+            visits_count=item.visits_count,
+        )
+        for item in clients
+    ]
 
 
 def claim_finalization_digest(
@@ -182,6 +207,12 @@ def claim_finalization_digest(
             _digest_booking(booking, client, service)
             for booking, client, service in rows
         ],
+        long_absent_clients=_digest_long_absent_clients(
+            session,
+            identity,
+            current=cutoff,
+            generated_day=body.local_day,
+        ),
     )
 
 
