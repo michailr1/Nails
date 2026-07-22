@@ -13,6 +13,7 @@ import httpx
 
 logger = logging.getLogger("nails-finalization-digest")
 _MAX_MESSAGE_LENGTH = 3900
+_MAX_LONG_ABSENT_CLIENTS = 5
 
 
 def _required_env(name: str) -> str:
@@ -108,10 +109,29 @@ def _price_text(item: dict[str, Any]) -> str:
     return "Итоговая сумма не указана"
 
 
+def _long_absent_lines(items: list[dict[str, Any]]) -> list[str]:
+    if not items:
+        return []
+    lines = ["", "💡 Давно не были"]
+    for item in items[:_MAX_LONG_ABSENT_CLIENTS]:
+        last_visit = date.fromisoformat(str(item["last_visit_date"]))
+        weeks = max(1, int(item["days_since_last_visit"]) // 7)
+        lines.append(
+            f"• {item['client_name']} — последний раз {last_visit:%d.%m}, "
+            f"{weeks} нед. назад"
+        )
+    remaining = len(items) - _MAX_LONG_ABSENT_CLIENTS
+    if remaining > 0:
+        lines.append(f"И ещё {remaining} — полный список есть в кабинете.")
+    lines.append("Нэйли никому не пишет сама — это только подсказка вам.")
+    return lines
+
+
 def _message(
     bookings: list[dict[str, Any]],
     timezone: ZoneInfo,
     local_day: date,
+    long_absent_clients: list[dict[str, Any]] | None = None,
 ) -> str:
     lines = [f"🌙 Итоги дня — {local_day:%d.%m.%Y}", ""]
     for index, item in enumerate(bookings, start=1):
@@ -137,6 +157,7 @@ def _message(
             "подтверждённую сумму, затем попросит одно подтверждение перед сохранением.",
         )
     )
+    lines.extend(_long_absent_lines(long_absent_clients or []))
     return "\n".join(lines)[:_MAX_MESSAGE_LENGTH]
 
 
@@ -175,11 +196,13 @@ def _send_owner_digest(
         return False
     claim_id = claim.get("claim_id")
     bookings = claim.get("bookings")
+    long_absent_clients = claim.get("long_absent_clients", [])
     claimed_local_day = claim.get("local_day")
     if (
         not isinstance(claim_id, str)
         or not isinstance(bookings, list)
         or not bookings
+        or not isinstance(long_absent_clients, list)
         or not isinstance(claimed_local_day, str)
     ):
         raise ValueError("backend returned an invalid digest claim")
@@ -193,7 +216,12 @@ def _send_owner_digest(
             f"https://api.telegram.org/bot{token}/sendMessage",
             json={
                 "chat_id": telegram_user_id,
-                "text": _message(bookings, now.tzinfo or _timezone(), local_day),
+                "text": _message(
+                    bookings,
+                    now.tzinfo or _timezone(),
+                    local_day,
+                    long_absent_clients,
+                ),
                 "disable_web_page_preview": True,
             },
         )
