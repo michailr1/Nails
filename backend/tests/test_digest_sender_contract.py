@@ -30,6 +30,7 @@ def _booking(**overrides):
         "price_min_amount": "2700.00",
         "price_max_amount": "2700.00",
         "price_unit": None,
+        "price_confirmed": True,
         "currency": "RUB",
     }
     value.update(overrides)
@@ -49,6 +50,7 @@ def test_message_uses_public_fields_and_never_turns_unknown_price_into_zero():
                 price_amount=None,
                 price_min_amount=None,
                 price_max_amount=None,
+                price_confirmed=False,
             ),
         ],
         ZoneInfo("Europe/Moscow"),
@@ -56,12 +58,15 @@ def test_message_uses_public_fields_and_never_turns_unknown_price_into_zero():
     )
 
     assert "Итоги дня — 19.07.2026" in message
+    assert "Заработок за день: от 2700 ₽" in message
     assert "Анна" in message
     assert "Маникюр + Снятие" in message
     assert "2700 ₽" in message
-    assert "Итоговая сумма не указана" in message
+    assert "Индивидуальная цена" in message
     assert "1 — 1700" in message
-    assert "общую подтверждённую сумму" in message
+    assert "Нэйли уже посчитала день" in message
+    assert "Итоговая сумма не указана" not in message
+    assert "общую подтверждённую сумму" not in message
     assert "\nОриентир: 0 ₽" not in message
     assert "claim_id" not in message
     assert "booking_id" not in message
@@ -117,6 +122,7 @@ def test_sender_keeps_bot_credential_outside_backend_requests(monkeypatch):
     assert telegram_calls[0][0].endswith("/botbot-secret/sendMessage")
     assert telegram_calls[0][1]["chat_id"] == 700000001
     assert "19.07.2026" in telegram_calls[0][1]["text"]
+    assert "Заработок за день: 2700 ₽" in telegram_calls[0][1]["text"]
     assert ack_calls == [
         (
             "internal-key",
