@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,8 +14,8 @@ from app.schemas.web_booking_update import (
     WebBookingUpdateResponse,
 )
 from app.services.scheduling_bookings import (
+    CatalogPriceSemantics,
     _catalog_item_snapshot,
-    _catalog_price_semantics,
     _ensure_money_range,
 )
 from app.services.scheduling_common import (
@@ -33,6 +34,56 @@ from app.services.scheduling_presenters import booking_summary
 from app.services.web_read import web_booking_summary
 
 _EDITABLE_STATUSES = {BookingStatus.scheduled, BookingStatus.completed}
+
+
+def _working_price_semantics(services: list[Service]) -> CatalogPriceSemantics:
+    currencies = {service.currency for service in services}
+    if len(currencies) != 1:
+        raise SchedulingDomainError("catalog_currency_mismatch")
+
+    minimum = Decimal(0)
+    maximum = Decimal(0)
+    estimated = False
+    known = False
+    for service in services:
+        if service.price_type == "fixed":
+            minimum += service.price_amount
+            maximum += service.price_amount
+            known = True
+        elif service.price_type == "range":
+            if service.price_min_amount is None or service.price_max_amount is None:
+                raise SchedulingDomainError("invalid_catalog_price")
+            minimum += service.price_min_amount
+            maximum += service.price_max_amount
+            estimated = True
+            known = True
+        elif service.price_type == "per_unit":
+            minimum += service.price_amount
+            maximum += service.price_amount
+            estimated = True
+            known = True
+        else:
+            estimated = True
+
+    minimum = _ensure_money_range(minimum)
+    maximum = _ensure_money_range(maximum)
+    if not known:
+        return CatalogPriceSemantics(
+            price_type="on_request",
+            price_min=None,
+            price_max=None,
+            price_unit=None,
+            legacy_amount=Decimal(0),
+            source="catalog_on_request",
+        )
+    return CatalogPriceSemantics(
+        price_type="range" if estimated else "fixed",
+        price_min=minimum,
+        price_max=maximum,
+        price_unit=None,
+        legacy_amount=minimum,
+        source="catalog_estimate" if estimated else "catalog_fixed",
+    )
 
 
 def update_booking(
@@ -57,7 +108,7 @@ def update_booking(
     if row is None:
         raise SchedulingDomainError("booking_not_found", status_code=404)
 
-    booking, old_client, old_service = row
+    booking, _old_client, _old_service = row
     if booking.status not in _EDITABLE_STATUSES:
         raise SchedulingDomainError("booking_not_editable")
 
@@ -81,7 +132,7 @@ def update_booking(
         exclude_booking_id=booking.id,
     )
 
-    semantics = _catalog_price_semantics(catalog_services)
+    semantics = _working_price_semantics(catalog_services)
     price_override = body.price_override_amount
     price_amount = (
         _ensure_money_range(price_override)
