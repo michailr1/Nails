@@ -25,10 +25,9 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
+      APP_TIMEZONE: Europe/Berlin
+      INTERNAL_API_KEY: test-only-internal-api-key-0000000000000000
       DATABASE_URL: postgresql+psycopg://nails_app:nails_test@127.0.0.1:55432/nails_test
-      INTERNAL_API_KEY: test-internal-key
-      WEB_AUTH_ENABLED: "true"
-      WEB_AUTH_HMAC_KEY: test-web-auth-hmac-key-that-is-long-enough
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,7 +35,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install -e 'backend[dev]'
+      - run: cd backend && python -m pip install -e '.[dev]'
       - run: cd backend && alembic upgrade head
       - name: Test and publish failure
         env:
