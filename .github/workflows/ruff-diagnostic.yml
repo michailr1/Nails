@@ -1,0 +1,41 @@
+name: Ruff diagnostic
+
+on:
+  push:
+    branches:
+      - feat/ux-205-glam-foundation
+
+permissions:
+  contents: read
+
+jobs:
+  ruff-diagnostic:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install Ruff
+        run: python -m pip install 'ruff>=0.9,<1'
+      - name: Capture Ruff output
+        shell: bash
+        run: |
+          set +e
+          ruff check . > ../ruff-output.txt 2>&1
+          status=$?
+          cat ../ruff-output.txt
+          echo "$status" > ../ruff-status.txt
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ruff-diagnostic
+          path: |
+            ruff-output.txt
+            ruff-status.txt
+          if-no-files-found: error
