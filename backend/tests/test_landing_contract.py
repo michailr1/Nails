@@ -23,10 +23,12 @@ def test_public_landing_is_packaged_separately_from_private_web() -> None:
 def test_landing_metadata_and_real_routes_are_present() -> None:
     html = (LANDING / "index.html").read_text(encoding="utf-8")
 
+    public_origin = "https://de.funti.cc:8446"
     assert '<html lang="ru">' in html
     assert "Нэйли — личная помощница мастера маникюра" in html
-    assert 'rel="canonical" href="https://de.funti.cc/"' in html
-    assert 'property="og:title"' in html
+    assert f'rel="canonical" href="{public_origin}/"' in html
+    assert f'property="og:url" content="{public_origin}/"' in html
+    assert f'property="og:image" content="{public_origin}/landing/og.svg"' in html
     assert 'href="/web/"' in html
     assert 'href="#features"' in html
     assert 'href="#how"' in html
