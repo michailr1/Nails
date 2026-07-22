@@ -36,7 +36,11 @@ def owners(
     return list_digest_owners(session)
 
 
-@router.post("/claim", response_model=FinalizationDigestClaimResponse)
+@router.post(
+    "/claim",
+    response_model=FinalizationDigestClaimResponse,
+    response_model_exclude_unset=True,
+)
 def claim(
     body: FinalizationDigestClaimRequest,
     session: SessionDependency,
