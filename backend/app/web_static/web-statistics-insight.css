@@ -29,6 +29,7 @@
 .naily-insight strong {
   min-width: 0;
   font-size: 0.95rem;
+  line-height: 1.25;
 }
 
 .long-absent-panel {
@@ -70,9 +71,15 @@
 @media (max-width: 720px) {
   .naily-insight {
     grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem 0.75rem;
+    padding: 0.8rem 0.9rem;
   }
 
   .naily-insight-label {
     grid-column: 1 / -1;
+  }
+
+  .naily-insight strong {
+    font-size: 1rem;
   }
 }
