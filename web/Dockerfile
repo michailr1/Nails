@@ -5,6 +5,7 @@ ENV NAILS_GIT_SHA=${GIT_SHA}
 
 COPY --chown=101:101 --chmod=0444 web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --chown=101:101 backend/app/web_static /usr/share/nginx/html/web
+COPY --chown=101:101 backend/app/landing_static /usr/share/nginx/html/landing
 
 EXPOSE 8080
 
