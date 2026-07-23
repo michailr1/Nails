@@ -14,6 +14,7 @@ class WebBookingUpdateRequest(BaseModel):
     client_public_name: str = Field(min_length=1, max_length=160)
     service_name: str = Field(min_length=1, max_length=160)
     addon_names: list[str] = Field(default_factory=list, max_length=20)
+    addon_quantities: dict[str, int] = Field(default_factory=dict, max_length=20)
     starts_at: datetime
     price_override_amount: Decimal | None = Field(
         default=None,
@@ -47,6 +48,22 @@ class WebBookingUpdateRequest(BaseModel):
             normalized.append(candidate)
         return normalized
 
+    @field_validator("addon_quantities")
+    @classmethod
+    def normalize_addon_quantities(cls, values: dict[str, int]) -> dict[str, int]:
+        normalized: dict[str, int] = {}
+        for raw_name, quantity in values.items():
+            name = " ".join(raw_name.split())
+            if not name or len(name) > 160:
+                raise ValueError("addon quantity name is invalid")
+            if quantity < 1 or quantity > 100:
+                raise ValueError("addon quantity must be between 1 and 100")
+            key = name.casefold()
+            if key in normalized:
+                raise ValueError("addon quantity names must be unique")
+            normalized[key] = quantity
+        return normalized
+
     @field_validator("starts_at")
     @classmethod
     def require_timezone(cls, value: datetime) -> datetime:
@@ -55,11 +72,17 @@ class WebBookingUpdateRequest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def reject_base_as_addon(self) -> WebBookingUpdateRequest:
+    def validate_composition(self) -> WebBookingUpdateRequest:
         base = self.service_name.casefold()
-        if any(name.casefold() == base for name in self.addon_names):
+        addon_keys = {name.casefold() for name in self.addon_names}
+        if base in addon_keys:
             raise ValueError("base service cannot also be an addon")
+        if set(self.addon_quantities) - addon_keys:
+            raise ValueError("addon quantities require matching addon names")
         return self
+
+    def quantity_for(self, addon_name: str) -> int:
+        return self.addon_quantities.get(addon_name.casefold(), 1)
 
 
 class WebBookingUpdateResponse(BaseModel):
