@@ -265,7 +265,9 @@ def create_booking(
         (
             addon.public_name
             for addon in addons
-            if quantities[addon.id] != 1 and addon.id not in per_unit_ids
+            if quantities[addon.id] != 1
+            and addon.price_type != "per_unit"
+            and addon.id not in per_unit_ids
         ),
         None,
     )
@@ -276,7 +278,10 @@ def create_booking(
         )
 
     catalog_duration = service.duration_minutes + sum(
-        0 if addon.id in included_ids else addon.extra_minutes * quantities[addon.id]
+        0
+        if addon.id in included_ids
+        else addon.extra_minutes
+        * (quantities[addon.id] if addon.id in per_unit_ids else 1)
         for addon in addons
     )
     duration = body.duration_override_minutes or catalog_duration
