@@ -229,7 +229,7 @@ def test_web_booking_overlap_returns_full_conflicting_booking(client, create_use
     }
 
 
-def test_web_booking_keeps_mixed_per_unit_price_unknown_instead_of_zero(client, create_user):
+def test_web_booking_defaults_per_unit_quantity_to_one(client, create_user):
     owner = create_user(telegram_user_id=100000202)
     _seed_client(owner.id, "Анна")
     _seed_service(
@@ -258,9 +258,9 @@ def test_web_booking_keeps_mixed_per_unit_price_unknown_instead_of_zero(client, 
 
     assert response.status_code == 200
     booking = response.json()["booking"]
-    assert booking["price_amount"] is None
-    assert booking["price_type"] == "on_request"
-    assert booking["price_confirmed"] is False
+    assert booking["price_amount"] == "1250.00"
+    assert booking["price_type"] == "fixed"
+    assert booking["price_confirmed"] is True
 
     calendar = client.get(
         "/web/api/calendar",
@@ -268,7 +268,7 @@ def test_web_booking_keeps_mixed_per_unit_price_unknown_instead_of_zero(client, 
         params={"date_from": "2026-07-22", "date_to": "2026-07-22"},
     )
     assert calendar.status_code == 200
-    assert calendar.json()["bookings"][0]["price_amount"] is None
+    assert calendar.json()["bookings"][0]["price_amount"] == "1250.00"
 
 
 def test_web_booking_is_owner_scoped(client, create_user):
