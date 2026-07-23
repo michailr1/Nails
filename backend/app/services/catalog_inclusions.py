@@ -2,13 +2,35 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKeyConstraint, Table, delete, func, insert, select
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKeyConstraint,
+    Table,
+    UniqueConstraint,
+    delete,
+    func,
+    insert,
+    select,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from app.db import Base
 from app.models import Service
 from app.services.scheduling_common import SchedulingDomainError
+
+if not any(
+    constraint.name == "uq_services_owner_id"
+    for constraint in Service.__table__.constraints
+):
+    Service.__table__.append_constraint(
+        UniqueConstraint(
+            Service.__table__.c.owner_user_id,
+            Service.__table__.c.id,
+            name="uq_services_owner_id",
+        )
+    )
 
 service_included_addons = Table(
     "service_included_addons",
