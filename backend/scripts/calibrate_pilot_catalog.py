@@ -8,7 +8,10 @@ from sqlalchemy import select
 
 from app.db import get_session_factory
 from app.models import Service
-from app.services.catalog_inclusions import replace_included_addons
+from app.services.catalog_inclusions import (
+    replace_included_addons,
+    replace_per_unit_time_addons,
+)
 from app.services.normalization import normalize_public_name
 
 
@@ -45,6 +48,7 @@ ADDON_MINUTES = {
     "Ремонт ногтя": 10,
     "Наращивание ногтя": 20,
 }
+PER_UNIT_TIME_ADDONS = ("Ремонт ногтя", "Наращивание ногтя")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -125,6 +129,13 @@ def main() -> None:
             if addon.extra_minutes != extra_minutes:
                 addon.extra_minutes = extra_minutes
                 changed.append(f"{addon.public_name}: extra={extra_minutes}")
+
+        per_unit_addons = [
+            _require_service(by_name, addon_name, "addon")
+            for addon_name in PER_UNIT_TIME_ADDONS
+        ]
+        replace_per_unit_time_addons(session, args.owner_user_id, per_unit_addons)
+        changed.append(f"per_unit_time={','.join(PER_UNIT_TIME_ADDONS)}")
 
         for service in services:
             current_price = (
