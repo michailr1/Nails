@@ -15,7 +15,10 @@ from app.schemas.scheduling_catalog_bookings import (
     CatalogBookingCreateRequest,
     CatalogBookingCreateResponse,
 )
-from app.services.catalog_inclusions import included_addon_ids
+from app.services.catalog_inclusions import (
+    included_addon_ids,
+    per_unit_time_addon_ids,
+)
 from app.services.normalization import normalize_public_name
 from app.services.scheduling_common import (
     SchedulingDomainError,
@@ -49,6 +52,7 @@ def _catalog_item_snapshot(
     *,
     quantity: int = 1,
     time_included_in_base: bool = False,
+    time_per_unit: bool = False,
 ) -> dict[str, Any]:
     price_amount = (
         str(service.price_amount)
@@ -73,6 +77,7 @@ def _catalog_item_snapshot(
         "extra_minutes": service.extra_minutes,
         "quantity": quantity,
         "time_included_in_base": time_included_in_base,
+        "time_per_unit": time_per_unit,
     }
 
 
@@ -247,13 +252,28 @@ def create_booking(
     addons = get_active_addons(session, identity.user_id, body.addon_names)
     client = get_active_client(session, identity.user_id, body.client_public_name)
     catalog_services = [service, *addons]
+    addon_ids = [addon.id for addon in addons]
     quantities = {addon.id: body.quantity_for(addon.public_name) for addon in addons}
     included_ids = included_addon_ids(
         session,
         identity.user_id,
         service.id,
-        [addon.id for addon in addons],
+        addon_ids,
     )
+    per_unit_ids = per_unit_time_addon_ids(session, identity.user_id, addon_ids)
+    invalid_quantity = next(
+        (
+            addon.public_name
+            for addon in addons
+            if quantities[addon.id] != 1 and addon.id not in per_unit_ids
+        ),
+        None,
+    )
+    if invalid_quantity is not None:
+        raise SchedulingDomainError(
+            "addon_quantity_not_supported",
+            details={"addon_name": invalid_quantity},
+        )
 
     catalog_duration = service.duration_minutes + sum(
         0 if addon.id in included_ids else addon.extra_minutes * quantities[addon.id]
@@ -309,6 +329,7 @@ def create_booking(
                     addon,
                     quantity=quantities[addon.id],
                     time_included_in_base=addon.id in included_ids,
+                    time_per_unit=addon.id in per_unit_ids,
                 )
                 for addon in addons
             ],
@@ -335,7 +356,9 @@ def create_booking(
                 "catalog_item_count": len(catalog_services),
                 "addon_count": len(addons),
                 "included_addon_count": len(included_ids),
-                "per_unit_quantity_total": sum(quantities.values()),
+                "per_unit_quantity_total": sum(
+                    quantities[addon_id] for addon_id in per_unit_ids
+                ),
                 "catalog_price_type": semantics.price_type,
                 "price_source": price_source,
                 "duration_source": duration_source,
