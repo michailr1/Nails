@@ -24,6 +24,7 @@ class CatalogItemSummary(BaseModel):
     extra_minutes: int
     quantity: int = 1
     time_included_in_base: bool = False
+    time_per_unit: bool = False
 
 
 class CatalogBookingSummary(BaseModel):
