@@ -42,8 +42,9 @@ _EDITABLE_STATUSES = {BookingStatus.scheduled, BookingStatus.completed}
 
 def _working_price_semantics(
     services: list[Service],
-    quantities: dict[uuid.UUID, int],
+    quantities: dict[uuid.UUID, int] | None = None,
 ) -> CatalogPriceSemantics:
+    quantities = quantities or {}
     currencies = {service.currency for service in services}
     if len(currencies) != 1:
         raise SchedulingDomainError("catalog_currency_mismatch")
@@ -189,6 +190,7 @@ def update_booking(
                 addon,
                 quantity=quantities[addon.id],
                 time_included_in_base=addon.id in included_ids,
+                time_per_unit=addon.id in per_unit_ids,
             )
             for addon in addons
         ],
