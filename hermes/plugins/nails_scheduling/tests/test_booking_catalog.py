@@ -21,11 +21,30 @@ def test_booking_validator_normalizes_addons_and_overrides():
         "client_public_name": "Анна",
         "service_name": "Маникюр",
         "addon_names": ["Снятие", "Ремонт"],
+        "addon_quantities": {},
         "day": "2026-07-21",
         "start_time": "12:00",
         "price_override_amount": "3100.00",
         "duration_override_minutes": 150,
     }
+
+
+def test_booking_validator_preserves_per_unit_quantity():
+    values = booking_catalog.validate_catalog_booking_args(
+        {
+            "action": "create_booking",
+            "client_public_name": "Анна",
+            "service_name": "Маникюр с покрытием",
+            "addon_names": ["Ремонт ногтя"],
+            "addon_quantities": {"Ремонт ногтя": 3},
+            "day": "2026-07-21",
+            "start_time": "12:00",
+            "confirmed": True,
+        }
+    )
+
+    assert values["addon_names"] == ["Ремонт ногтя"]
+    assert values["addon_quantities"] == {"ремонт ногтя": 3}
 
 
 def test_addon_catalog_validator_rejects_buffers():
