@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  pilot-time-calibration:
+  backend-diagnostic:
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -44,11 +44,11 @@ jobs:
         id: migrate
         continue-on-error: true
         run: alembic upgrade head > ../migration-diagnostic.log 2>&1
-      - name: Capture pilot regression output
+      - name: Capture full backend pytest output
         id: tests
         if: steps.migrate.outcome == 'success'
         continue-on-error: true
-        run: pytest -vv tests/test_pilot_time_calibration.py > ../pytest-diagnostic.log 2>&1
+        run: pytest -vv > ../pytest-diagnostic.log 2>&1
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
