@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -14,6 +15,7 @@ from app.schemas.scheduling_catalog_bookings import (
     CatalogBookingCreateRequest,
     CatalogBookingCreateResponse,
 )
+from app.services.catalog_inclusions import included_addon_ids
 from app.services.normalization import normalize_public_name
 from app.services.scheduling_common import (
     SchedulingDomainError,
@@ -42,7 +44,12 @@ class CatalogPriceSemantics:
     source: str
 
 
-def _catalog_item_snapshot(service: Service) -> dict[str, Any]:
+def _catalog_item_snapshot(
+    service: Service,
+    *,
+    quantity: int = 1,
+    time_included_in_base: bool = False,
+) -> dict[str, Any]:
     price_amount = (
         str(service.price_amount)
         if service.price_type in {"fixed", "per_unit"}
@@ -64,6 +71,8 @@ def _catalog_item_snapshot(service: Service) -> dict[str, Any]:
         "currency": service.currency,
         "duration_minutes": service.duration_minutes if service.kind == "base" else None,
         "extra_minutes": service.extra_minutes,
+        "quantity": quantity,
+        "time_included_in_base": time_included_in_base,
     }
 
 
@@ -73,21 +82,14 @@ def _ensure_money_range(value: Decimal) -> Decimal:
     return value
 
 
-def _catalog_price_semantics(services: list[Service]) -> CatalogPriceSemantics:
+def _catalog_price_semantics(
+    services: list[Service],
+    quantities: dict[uuid.UUID, int] | None = None,
+) -> CatalogPriceSemantics:
+    quantities = quantities or {}
     currencies = {service.currency for service in services}
     if len(currencies) != 1:
         raise SchedulingDomainError("catalog_currency_mismatch")
-
-    if all(service.price_type == "fixed" for service in services):
-        total = _ensure_money_range(sum((service.price_amount for service in services), Decimal(0)))
-        return CatalogPriceSemantics(
-            price_type="fixed",
-            price_min=total,
-            price_max=total,
-            price_unit=None,
-            legacy_amount=total,
-            source="catalog_fixed",
-        )
 
     if any(service.price_type == "on_request" for service in services):
         return CatalogPriceSemantics(
@@ -99,47 +101,56 @@ def _catalog_price_semantics(services: list[Service]) -> CatalogPriceSemantics:
             source="catalog_on_request",
         )
 
-    per_unit = [service for service in services if service.price_type == "per_unit"]
-    if per_unit:
-        if len(services) == 1:
-            service = per_unit[0]
-            return CatalogPriceSemantics(
-                price_type="per_unit",
-                price_min=service.price_amount,
-                price_max=service.price_amount,
-                price_unit=service.price_unit,
-                legacy_amount=service.price_amount,
-                source="catalog_per_unit",
-            )
+    if len(services) == 1 and services[0].price_type == "per_unit":
+        service = services[0]
+        quantity = quantities.get(service.id, 1)
+        amount = _ensure_money_range(service.price_amount * quantity)
         return CatalogPriceSemantics(
-            price_type="on_request",
-            price_min=None,
-            price_max=None,
-            price_unit=None,
-            legacy_amount=Decimal(0),
-            source="catalog_mixed",
+            price_type="per_unit",
+            price_min=amount,
+            price_max=amount,
+            price_unit=service.price_unit,
+            legacy_amount=amount,
+            source="catalog_per_unit",
         )
 
     minimum = Decimal(0)
     maximum = Decimal(0)
+    has_range = False
     for service in services:
+        quantity = quantities.get(service.id, 1)
         if service.price_type == "fixed":
             minimum += service.price_amount
             maximum += service.price_amount
+        elif service.price_type == "per_unit":
+            contribution = service.price_amount * quantity
+            minimum += contribution
+            maximum += contribution
         else:
             if service.price_min_amount is None or service.price_max_amount is None:
                 raise SchedulingDomainError("invalid_catalog_price")
+            has_range = True
             minimum += service.price_min_amount
             maximum += service.price_max_amount
+
     minimum = _ensure_money_range(minimum)
     maximum = _ensure_money_range(maximum)
+    if has_range:
+        return CatalogPriceSemantics(
+            price_type="range",
+            price_min=minimum,
+            price_max=maximum,
+            price_unit=None,
+            legacy_amount=minimum,
+            source="catalog_range",
+        )
     return CatalogPriceSemantics(
-        price_type="range",
+        price_type="fixed",
         price_min=minimum,
         price_max=maximum,
         price_unit=None,
         legacy_amount=minimum,
-        source="catalog_range",
+        source="catalog_fixed",
     )
 
 
@@ -148,15 +159,26 @@ def _catalog_price_bounds(service: Service) -> tuple[Decimal | None, Decimal | N
     return semantics.price_min, semantics.price_max
 
 
-def _snapshot_addon_names(booking: Booking) -> list[str]:
-    result: list[str] = []
+def _snapshot_addon_composition(booking: Booking) -> dict[str, int]:
+    result: dict[str, int] = {}
     for item in booking.catalog_items_snapshot:
         if not isinstance(item, dict) or item.get("kind") != "addon":
             continue
         public_name = item.get("public_name")
-        if isinstance(public_name, str):
-            result.append(normalize_public_name(public_name))
-    return sorted(result)
+        if not isinstance(public_name, str):
+            continue
+        quantity = item.get("quantity", 1)
+        if not isinstance(quantity, int) or quantity < 1:
+            quantity = 1
+        result[normalize_public_name(public_name)] = quantity
+    return result
+
+
+def _requested_addon_composition(body: CatalogBookingCreateRequest) -> dict[str, int]:
+    return {
+        normalize_public_name(name): body.quantity_for(name)
+        for name in body.addon_names
+    }
 
 
 def _find_idempotent_booking(
@@ -178,7 +200,6 @@ def _find_idempotent_booking(
         return None
 
     booking, client, service = result
-    requested_addons = sorted(normalize_public_name(name) for name in body.addon_names)
     price_override_matches = (
         body.price_override_amount is None
         and booking.price_source != "manual_override"
@@ -199,7 +220,7 @@ def _find_idempotent_booking(
         client.normalized_public_name != normalize_public_name(body.client_public_name)
         or service.normalized_public_name != normalize_public_name(body.service_name)
         or booking.starts_at.astimezone(UTC) != body.starts_at.astimezone(UTC)
-        or _snapshot_addon_names(booking) != requested_addons
+        or _snapshot_addon_composition(booking) != _requested_addon_composition(body)
         or not price_override_matches
         or not duration_override_matches
     ):
@@ -226,8 +247,18 @@ def create_booking(
     addons = get_active_addons(session, identity.user_id, body.addon_names)
     client = get_active_client(session, identity.user_id, body.client_public_name)
     catalog_services = [service, *addons]
+    quantities = {addon.id: body.quantity_for(addon.public_name) for addon in addons}
+    included_ids = included_addon_ids(
+        session,
+        identity.user_id,
+        service.id,
+        [addon.id for addon in addons],
+    )
 
-    catalog_duration = service.duration_minutes + sum(addon.extra_minutes for addon in addons)
+    catalog_duration = service.duration_minutes + sum(
+        0 if addon.id in included_ids else addon.extra_minutes * quantities[addon.id]
+        for addon in addons
+    )
     duration = body.duration_override_minutes or catalog_duration
     reservation = calculate_reservation(
         service,
@@ -237,7 +268,7 @@ def create_booking(
     ensure_reservation_available(session, identity.user_id, reservation)
 
     now = datetime.now(UTC)
-    semantics = _catalog_price_semantics(catalog_services)
+    semantics = _catalog_price_semantics(catalog_services, quantities)
     price_override = body.price_override_amount
     price_amount = (
         _ensure_money_range(price_override)
@@ -251,7 +282,7 @@ def create_booking(
         else None
     )
     duration_source = (
-        "manual_override" if body.duration_override_minutes is not None else "catalog_v2"
+        "manual_override" if body.duration_override_minutes is not None else "catalog_v3"
     )
 
     booking = Booking(
@@ -272,8 +303,15 @@ def create_booking(
         price_source=price_source,
         price_confirmed_at=price_confirmed_at,
         catalog_items_snapshot=[
-            _catalog_item_snapshot(catalog_service)
-            for catalog_service in catalog_services
+            _catalog_item_snapshot(service),
+            *[
+                _catalog_item_snapshot(
+                    addon,
+                    quantity=quantities[addon.id],
+                    time_included_in_base=addon.id in included_ids,
+                )
+                for addon in addons
+            ],
         ],
         catalog_price_type_snapshot=semantics.price_type,
         catalog_price_min_snapshot=semantics.price_min,
@@ -296,6 +334,8 @@ def create_booking(
                 "status": BookingStatus.scheduled.value,
                 "catalog_item_count": len(catalog_services),
                 "addon_count": len(addons),
+                "included_addon_count": len(included_ids),
+                "per_unit_quantity_total": sum(quantities.values()),
                 "catalog_price_type": semantics.price_type,
                 "price_source": price_source,
                 "duration_source": duration_source,
