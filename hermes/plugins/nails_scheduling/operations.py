@@ -19,6 +19,24 @@ def _optional_decimal(value: Any) -> Decimal | None:
         raise ValueError("invalid decimal") from exc
 
 
+def _booking_addon_quantities(booking: dict[str, Any]) -> dict[str, int]:
+    items = booking.get("catalog_items")
+    if not isinstance(items, list):
+        return {}
+    result: dict[str, int] = {}
+    for item in items:
+        if not isinstance(item, dict) or item.get("kind") != "addon":
+            continue
+        name = item.get("public_name")
+        if not isinstance(name, str):
+            continue
+        quantity = item.get("quantity", 1)
+        if not isinstance(quantity, int) or quantity < 1:
+            quantity = 1
+        result[_normalized_lookup(name)] = quantity
+    return result
+
+
 def _matching_existing_booking(
     day_result: dict[str, Any],
     *,
@@ -26,6 +44,7 @@ def _matching_existing_booking(
     service_name: str,
     starts_at: datetime,
     addon_names: list[str] | None = None,
+    addon_quantities: dict[str, int] | None = None,
     price_override_amount: str | None = None,
     duration_override_minutes: int | None = None,
 ) -> dict[str, Any] | None:
@@ -58,6 +77,16 @@ def _matching_existing_booking(
             requested = sorted(_normalized_lookup(name) for name in addon_names)
             actual = sorted(_normalized_lookup(str(name)) for name in existing_addons)
             if requested != actual:
+                continue
+            requested_quantities = {
+                _normalized_lookup(name): quantity
+                for name, quantity in (addon_quantities or {}).items()
+            }
+            actual_quantities = _booking_addon_quantities(booking)
+            if any(
+                actual_quantities.get(name, 1) != requested_quantities.get(name, 1)
+                for name in requested
+            ):
                 continue
 
             existing_price_source = booking.get("price_source")
@@ -115,9 +144,6 @@ def _create_booking(
             "The client was not found. Confirm and create the client first.",
         )
 
-    # ADR-006: free slots are suggestions, not an authorization gate for an
-    # explicitly requested time. Read the day only to resolve the authoritative
-    # timezone and preserve idempotent recognition of an already-created booking.
     day_response = _call_backend(
         action="day_view",
         telegram_user_id=telegram_user_id,
@@ -146,6 +172,7 @@ def _create_booking(
             service_name=values["service_name"],
             starts_at=requested_start,
             addon_names=values["addon_names"],
+            addon_quantities=values["addon_quantities"],
             price_override_amount=values["price_override_amount"],
             duration_override_minutes=values["duration_override_minutes"],
         )
@@ -173,6 +200,7 @@ def _create_booking(
             "client_public_name": values["client_public_name"],
             "service_name": values["service_name"],
             "addon_names": values["addon_names"],
+            "addon_quantities": values["addon_quantities"],
             "starts_at": requested_start.isoformat(),
             "price_override_amount": values["price_override_amount"],
             "duration_override_minutes": values["duration_override_minutes"],
