@@ -189,6 +189,17 @@ def _create_booking(
             "result": {"booking": existing, "created": False},
         }
 
+    body = {
+        "client_public_name": values["client_public_name"],
+        "service_name": values["service_name"],
+        "addon_names": values["addon_names"],
+        "starts_at": requested_start.isoformat(),
+        "price_override_amount": values["price_override_amount"],
+        "duration_override_minutes": values["duration_override_minutes"],
+    }
+    if values["addon_quantities"]:
+        body["addon_quantities"] = values["addon_quantities"]
+
     return _call_backend(
         action="create_booking",
         telegram_user_id=telegram_user_id,
@@ -196,15 +207,7 @@ def _create_booking(
         method="POST",
         path="/api/v1/scheduling/bookings",
         params=None,
-        json_body={
-            "client_public_name": values["client_public_name"],
-            "service_name": values["service_name"],
-            "addon_names": values["addon_names"],
-            "addon_quantities": values["addon_quantities"],
-            "starts_at": requested_start.isoformat(),
-            "price_override_amount": values["price_override_amount"],
-            "duration_override_minutes": values["duration_override_minutes"],
-        },
+        json_body=body,
     )
 
 
