@@ -13,6 +13,10 @@ from app.schemas.web_booking_update import (
     WebBookingUpdateRequest,
     WebBookingUpdateResponse,
 )
+from app.services.catalog_inclusions import (
+    included_addon_ids,
+    per_unit_time_addon_ids,
+)
 from app.services.scheduling_bookings import (
     CatalogPriceSemantics,
     _catalog_item_snapshot,
@@ -36,7 +40,11 @@ from app.services.web_read import web_booking_summary
 _EDITABLE_STATUSES = {BookingStatus.scheduled, BookingStatus.completed}
 
 
-def _working_price_semantics(services: list[Service]) -> CatalogPriceSemantics:
+def _working_price_semantics(
+    services: list[Service],
+    quantities: dict[uuid.UUID, int] | None = None,
+) -> CatalogPriceSemantics:
+    quantities = quantities or {}
     currencies = {service.currency for service in services}
     if len(currencies) != 1:
         raise SchedulingDomainError("catalog_currency_mismatch")
@@ -46,6 +54,7 @@ def _working_price_semantics(services: list[Service]) -> CatalogPriceSemantics:
     estimated = False
     known = False
     for service in services:
+        quantity = quantities.get(service.id, 1)
         if service.price_type == "fixed":
             minimum += service.price_amount
             maximum += service.price_amount
@@ -58,8 +67,8 @@ def _working_price_semantics(services: list[Service]) -> CatalogPriceSemantics:
             estimated = True
             known = True
         elif service.price_type == "per_unit":
-            minimum += service.price_amount
-            maximum += service.price_amount
+            minimum += service.price_amount * quantity
+            maximum += service.price_amount * quantity
             estimated = True
             known = True
         else:
@@ -116,8 +125,37 @@ def update_booking(
     service = get_active_service(session, identity.user_id, body.service_name)
     addons = get_active_addons(session, identity.user_id, body.addon_names)
     catalog_services = [service, *addons]
+    addon_ids = [addon.id for addon in addons]
+    included_ids = included_addon_ids(
+        session,
+        identity.user_id,
+        service.id,
+        addon_ids,
+    )
+    per_unit_ids = per_unit_time_addon_ids(session, identity.user_id, addon_ids)
+    quantities = {addon.id: body.quantity_for(addon.public_name) for addon in addons}
+    invalid_quantity = next(
+        (
+            addon.public_name
+            for addon in addons
+            if quantities[addon.id] != 1
+            and addon.price_type != "per_unit"
+            and addon.id not in per_unit_ids
+        ),
+        None,
+    )
+    if invalid_quantity is not None:
+        raise SchedulingDomainError(
+            "addon_quantity_not_supported",
+            details={"addon_name": invalid_quantity},
+        )
+
     catalog_duration = service.duration_minutes + sum(
-        addon.extra_minutes for addon in addons
+        0
+        if addon.id in included_ids
+        else addon.extra_minutes
+        * (quantities[addon.id] if addon.id in per_unit_ids else 1)
+        for addon in addons
     )
     duration = body.duration_override_minutes or catalog_duration
     reservation = calculate_reservation(
@@ -132,7 +170,7 @@ def update_booking(
         exclude_booking_id=booking.id,
     )
 
-    semantics = _working_price_semantics(catalog_services)
+    semantics = _working_price_semantics(catalog_services, quantities)
     price_override = body.price_override_amount
     price_amount = (
         _ensure_money_range(price_override)
@@ -148,9 +186,20 @@ def update_booking(
     duration_source = (
         "manual_override"
         if body.duration_override_minutes is not None
-        else "catalog_v2"
+        else "catalog_v3"
     )
-    snapshots = [_catalog_item_snapshot(item) for item in catalog_services]
+    snapshots = [
+        _catalog_item_snapshot(service),
+        *[
+            _catalog_item_snapshot(
+                addon,
+                quantity=quantities[addon.id],
+                time_included_in_base=addon.id in included_ids,
+                time_per_unit=addon.id in per_unit_ids,
+            )
+            for addon in addons
+        ],
+    ]
 
     before = {
         "client_id": booking.client_id,
@@ -212,6 +261,10 @@ def update_booking(
                     "status": booking.status.value,
                     "catalog_item_count": len(catalog_services),
                     "addon_count": len(addons),
+                    "included_addon_count": len(included_ids),
+                    "per_unit_quantity_total": sum(
+                        quantities[addon_id] for addon_id in per_unit_ids
+                    ),
                     "price_source": price_source,
                     "duration_source": duration_source,
                     "duration_minutes": reservation.duration_minutes,

@@ -112,5 +112,5 @@ def test_fixed_addon_extends_price_and_duration_snapshot(
     assert booking["price_source"] == "catalog_fixed"
     assert booking["price_confirmed"] is True
     assert booking["duration_minutes"] == 140
-    assert booking["duration_source"] == "catalog_v2"
+    assert booking["duration_source"] == "catalog_v3"
     assert booking["buffer_after_minutes"] == 20

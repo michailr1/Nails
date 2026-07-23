@@ -40,6 +40,7 @@ def test_schema_exposes_only_public_business_arguments():
         "current_service_name",
         "service_name",
         "addon_names",
+        "addon_quantities",
         "service_description",
         "kind",
         "price_type",

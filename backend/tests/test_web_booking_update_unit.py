@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ def _service(
     maximum: str | None = None,
 ):
     return SimpleNamespace(
+        id=uuid.uuid4(),
         currency="RUB",
         price_type=price_type,
         price_amount=Decimal(amount),

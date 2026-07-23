@@ -71,6 +71,7 @@ def _verified_create_booking(
             service_name=values["service_name"],
             starts_at=starts_at,
             addon_names=values["addon_names"],
+            addon_quantities=values["addon_quantities"],
             price_override_amount=values["price_override_amount"],
             duration_override_minutes=values["duration_override_minutes"],
         )

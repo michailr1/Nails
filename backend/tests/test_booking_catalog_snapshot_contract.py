@@ -47,6 +47,9 @@ def test_fixed_service_snapshot_preserves_catalog_values() -> None:
         "currency": "RUB",
         "duration_minutes": 120,
         "extra_minutes": 0,
+        "quantity": 1,
+        "time_included_in_base": False,
+        "time_per_unit": False,
     }
     assert _catalog_price_bounds(service) == (
         Decimal("2700.00"),

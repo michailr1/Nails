@@ -86,19 +86,20 @@ NAILS_SCHEDULING = {
         "be stored and later read back; private_alias is never a client-facing name. Update or "
         "rename an existing client card only after showing the exact fields to change and "
         "receiving explicit confirmation; omitted fields remain unchanged and null clears a field. "
-        "Create a booking from exactly one base service and zero or more addon_names. Preserve "
-        "range, per-unit and on-request pricing as estimates unless the master explicitly confirms "
+        "Create a booking from exactly one base service and zero or more addon_names. Supply "
+        "addon_quantities only when the master states a count for a per-unit-time addon such as "
+        "repair or extension; omitted quantities default to one. Preserve range, per-unit and "
+        "on-request pricing as estimates unless the master explicitly confirms "
         "price_override_amount. Use duration_override_minutes only when the master explicitly "
         "changes the composed duration. For photo price import, use vision first, "
         "show one complete editable table, label durations as suggestions, and call "
-        "replace_catalog only after one "
-        "explicit confirmation of the whole table. Create, reschedule, cancel, or finalize a "
-        "booking only after showing a complete human-readable current-to-future summary and "
-        "receiving explicit confirmation. finalize_booking records completed or no_show; omit "
-        "price_amount to preserve the booking estimate, or provide it only when the master states "
-        "the final total. Rescheduling must use an exact backend free slot. Cancellation is soft "
-        "and preserves history. Do not promise an operation before a successful tool result. Send "
-        "at most one brief progress message before the final result."
+        "replace_catalog only after one explicit confirmation of the whole table. Create, "
+        "reschedule, cancel, or finalize a booking only after showing a complete human-readable "
+        "current-to-future summary and receiving explicit confirmation. finalize_booking records "
+        "completed or no_show; omit price_amount to preserve the booking estimate, or provide it "
+        "only when the master states the final total. Rescheduling must use an exact backend free "
+        "slot. Cancellation is soft and preserves history. Do not promise an operation before a "
+        "successful tool result. Send at most one brief progress message before the final result."
     ),
     "parameters": {
         "type": "object",
@@ -178,6 +179,19 @@ NAILS_SCHEDULING = {
                 "items": {"type": "string"},
                 "maxItems": 20,
                 "description": "Public addon service names included in the booking.",
+            },
+            "addon_quantities": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                },
+                "maxProperties": 20,
+                "description": (
+                    "Optional addon-name to quantity map for addons whose time is per unit. "
+                    "Names must also appear in addon_names."
+                ),
             },
             "service_description": {"type": ["string", "null"]},
             "kind": {"type": "string", "enum": ["base", "addon"]},
