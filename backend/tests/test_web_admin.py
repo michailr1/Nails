@@ -40,6 +40,22 @@ def _login(
     assert consumed.json()["authenticated"] is True
 
 
+def test_admin_session_and_calendar_currently_disagree(client, create_user, auth_headers):
+    """Defect-first: portal session accepts admin while data still rejects it."""
+    admin = create_user(telegram_user_id=690000001, role=UserRole.admin)
+    _login(client, auth_headers, admin.telegram_user_id)
+
+    session_state = client.get("/web/api/auth/session", headers=WEB_ORIGIN_HEADERS)
+    calendar = client.get(
+        "/web/api/calendar",
+        headers=WEB_ORIGIN_HEADERS,
+        params={"date_from": "2026-07-01", "date_to": "2026-07-31"},
+    )
+
+    assert session_state.status_code == 200
+    assert calendar.status_code == 401
+
+
 def test_admin_can_create_and_list_isolated_master(client, create_user, auth_headers):
     admin = create_user(telegram_user_id=700000001, role=UserRole.admin)
     _login(client, auth_headers, admin.telegram_user_id)
