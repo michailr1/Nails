@@ -201,7 +201,7 @@ class Handler(BaseHTTPRequestHandler):
             self._write(503, {"code": "hermes_access_apply_failed"})
 
 
-class Server(socketserver.ThreadingUnixStreamServer):
+class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
 
