@@ -81,6 +81,11 @@
   text-align: right;
 }
 
-.admin-select-master {
+.admin-master-actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-master-actions button {
   width: 100%;
 }
