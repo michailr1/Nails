@@ -40,6 +40,7 @@ from app.services.scheduling_lookup import get_active_client, get_active_client_
 from app.services.scheduling_services import list_services
 from app.services.web_auth import require_web_session_identity, validate_web_boundary
 from app.services.web_export import export_all_calendar, export_calendar, export_clients
+from app.services.web_portal_auth import require_effective_owner_identity
 from app.services.web_read import (
     list_calendar,
     list_clients,
@@ -52,14 +53,22 @@ router = APIRouter(prefix="/web/api", tags=["web-read"])
 SessionDependency = Annotated[Session, Depends(get_db_session)]
 
 
-def require_web_identity(
+def require_read_identity(
+    request: Request,
+    session: SessionDependency,
+) -> RequestIdentity:
+    return require_effective_owner_identity(session, request)
+
+
+def require_write_identity(
     request: Request,
     session: SessionDependency,
 ) -> RequestIdentity:
     return require_web_session_identity(session, request)
 
 
-IdentityDependency = Annotated[RequestIdentity, Depends(require_web_identity)]
+ReadIdentityDependency = Annotated[RequestIdentity, Depends(require_read_identity)]
+WriteIdentityDependency = Annotated[RequestIdentity, Depends(require_write_identity)]
 ExportFormat = Literal["csv", "xlsx"]
 
 
@@ -93,7 +102,7 @@ def _calendar(
 @router.get("/calendar", response_model=WebCalendarResponse)
 def calendar(
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: ReadIdentityDependency,
     date_from: date,
     date_to: date,
 ) -> WebCalendarResponse:
@@ -103,7 +112,7 @@ def calendar(
 @router.get("/statistics", response_model=WebStatisticsResponse)
 def statistics(
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: ReadIdentityDependency,
     date_from: date,
     date_to: date,
 ) -> WebStatisticsResponse:
@@ -124,7 +133,7 @@ def statistics(
 @router.get("/clients", response_model=WebClientListResponse)
 def clients(
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: ReadIdentityDependency,
 ) -> WebClientListResponse:
     return list_clients(session, identity)
 
@@ -134,7 +143,7 @@ def client_create(
     body: WebClientCreateRequest,
     request: Request,
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: WriteIdentityDependency,
 ) -> WebClientCreateResponse:
     validate_web_boundary(request)
     try:
@@ -160,7 +169,7 @@ def client_create(
 def client_card(
     client_id: uuid.UUID,
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: ReadIdentityDependency,
 ) -> WebClientCard:
     try:
         client = get_active_client_by_id(session, identity.user_id, client_id)
@@ -175,7 +184,7 @@ def client_replace(
     body: WebClientReplaceRequest,
     request: Request,
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: WriteIdentityDependency,
 ) -> WebClientReplaceResponse:
     validate_web_boundary(request)
     try:
@@ -212,7 +221,7 @@ def client_archive(
     client_id: uuid.UUID,
     request: Request,
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: WriteIdentityDependency,
 ) -> WebClientArchiveResponse:
     validate_web_boundary(request)
     try:
@@ -225,7 +234,7 @@ def client_archive(
 @router.get("/services", response_model=ServiceListResponse)
 def services(
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: ReadIdentityDependency,
 ) -> ServiceListResponse:
     return list_services(session, identity, include_inactive=True)
 
@@ -235,7 +244,7 @@ def service_catalog_replace(
     body: CatalogReplaceRequest,
     request: Request,
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: WriteIdentityDependency,
 ) -> CatalogReplaceResponse:
     validate_web_boundary(request)
     return replace_catalog(session, identity, body)
@@ -246,7 +255,7 @@ def booking_create(
     body: CatalogBookingCreateRequest,
     request: Request,
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: WriteIdentityDependency,
 ) -> WebBookingCreateResponse:
     validate_web_boundary(request)
     try:
@@ -267,7 +276,7 @@ def booking_create(
 @router.post("/exports/calendar")
 def calendar_export(
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: ReadIdentityDependency,
     date_from: date,
     date_to: date,
     format_name: Annotated[ExportFormat, Query(alias="format")] = "csv",
@@ -295,7 +304,7 @@ def calendar_export(
 @router.post("/exports/calendar/all")
 def all_calendar_export(
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: ReadIdentityDependency,
     format_name: Annotated[ExportFormat, Query(alias="format")] = "csv",
 ) -> Response:
     try:
@@ -319,7 +328,7 @@ def all_calendar_export(
 @router.post("/exports/clients")
 def clients_export(
     session: SessionDependency,
-    identity: IdentityDependency,
+    identity: ReadIdentityDependency,
     format_name: Annotated[ExportFormat, Query(alias="format")] = "csv",
 ) -> Response:
     exported = export_clients(
