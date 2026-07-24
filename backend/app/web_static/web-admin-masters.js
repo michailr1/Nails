@@ -20,11 +20,21 @@
     nav.append(button);
   };
 
+  async function resolveSessionRole() {
+    try {
+      await api("/web/api/admin/masters");
+      return "admin";
+    } catch (error) {
+      if (error.status === 403) return "master";
+      throw error;
+    }
+  }
+
   renderApp = async function adminAwareRenderApp() {
     clearPoll();
     try {
-      const session = await api("/web/api/auth/session");
-      sessionRole = session.role;
+      await api("/web/api/auth/session");
+      sessionRole = await resolveSessionRole();
     } catch (error) {
       if (error.status === 401) return renderLogin();
       return renderLogin("Не удалось проверить сессию.");
