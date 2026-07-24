@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from conftest import WEB_ORIGIN_HEADERS
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.db import get_session_factory
 from app.models import AuditEvent, OnboardingState, OnboardingStatus, User, UserRole
-from conftest import WEB_ORIGIN_HEADERS
 
 
 def _login(
