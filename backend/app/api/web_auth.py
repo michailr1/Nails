@@ -123,7 +123,7 @@ def session_state(
     session: SessionDependency,
 ) -> WebSessionStateResponse | JSONResponse:
     try:
-        identity = require_web_session_identity(session, request)
+        require_web_session_identity(session, request)
     except HTTPException as exc:
         if exc.status_code != status.HTTP_401_UNAUTHORIZED:
             raise
@@ -133,7 +133,7 @@ def session_state(
         )
         clear_auth_cookies(response)
         return response
-    return WebSessionStateResponse(authenticated=True, role=identity.role.value)
+    return WebSessionStateResponse(authenticated=True)
 
 
 @router.post("/web/api/auth/logout", response_model=LogoutResponse)
