@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +11,7 @@ from app.db import get_db_session
 from app.schemas.web_admin import (
     AdminMasterCreateRequest,
     AdminMasterCreateResponse,
+    AdminMasterDisableResponse,
     AdminMasterListResponse,
     AdminMasterSelectRequest,
     AdminMasterSelectResponse,
@@ -17,6 +19,7 @@ from app.schemas.web_admin import (
 from app.services.web_admin import (
     AdminDomainError,
     create_master,
+    disable_master,
     list_masters,
     master_card,
 )
@@ -85,6 +88,32 @@ def master_create(
     return AdminMasterCreateResponse(
         master=master_card(result.master),
         created=result.created,
+        reactivated=result.reactivated,
+    )
+
+
+@router.post(
+    "/masters/{master_user_id}/disable",
+    response_model=AdminMasterDisableResponse,
+)
+def master_disable(
+    master_user_id: uuid.UUID,
+    request: Request,
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> AdminMasterDisableResponse:
+    validate_web_boundary(request)
+    try:
+        result = disable_master(
+            session,
+            identity,
+            master_user_id=master_user_id,
+        )
+    except AdminDomainError as exc:
+        raise _translate(exc) from exc
+    return AdminMasterDisableResponse(
+        master=master_card(result.master),
+        changed=result.changed,
     )
 
 

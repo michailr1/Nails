@@ -27,6 +27,12 @@ class AdminMasterListResponse(BaseModel):
 class AdminMasterCreateResponse(BaseModel):
     master: AdminMasterCard
     created: bool
+    reactivated: bool = False
+
+
+class AdminMasterDisableResponse(BaseModel):
+    master: AdminMasterCard
+    changed: bool
 
 
 class AdminMasterSelectRequest(BaseModel):

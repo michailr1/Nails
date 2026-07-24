@@ -77,6 +77,17 @@
     return master.onboarding_status === "completed" ? "Подключён" : "Настройка не завершена";
   }
 
+  function masterActions(master) {
+    if (!master.is_active) {
+      return `<button class="primary-button admin-reactivate-master" type="button" data-master-id="${escapeHtml(master.id)}" data-telegram-id="${escapeHtml(master.telegram_user_id)}">Вернуть доступ</button>`;
+    }
+    return `
+      <button class="secondary-button admin-select-master" type="button" data-master-id="${escapeHtml(master.id)}">
+        ${master.id === targetOwnerUserId ? "Открыт сейчас" : "Открыть обзор"}
+      </button>
+      <button class="secondary-button admin-disable-master" type="button" data-master-id="${escapeHtml(master.id)}" data-telegram-id="${escapeHtml(master.telegram_user_id)}">Отключить мастера</button>`;
+  }
+
   async function renderMasters(message = "") {
     appShell("Мастера", `<div class="loading-state">Загружаем мастеров…</div>`);
     try {
@@ -91,16 +102,14 @@
             <div><dt>Telegram ID</dt><dd>${escapeHtml(maskTelegramId(master.telegram_user_id))}</dd></div>
             <div><dt>Первичная настройка</dt><dd>${escapeHtml(onboardingLabel(master.onboarding_status))}</dd></div>
           </dl>
-          <button class="secondary-button admin-select-master" type="button" data-master-id="${escapeHtml(master.id)}" ${master.is_active ? "" : "disabled"}>
-            ${master.id === targetOwnerUserId ? "Открыт сейчас" : "Открыть обзор"}
-          </button>
+          <div class="admin-master-actions">${masterActions(master)}</div>
         </article>`).join("");
 
       document.querySelector("#page-content").innerHTML = `
         <section class="admin-master-create">
           <p class="eyebrow">Новое подключение</p>
           <h2>Добавить мастера</h2>
-          <p class="muted">Укажите Telegram ID. У мастера появится отдельный пустой кабинет.</p>
+          <p class="muted">Укажите Telegram ID. Нэйли создаст кабинет и сразу откроет доступ к помощнице.</p>
           ${message ? `<p class="small" role="status">${escapeHtml(message)}</p>` : ""}
           <form id="admin-master-form">
             <label>Telegram ID
@@ -116,6 +125,12 @@
       document.querySelector("#admin-master-form").addEventListener("submit", submitMaster);
       document.querySelectorAll(".admin-select-master").forEach((button) => {
         button.addEventListener("click", () => selectMaster(button.dataset.masterId));
+      });
+      document.querySelectorAll(".admin-disable-master").forEach((button) => {
+        button.addEventListener("click", () => disableMaster(button.dataset.masterId, button.dataset.telegramId));
+      });
+      document.querySelectorAll(".admin-reactivate-master").forEach((button) => {
+        button.addEventListener("click", () => reactivateMaster(button.dataset.telegramId));
       });
     } catch (error) {
       if (error.status === 403) {
@@ -146,6 +161,37 @@
     }
   }
 
+  async function disableMaster(masterUserId, telegramUserId) {
+    if (!window.confirm(`Отключить мастера ${maskTelegramId(telegramUserId)}? Данные и записи сохранятся, но доступ к Нэйли будет отозван.`)) return;
+    try {
+      await api(`/web/api/admin/masters/${masterUserId}/disable`, { method: "POST" });
+      if (targetOwnerUserId === masterUserId) {
+        targetOwnerUserId = null;
+        selectedMaster = null;
+      }
+      return renderMasters("Доступ мастера отключён. Данные сохранены.");
+    } catch (error) {
+      return renderMasters(error.status === 503
+        ? "Не удалось применить доступ в Hermes. Изменения не завершены."
+        : "Не удалось отключить мастера.");
+    }
+  }
+
+  async function reactivateMaster(telegramUserId) {
+    if (!window.confirm(`Вернуть доступ мастеру ${maskTelegramId(telegramUserId)}?`)) return;
+    try {
+      const result = await api("/web/api/admin/masters", {
+        method: "POST",
+        body: JSON.stringify({ telegram_user_id: Number(telegramUserId) }),
+      });
+      return renderMasters(result.reactivated ? "Доступ мастера восстановлен." : "Мастер уже подключён.");
+    } catch (error) {
+      return renderMasters(error.status === 503
+        ? "Не удалось применить доступ в Hermes. Изменения не завершены."
+        : "Не удалось вернуть доступ мастеру.");
+    }
+  }
+
   async function submitMaster(event) {
     event.preventDefault();
     const input = document.querySelector("#admin-master-telegram-id");
@@ -153,7 +199,7 @@
     if (!Number.isSafeInteger(telegramUserId) || telegramUserId <= 0) {
       return renderMasters("Введите корректный Telegram ID.");
     }
-    if (!window.confirm(`Добавить мастера с Telegram ID ${telegramUserId}? Будет создан отдельный пустой кабинет.`)) {
+    if (!window.confirm(`Добавить мастера с Telegram ID ${telegramUserId}? Будет создан отдельный пустой кабинет и открыт доступ к Нэйли.`)) {
       return;
     }
     const button = event.currentTarget.querySelector("button[type=submit]");
@@ -164,13 +210,19 @@
         method: "POST",
         body: JSON.stringify({ telegram_user_id: telegramUserId }),
       });
-      return renderMasters(result.created ? "Мастер добавлен." : "Этот мастер уже подключён.");
+      return renderMasters(result.created
+        ? "Мастер добавлен и получил доступ к Нэйли."
+        : result.reactivated
+          ? "Доступ мастера восстановлен."
+          : "Этот мастер уже подключён.");
     } catch (error) {
       const message = error.status === 409
         ? "Этот Telegram ID уже принадлежит другой роли."
         : error.status === 403
           ? "Недостаточно прав."
-          : "Не удалось добавить мастера.";
+          : error.status === 503
+            ? "Не удалось применить доступ в Hermes. Мастер не добавлен."
+            : "Не удалось добавить мастера.";
       return renderMasters(message);
     }
   }

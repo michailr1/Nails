@@ -48,6 +48,9 @@ services:
       WEB_RATE_STATUS_WINDOW_SECONDS: ${WEB_RATE_STATUS_WINDOW_SECONDS:-600}
       WEB_RATE_CONSUME_LIMIT: ${WEB_RATE_CONSUME_LIMIT:-10}
       WEB_RATE_CONSUME_WINDOW_SECONDS: ${WEB_RATE_CONSUME_WINDOW_SECONDS:-600}
+      HERMES_ACCESS_SYNC_ENABLED: ${HERMES_ACCESS_SYNC_ENABLED:-false}
+      HERMES_ACCESS_SOCKET: ${HERMES_ACCESS_SOCKET:-/run/nails-hermes-access/access.sock}
+      HERMES_ACCESS_TIMEOUT_SECONDS: ${HERMES_ACCESS_TIMEOUT_SECONDS:-10}
     command: >-
       sh -c "alembic upgrade head &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000"
@@ -62,6 +65,10 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+    group_add:
+      - "42891"
+    volumes:
+      - /run/nails-hermes-access:/run/nails-hermes-access:ro
     read_only: true
     tmpfs:
       - /tmp:size=32m,mode=1777
