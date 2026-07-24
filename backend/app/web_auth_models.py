@@ -83,6 +83,7 @@ class WebSession(Base):
     __table_args__ = (
         Index("ix_web_sessions_user_active", "user_id", "revoked_at"),
         Index("ix_web_sessions_expiry", "idle_expires_at", "absolute_expires_at"),
+        Index("ix_web_sessions_target_owner", "target_owner_user_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -95,6 +96,11 @@ class WebSession(Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    target_owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
