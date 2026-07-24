@@ -126,6 +126,22 @@ class Settings(BaseSettings):
         le=86400,
     )
 
+    hermes_access_sync_enabled: bool = Field(
+        default=False,
+        alias="HERMES_ACCESS_SYNC_ENABLED",
+    )
+    hermes_access_socket: str = Field(
+        default="/run/nails-hermes-access/access.sock",
+        alias="HERMES_ACCESS_SOCKET",
+        min_length=1,
+    )
+    hermes_access_timeout_seconds: float = Field(
+        default=10.0,
+        alias="HERMES_ACCESS_TIMEOUT_SECONDS",
+        ge=1.0,
+        le=30.0,
+    )
+
     @field_validator("app_timezone")
     @classmethod
     def validate_timezone(cls, value: str) -> str:
