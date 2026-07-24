@@ -1,3 +1,13 @@
+.admin-scope-banner {
+  margin-bottom: 1rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--line, rgba(84, 57, 61, 0.2));
+  border-radius: 14px;
+  background: var(--surface, rgba(255, 255, 255, 0.78));
+  font-weight: 700;
+  text-align: center;
+}
+
 .admin-master-create,
 .admin-master-list {
   display: grid;
@@ -69,4 +79,8 @@
 .admin-master-meta dd {
   margin: 0;
   text-align: right;
+}
+
+.admin-select-master {
+  width: 100%;
 }
