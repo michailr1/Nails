@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.models import AuditEvent, OnboardingState, OnboardingStatus, User, UserRole
 from app.schemas.web_admin import AdminMasterCard
+from app.services.hermes_access import HermesAccessError, get_hermes_access_client
+from app.web_auth_models import WebSession
 
 
 class AdminDomainError(Exception):
@@ -21,6 +26,13 @@ class AdminDomainError(Exception):
 class AdminMasterCreateResult:
     master: User
     created: bool
+    reactivated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class AdminMasterDisableResult:
+    master: User
+    changed: bool
 
 
 def require_admin(identity: RequestIdentity) -> None:
@@ -54,6 +66,20 @@ def list_masters(session: Session, identity: RequestIdentity) -> list[User]:
     )
 
 
+def _grant(telegram_user_id: int):
+    try:
+        return get_hermes_access_client().grant(telegram_user_id)
+    except HermesAccessError as exc:
+        raise AdminDomainError(str(exc), 503) from exc
+
+
+def _revoke(telegram_user_id: int):
+    try:
+        return get_hermes_access_client().revoke(telegram_user_id)
+    except HermesAccessError as exc:
+        raise AdminDomainError(str(exc), 503) from exc
+
+
 def create_master(
     session: Session,
     identity: RequestIdentity,
@@ -65,38 +91,122 @@ def create_master(
     existing = session.scalar(
         select(User).where(User.telegram_user_id == telegram_user_id)
     )
-    if existing is not None and existing.role == UserRole.master:
-        return AdminMasterCreateResult(master=existing, created=False)
-    if existing is not None:
+    if existing is not None and existing.role != UserRole.master:
         raise AdminDomainError("telegram_identity_conflict", 409)
 
-    master = User(
-        telegram_user_id=telegram_user_id,
-        role=UserRole.master,
-        is_active=True,
-    )
-    session.add(master)
-    session.flush()
-    session.add(
-        OnboardingState(
-            user_id=master.id,
-            status=OnboardingStatus.not_started,
+    access = _grant(telegram_user_id)
+    if existing is not None and existing.is_active:
+        return AdminMasterCreateResult(master=existing, created=False)
+
+    try:
+        if existing is not None:
+            existing.is_active = True
+            master = existing
+            action = "admin.master.reactivate"
+            created = False
+            reactivated = True
+        else:
+            master = User(
+                telegram_user_id=telegram_user_id,
+                role=UserRole.master,
+                is_active=True,
+            )
+            session.add(master)
+            session.flush()
+            session.add(
+                OnboardingState(
+                    user_id=master.id,
+                    status=OnboardingStatus.not_started,
+                )
+            )
+            action = "admin.master.create"
+            created = True
+            reactivated = False
+
+        session.add(
+            AuditEvent(
+                owner_user_id=master.id,
+                actor_user_id=identity.user_id,
+                action=action,
+                object_type="user",
+                object_id=master.id,
+                request_id=identity.request_id,
+                safe_changes={
+                    "telegram_user_id_suffix": str(telegram_user_id)[-4:],
+                    "role": "master",
+                    "is_active": True,
+                },
+            )
+        )
+        session.commit()
+        session.refresh(master)
+        return AdminMasterCreateResult(
+            master=master,
+            created=created,
+            reactivated=reactivated,
+        )
+    except SQLAlchemyError:
+        session.rollback()
+        if access.changed:
+            try:
+                get_hermes_access_client().revoke(telegram_user_id)
+            except HermesAccessError:
+                raise AdminDomainError("master_create_compensation_failed", 503) from None
+        raise
+
+
+def disable_master(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    master_user_id: uuid.UUID,
+) -> AdminMasterDisableResult:
+    require_admin(identity)
+    master = session.scalar(
+        select(User).where(
+            User.id == master_user_id,
+            User.role == UserRole.master,
         )
     )
-    session.add(
-        AuditEvent(
-            owner_user_id=master.id,
-            actor_user_id=identity.user_id,
-            action="admin.master.create",
-            object_type="user",
-            object_id=master.id,
-            request_id=identity.request_id,
-            safe_changes={
-                "telegram_user_id_suffix": str(telegram_user_id)[-4:],
-                "role": "master",
-            },
+    if master is None:
+        raise AdminDomainError("master_not_found", 404)
+
+    access = _revoke(master.telegram_user_id)
+    if not master.is_active:
+        return AdminMasterDisableResult(master=master, changed=False)
+
+    now = datetime.now(UTC)
+    try:
+        master.is_active = False
+        session.execute(
+            update(WebSession)
+            .where(WebSession.user_id == master.id, WebSession.revoked_at.is_(None))
+            .values(revoked_at=now)
         )
-    )
-    session.commit()
-    session.refresh(master)
-    return AdminMasterCreateResult(master=master, created=True)
+        session.execute(
+            update(WebSession)
+            .where(WebSession.target_owner_user_id == master.id)
+            .values(target_owner_user_id=None)
+        )
+        session.add(
+            AuditEvent(
+                owner_user_id=master.id,
+                actor_user_id=identity.user_id,
+                action="admin.master.disable",
+                object_type="user",
+                object_id=master.id,
+                request_id=identity.request_id,
+                safe_changes={"is_active": False},
+            )
+        )
+        session.commit()
+        session.refresh(master)
+        return AdminMasterDisableResult(master=master, changed=True)
+    except SQLAlchemyError:
+        session.rollback()
+        if access.changed:
+            try:
+                get_hermes_access_client().grant(master.telegram_user_id)
+            except HermesAccessError:
+                raise AdminDomainError("master_disable_compensation_failed", 503) from None
+        raise
