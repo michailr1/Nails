@@ -1,0 +1,53 @@
+name: Pytest diagnostic
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: nails_test
+          POSTGRES_USER: nails_app
+          POSTGRES_PASSWORD: nails_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U nails_app -d nails_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      APP_TIMEZONE: Europe/Berlin
+      INTERNAL_API_KEY: test-only-internal-api-key-0000000000000000
+      DATABASE_URL: postgresql+psycopg://nails_app:nails_test@127.0.0.1:55432/nails_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        run: pip install --quiet -e '.[dev]'
+      - name: Apply migrations
+        run: alembic upgrade head
+      - name: Capture pytest output
+        id: pytest
+        continue-on-error: true
+        run: pytest -q > /tmp/pytest.txt 2>&1
+      - name: Upload pytest output
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-diagnostic
+          path: /tmp/pytest.txt
+      - name: Fail when pytest failed
+        if: steps.pytest.outcome == 'failure'
+        run: exit 1
