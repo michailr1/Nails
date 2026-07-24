@@ -1,0 +1,72 @@
+.admin-master-create,
+.admin-master-list {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-master-create form {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 34rem;
+}
+
+.admin-master-create label {
+  display: grid;
+  gap: 0.45rem;
+  font-weight: 600;
+}
+
+.admin-master-create input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line, rgba(84, 57, 61, 0.2));
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  background: var(--surface, rgba(255, 255, 255, 0.74));
+  color: inherit;
+  font: inherit;
+}
+
+.admin-master-list {
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.admin-master-list .section-heading {
+  grid-column: 1 / -1;
+}
+
+.admin-master-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+  border: 1px solid var(--line, rgba(84, 57, 61, 0.16));
+  border-radius: 18px;
+  background: var(--surface, rgba(255, 255, 255, 0.72));
+}
+
+.admin-master-card h2 {
+  margin: 0.2rem 0 0;
+  font-size: 1.1rem;
+}
+
+.admin-master-meta {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.admin-master-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-master-meta dt {
+  color: var(--muted, #76666a);
+}
+
+.admin-master-meta dd {
+  margin: 0;
+  text-align: right;
+}
