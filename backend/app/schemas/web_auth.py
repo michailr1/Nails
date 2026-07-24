@@ -46,7 +46,6 @@ class TelegramChallengeApproveResponse(BaseModel):
 
 class WebSessionStateResponse(BaseModel):
     authenticated: bool
-    role: str
 
 
 class LogoutResponse(BaseModel):
