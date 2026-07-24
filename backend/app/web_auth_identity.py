@@ -16,6 +16,9 @@ from app.models import User, UserRole
 SessionDependency = Annotated[Session, Depends(get_db_session)]
 
 
+WEB_APPROVAL_ROLES = frozenset({UserRole.master, UserRole.admin})
+
+
 def require_web_approval_identity(
     session: SessionDependency,
     internal_key: str | None = Header(default=None, alias="X-Nails-Internal-Key"),
@@ -47,7 +50,7 @@ def require_web_approval_identity(
     user = session.scalar(
         select(User).where(User.telegram_user_id == parsed_telegram_user_id)
     )
-    if user is None or not user.is_active or user.role != UserRole.master:
+    if user is None or not user.is_active or user.role not in WEB_APPROVAL_ROLES:
         return None
 
     return RequestIdentity(
