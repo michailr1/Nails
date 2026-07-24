@@ -39,11 +39,18 @@ jobs:
         run: pip install --quiet -e '.[dev]'
       - name: Apply migrations
         run: alembic upgrade head
-      - name: Run tests with concise failure output
+      - name: Run tests
+        id: tests
+        continue-on-error: true
         shell: bash
         run: |
-          set +e
           pytest -q --tb=short > /tmp/pytest.log 2>&1
-          status=$?
-          tail -120 /tmp/pytest.log
-          exit $status
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-diagnostic-log
+          path: /tmp/pytest.log
+      - name: Fail when tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
