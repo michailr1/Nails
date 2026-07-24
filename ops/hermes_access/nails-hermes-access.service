@@ -1,0 +1,24 @@
+[Unit]
+Description=Nails Hermes Telegram access synchronizer
+After=network.target
+
+[Service]
+Type=simple
+Environment=NAILS_HERMES_ACCESS_GID=42891
+ExecStart=/usr/bin/python3 /opt/nails/hermes-access/helper.py
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=nails-hermes-access
+RuntimeDirectoryMode=0750
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/root/.hermes/profiles/nails/.env /root/.hermes/profiles/nails /run/nails-hermes-access /run/lock
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
