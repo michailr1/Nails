@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.db import get_db_session
+from app.models import UserRole
 from app.schemas.web_auth import (
     ChallengeConsumeRequest,
     ChallengeConsumeResponse,
@@ -119,7 +120,11 @@ def approve_from_telegram(
     )
 
 
-@router.get("/web/api/auth/session", response_model=WebSessionStateResponse)
+@router.get(
+    "/web/api/auth/session",
+    response_model=WebSessionStateResponse,
+    response_model_exclude_unset=True,
+)
 def session_state(
     request: Request,
     session: SessionDependency,
@@ -135,11 +140,13 @@ def session_state(
         )
         clear_auth_cookies(response)
         return response
-    return WebSessionStateResponse(
-        authenticated=True,
-        role=context.identity.role.value,
-        target_owner_user_id=context.web_session.target_owner_user_id,
-    )
+    if context.identity.role == UserRole.admin:
+        return WebSessionStateResponse(
+            authenticated=True,
+            role=UserRole.admin.value,
+            target_owner_user_id=context.web_session.target_owner_user_id,
+        )
+    return WebSessionStateResponse(authenticated=True)
 
 
 @router.post("/web/api/auth/logout", response_model=LogoutResponse)
