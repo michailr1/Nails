@@ -18,7 +18,8 @@ from app.services.web_admin import (
     list_masters,
     master_card,
 )
-from app.services.web_auth import require_web_session_identity, validate_web_boundary
+from app.services.web_auth import validate_web_boundary
+from app.services.web_portal_auth import require_portal_session_identity
 
 router = APIRouter(prefix="/web/api/admin", tags=["web-admin"])
 SessionDependency = Annotated[Session, Depends(get_db_session)]
@@ -28,7 +29,7 @@ def require_web_identity(
     request: Request,
     session: SessionDependency,
 ) -> RequestIdentity:
-    return require_web_session_identity(session, request)
+    return require_portal_session_identity(session, request)
 
 
 IdentityDependency = Annotated[RequestIdentity, Depends(require_web_identity)]
