@@ -30,7 +30,7 @@ from app.services.web_auth import (
 )
 from app.services.web_portal_auth import (
     consume_portal_challenge,
-    require_portal_session_identity,
+    require_portal_session_context,
 )
 from app.web_auth_identity import require_web_approval_identity
 
@@ -125,7 +125,7 @@ def session_state(
     session: SessionDependency,
 ) -> WebSessionStateResponse | JSONResponse:
     try:
-        require_portal_session_identity(session, request)
+        context = require_portal_session_context(session, request)
     except HTTPException as exc:
         if exc.status_code != status.HTTP_401_UNAUTHORIZED:
             raise
@@ -135,7 +135,11 @@ def session_state(
         )
         clear_auth_cookies(response)
         return response
-    return WebSessionStateResponse(authenticated=True)
+    return WebSessionStateResponse(
+        authenticated=True,
+        role=context.identity.role.value,
+        target_owner_user_id=context.web_session.target_owner_user_id,
+    )
 
 
 @router.post("/web/api/auth/logout", response_model=LogoutResponse)
