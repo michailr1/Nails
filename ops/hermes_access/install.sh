@@ -33,6 +33,19 @@ set_env_key() {
   mv "$tmp" "$file"
 }
 
+wait_for_socket() {
+  local attempt
+  for attempt in $(seq 1 40); do
+    if [[ -S /run/nails-hermes-access/access.sock ]] && systemctl is-active --quiet nails-hermes-access.service; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  systemctl --no-pager --full status nails-hermes-access.service >&2 || true
+  journalctl --no-pager -u nails-hermes-access.service -n 30 >&2 || true
+  return 1
+}
+
 case "$ACTION" in
   install)
     [[ -f "$SOURCE_ROOT/ops/hermes_access/helper.py" ]] || fail "helper source missing"
@@ -56,9 +69,9 @@ case "$ACTION" in
     /usr/bin/python3 -m py_compile "$RUNTIME_DIR/helper.py"
     systemd-analyze verify "$SERVICE_FILE" >/dev/null
     systemctl daemon-reload
-    systemctl enable --now nails-hermes-access.service >/dev/null
-    systemctl is-active --quiet nails-hermes-access.service
-    [[ -S /run/nails-hermes-access/access.sock ]] || fail "helper socket missing"
+    systemctl enable nails-hermes-access.service >/dev/null
+    systemctl restart nails-hermes-access.service
+    wait_for_socket || fail "helper socket missing"
     [[ "$(stat -c %g /run/nails-hermes-access/access.sock)" == "$GROUP_GID" ]] || fail "helper socket gid mismatch"
     printf 'HERMES_ACCESS_INSTALL_OK=true backup=%s\n' "$BACKUP_DIR"
     ;;
