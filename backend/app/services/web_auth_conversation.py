@@ -65,13 +65,17 @@ def _view(challenge: WebLoginChallenge | None, now: datetime) -> ConversationalC
     return ConversationalChallenge(challenge.status, challenge.expires_at, remaining)
 
 
+def _can_approve_web_login(identity: RequestIdentity) -> bool:
+    return identity.role in {UserRole.master, UserRole.admin}
+
+
 def inspect_conversational_challenge(
     session: Session,
     *,
     identity: RequestIdentity,
     verification_number: str,
 ) -> ConversationalChallenge:
-    if identity.role != UserRole.master:
+    if not _can_approve_web_login(identity):
         return ConversationalChallenge("not_found", None, 0)
 
     now = _now()
@@ -125,7 +129,7 @@ def decide_conversational_challenge(
     verification_number: str,
     decision: Literal["approve", "deny"],
 ) -> ConversationalChallenge:
-    if identity.role != UserRole.master:
+    if not _can_approve_web_login(identity):
         return ConversationalChallenge("not_found", None, 0)
 
     now = _now()
