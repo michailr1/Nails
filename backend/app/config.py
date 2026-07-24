@@ -27,6 +27,17 @@ class Settings(BaseSettings):
         le=365,
     )
 
+    client_api_enabled: bool = Field(default=False, alias="CLIENT_API_ENABLED")
+    client_internal_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        alias="CLIENT_INTERNAL_API_KEY",
+    )
+    client_owner_telegram_user_id: int | None = Field(
+        default=None,
+        alias="CLIENT_OWNER_TELEGRAM_USER_ID",
+        gt=0,
+    )
+
     web_auth_enabled: bool = Field(default=False, alias="WEB_AUTH_ENABLED")
     web_auth_hmac_key: SecretStr = Field(
         default=SecretStr(""),
@@ -165,7 +176,19 @@ class Settings(BaseSettings):
         return ",".join(item.strip() for item in value.split(",") if item.strip())
 
     @model_validator(mode="after")
-    def validate_web_auth(self) -> Settings:
+    def validate_feature_auth(self) -> Settings:
+        client_key = self.client_internal_api_key.get_secret_value().strip()
+        if self.client_api_enabled:
+            if len(client_key) < 32:
+                raise ValueError(
+                    "CLIENT_INTERNAL_API_KEY must contain at least 32 characters "
+                    "when client API is enabled"
+                )
+            if self.client_owner_telegram_user_id is None:
+                raise ValueError(
+                    "CLIENT_OWNER_TELEGRAM_USER_ID is required when client API is enabled"
+                )
+
         hmac_key = self.web_auth_hmac_key.get_secret_value().strip()
         if self.web_auth_enabled and len(hmac_key) < 32:
             raise ValueError(

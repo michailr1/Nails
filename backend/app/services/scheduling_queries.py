@@ -81,15 +81,15 @@ def get_day_view(
     )
 
 
-def find_free_slots(
+def find_free_slots_for_owner(
     session: Session,
-    identity: RequestIdentity,
+    owner_user_id,
     day: date,
     service_name: str,
 ) -> FreeSlotsResponse:
     timezone = app_timezone()
-    service = get_active_service(session, identity.user_id, service_name)
-    availability = availability_for_day(session, identity.user_id, day)
+    service = get_active_service(session, owner_user_id, service_name)
+    availability = availability_for_day(session, owner_user_id, day)
     is_day_off = any(not item.is_available for item in availability)
     explicit_windows = [item for item in availability if item.is_available]
 
@@ -109,7 +109,7 @@ def find_free_slots(
         (booking.reserved_starts_at, booking.reserved_ends_at)
         for booking, _, _ in _bookings_for_range(
             session,
-            identity.user_id,
+            owner_user_id,
             start_at,
             end_at,
         )
@@ -150,4 +150,18 @@ def find_free_slots(
         step_minutes=SLOT_STEP_MINUTES,
         service=service_summary(service),
         starts_at=sorted(starts),
+    )
+
+
+def find_free_slots(
+    session: Session,
+    identity: RequestIdentity,
+    day: date,
+    service_name: str,
+) -> FreeSlotsResponse:
+    return find_free_slots_for_owner(
+        session,
+        identity.user_id,
+        day,
+        service_name,
     )
