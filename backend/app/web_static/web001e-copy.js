@@ -173,26 +173,13 @@ async function restoreStoredChallenge() {
     }
     return;
   }
+
   state.challenge = stored;
   renderConfirmation("Проверяем подтверждение в диалоге с Нэйли…");
   challengeRestoreInFlight = true;
   try {
-    const current = await api(`/web/api/auth/challenges/${encodeURIComponent(stored.challenge_id)}`);
-    if (["pending", "approved"].includes(current.status)) {
-      renderConfirmation(current.status === "approved" ? "Подтверждение получено. Открываем кабинет…" : "Ждём подтверждение в диалоге с Нэйли…");
-      clearPoll();
-      pollChallenge();
-      return;
-    }
-    forgetStoredChallenge();
-    state.challenge = null;
-    releaseInitialSessionCheck();
-  } catch (error) {
-    if (error.status === 404) {
-      forgetStoredChallenge();
-      state.challenge = null;
-      releaseInitialSessionCheck();
-    }
+    clearPoll();
+    await pollChallenge();
   } finally {
     challengeRestoreInFlight = false;
   }
