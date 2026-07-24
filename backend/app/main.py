@@ -12,6 +12,7 @@ from app.api.onboarding import router as onboarding_router
 from app.api.scheduling import router as scheduling_router
 from app.api.scheduling_catalog_batch import router as scheduling_catalog_batch_router
 from app.api.scheduling_digest import router as scheduling_digest_router
+from app.api.web_admin import router as web_admin_router
 from app.api.web_auth import router as web_auth_router
 from app.api.web_auth_conversation import router as web_auth_conversation_router
 from app.api.web_booking_mutations import router as web_booking_mutations_router
@@ -89,6 +90,7 @@ app.include_router(scheduling_digest_router)
 app.include_router(feedback_router)
 app.include_router(web_auth_router)
 app.include_router(web_auth_conversation_router)
+app.include_router(web_admin_router)
 app.include_router(web_read_router)
 app.include_router(web_booking_mutations_router)
 app.mount(
