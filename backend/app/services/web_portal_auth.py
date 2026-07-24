@@ -12,9 +12,9 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity
 from app.models import User, UserRole
 from app.services.web_auth import (
-    ConsumedChallenge,
     _LOGIN_COOKIE,
     _SESSION_COOKIE,
+    ConsumedChallenge,
     _audit,
     _consume_rate_bucket,
     _keyed_hash,
