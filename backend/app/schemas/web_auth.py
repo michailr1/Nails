@@ -46,7 +46,7 @@ class TelegramChallengeApproveResponse(BaseModel):
 
 class WebSessionStateResponse(BaseModel):
     authenticated: bool
-    role: str
+    role: str | None = None
     target_owner_user_id: uuid.UUID | None = None
 
 
