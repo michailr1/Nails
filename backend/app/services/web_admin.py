@@ -65,9 +65,9 @@ def create_master(
     existing = session.scalar(
         select(User).where(User.telegram_user_id == telegram_user_id)
     )
+    if existing is not None and existing.role == UserRole.master:
+        return AdminMasterCreateResult(master=existing, created=False)
     if existing is not None:
-        if existing.role == UserRole.master:
-            return AdminMasterCreateResult(master=existing, created=False)
         raise AdminDomainError("telegram_identity_conflict", 409)
 
     master = User(
