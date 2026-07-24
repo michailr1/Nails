@@ -6,6 +6,7 @@ from conftest import WEB_ORIGIN_HEADERS
 from sqlalchemy import select
 
 from app.db import get_session_factory
+from app.models import UserRole
 from app.web_auth_models import WebLoginChallenge
 
 
@@ -55,6 +56,42 @@ def test_master_can_claim_read_and_approve_own_challenge(
         json={"challenge_id": started["challenge_id"]},
     )
     assert consumed.json() == {"authenticated": True, "status": "consumed"}
+
+
+def test_admin_can_claim_approve_and_consume_own_challenge(
+    client,
+    create_user,
+    auth_headers,
+):
+    admin = create_user(role=UserRole.admin)
+    started = _start(client)
+    number = str(started["verification_number"])
+
+    read = _read(client, auth_headers, number, admin.telegram_user_id)
+    assert read.status_code == 200
+    assert read.json()["status"] == "pending"
+
+    approved = _decide(
+        client,
+        auth_headers,
+        number,
+        "approve",
+        admin.telegram_user_id,
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    consumed = client.post(
+        "/web/api/auth/challenges/consume",
+        headers=WEB_ORIGIN_HEADERS,
+        json={"challenge_id": started["challenge_id"]},
+    )
+    assert consumed.json() == {"authenticated": True, "status": "consumed"}
+
+    with get_session_factory()() as session:
+        challenge = session.scalar(select(WebLoginChallenge))
+        assert challenge is not None
+        assert challenge.user_id == admin.id
 
 
 def test_master_can_approve_without_preceding_read(client, create_user, auth_headers):
