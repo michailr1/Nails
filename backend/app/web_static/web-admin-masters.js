@@ -1,10 +1,22 @@
 (() => {
   let sessionRole = null;
+  let targetOwnerUserId = null;
+  let selectedMaster = null;
   const baseRenderApp = renderApp;
   const baseAppShell = appShell;
 
+  function maskTelegramId(value) {
+    const text = String(value);
+    if (text.length <= 4) return text;
+    return `${text.slice(0, 2)}•••${text.slice(-2)}`;
+  }
+
   appShell = function adminAwareShell(title, body) {
-    baseAppShell(title, body);
+    const scopeBanner = sessionRole === "admin" && selectedMaster
+      ? `<div class="admin-scope-banner" role="status">Просмотр как мастер ${escapeHtml(maskTelegramId(selectedMaster.telegram_user_id))} · только чтение</div>`
+      : "";
+    baseAppShell(title, `${scopeBanner}${body}`);
+    document.body.classList.toggle("admin-readonly", sessionRole === "admin" && Boolean(targetOwnerUserId));
     if (sessionRole !== "admin") return;
     const nav = document.querySelector(".nav");
     if (!nav || nav.querySelector('[data-view="masters"]')) return;
@@ -20,24 +32,26 @@
     nav.append(button);
   };
 
-  async function resolveSessionRole() {
-    try {
-      await api("/web/api/admin/masters");
-      return "admin";
-    } catch (error) {
-      if (error.status === 403) return "master";
-      throw error;
-    }
+  async function loadMasters() {
+    const payload = await api("/web/api/admin/masters");
+    selectedMaster = payload.masters.find((master) => master.id === targetOwnerUserId) || null;
+    return payload.masters;
   }
 
   renderApp = async function adminAwareRenderApp() {
     clearPoll();
     try {
-      await api("/web/api/auth/session");
-      sessionRole = await resolveSessionRole();
+      const session = await api("/web/api/auth/session");
+      sessionRole = session.role;
+      targetOwnerUserId = session.target_owner_user_id || null;
+      if (sessionRole === "admin") await loadMasters();
     } catch (error) {
       if (error.status === 401) return renderLogin();
       return renderLogin("Не удалось проверить сессию.");
+    }
+    if (sessionRole === "admin" && !targetOwnerUserId) {
+      state.view = "masters";
+      return renderMasters("Выберите мастера для просмотра кабинета.");
     }
     if (state.view === "masters") {
       if (sessionRole !== "admin") {
@@ -63,12 +77,6 @@
     return master.onboarding_status === "completed" ? "Подключён" : "Настройка не завершена";
   }
 
-  function maskTelegramId(value) {
-    const text = String(value);
-    if (text.length <= 4) return text;
-    return `${text.slice(0, 2)}•••${text.slice(-2)}`;
-  }
-
   async function renderMasters(message = "") {
     appShell("Мастера", `<div class="loading-state">Загружаем мастеров…</div>`);
     try {
@@ -83,6 +91,9 @@
             <div><dt>Telegram ID</dt><dd>${escapeHtml(maskTelegramId(master.telegram_user_id))}</dd></div>
             <div><dt>Первичная настройка</dt><dd>${escapeHtml(onboardingLabel(master.onboarding_status))}</dd></div>
           </dl>
+          <button class="secondary-button admin-select-master" type="button" data-master-id="${escapeHtml(master.id)}" ${master.is_active ? "" : "disabled"}>
+            ${master.id === targetOwnerUserId ? "Открыт сейчас" : "Открыть обзор"}
+          </button>
         </article>`).join("");
 
       document.querySelector("#page-content").innerHTML = `
@@ -103,12 +114,35 @@
           ${cards || '<div class="empty-state">Мастеров пока нет.</div>'}
         </section>`;
       document.querySelector("#admin-master-form").addEventListener("submit", submitMaster);
+      document.querySelectorAll(".admin-select-master").forEach((button) => {
+        button.addEventListener("click", () => selectMaster(button.dataset.masterId));
+      });
     } catch (error) {
       if (error.status === 403) {
         state.view = "calendar";
         return baseRenderApp();
       }
       document.querySelector("#page-content").innerHTML = '<div class="empty-state">Не удалось загрузить список мастеров.</div>';
+    }
+  }
+
+  async function selectMaster(masterUserId) {
+    try {
+      const result = await api("/web/api/admin/select-master", {
+        method: "POST",
+        body: JSON.stringify({ master_user_id: masterUserId }),
+      });
+      targetOwnerUserId = result.master.id;
+      selectedMaster = result.master;
+      state.view = "calendar";
+      return renderApp();
+    } catch (error) {
+      const message = error.status === 404
+        ? "Мастер не найден или его доступ приостановлен."
+        : error.status === 403
+          ? "Недостаточно прав."
+          : "Не удалось открыть кабинет мастера.";
+      return renderMasters(message);
     }
   }
 
