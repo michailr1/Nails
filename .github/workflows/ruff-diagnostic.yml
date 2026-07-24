@@ -19,5 +19,15 @@ jobs:
           python-version: "3.12"
       - name: Install Ruff
         run: pip install --quiet 'ruff>=0.9,<1'
-      - name: Ruff
-        run: ruff check . --output-format=concise
+      - name: Capture Ruff output
+        id: ruff
+        continue-on-error: true
+        run: ruff check . --output-format=concise > /tmp/ruff.txt 2>&1
+      - name: Upload Ruff output
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-diagnostic
+          path: /tmp/ruff.txt
+      - name: Fail when Ruff failed
+        if: steps.ruff.outcome == 'failure'
+        run: exit 1
