@@ -27,12 +27,9 @@ jobs:
       run:
         working-directory: backend
     env:
+      APP_TIMEZONE: Europe/Berlin
+      INTERNAL_API_KEY: test-only-internal-api-key-0000000000000000
       DATABASE_URL: postgresql+psycopg://nails_app:nails_test@127.0.0.1:55432/nails_test
-      INTERNAL_API_KEY: iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
-      WEB_AUTH_ENABLED: "true"
-      WEB_AUTH_HMAC_KEY: wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-      WEB_ALLOWED_HOSTS: testserver
-      WEB_ALLOWED_ORIGINS: https://testserver
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
