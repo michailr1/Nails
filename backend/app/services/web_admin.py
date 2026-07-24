@@ -24,7 +24,7 @@ class AdminMasterCreateResult:
 
 
 def require_admin(identity: RequestIdentity) -> None:
-    if identity.role is not UserRole.admin:
+    if identity.role != UserRole.admin:
         raise AdminDomainError("admin_required", 403)
 
 
@@ -66,7 +66,7 @@ def create_master(
         select(User).where(User.telegram_user_id == telegram_user_id)
     )
     if existing is not None:
-        if existing.role is UserRole.master:
+        if existing.role == UserRole.master:
             return AdminMasterCreateResult(master=existing, created=False)
         raise AdminDomainError("telegram_identity_conflict", 409)
 
@@ -91,7 +91,10 @@ def create_master(
             object_type="user",
             object_id=master.id,
             request_id=identity.request_id,
-            safe_changes={"telegram_user_id": str(telegram_user_id), "role": "master"},
+            safe_changes={
+                "telegram_user_id_suffix": str(telegram_user_id)[-4:],
+                "role": "master",
+            },
         )
     )
     session.commit()
