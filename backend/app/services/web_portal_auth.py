@@ -3,9 +3,10 @@ from __future__ import annotations
 import hmac
 import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 
-from fastapi import Request
+from fastapi import HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -30,6 +31,12 @@ from app.services.web_auth import (
 from app.web_auth_models import WebChallengeStatus, WebLoginChallenge, WebSession
 
 PORTAL_ROLES = frozenset({UserRole.master, UserRole.admin})
+
+
+@dataclass(frozen=True, slots=True)
+class PortalSessionContext:
+    identity: RequestIdentity
+    web_session: WebSession
 
 
 def consume_portal_challenge(
@@ -121,6 +128,7 @@ def consume_portal_challenge(
             settings=settings,
         ),
         user_id=user.id,
+        target_owner_user_id=None,
         last_seen_at=now,
         idle_expires_at=now
         + timedelta(seconds=settings.web_session_idle_ttl_seconds),
@@ -152,10 +160,10 @@ def consume_portal_challenge(
     )
 
 
-def require_portal_session_identity(
+def require_portal_session_context(
     session: Session,
     request: Request,
-) -> RequestIdentity:
+) -> PortalSessionContext:
     validate_web_boundary(request)
     settings = _settings()
     token = request.cookies.get(_SESSION_COOKIE, "")
@@ -207,9 +215,105 @@ def require_portal_session_identity(
         )
         session.commit()
 
-    return RequestIdentity(
-        user_id=user.id,
-        telegram_user_id=user.telegram_user_id,
-        role=user.role,
-        request_id=_request_id(),
+    return PortalSessionContext(
+        identity=RequestIdentity(
+            user_id=user.id,
+            telegram_user_id=user.telegram_user_id,
+            role=user.role,
+            request_id=_request_id(),
+        ),
+        web_session=web_session,
     )
+
+
+def require_portal_session_identity(
+    session: Session,
+    request: Request,
+) -> RequestIdentity:
+    return require_portal_session_context(session, request).identity
+
+
+def resolve_effective_owner(
+    session: Session,
+    context: PortalSessionContext,
+) -> uuid.UUID:
+    identity = context.identity
+    if identity.role == UserRole.master:
+        return identity.user_id
+    if identity.role != UserRole.admin:
+        raise _unauthorized()
+
+    target_owner_user_id = context.web_session.target_owner_user_id
+    if target_owner_user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "select_master_required"},
+        )
+    master = session.scalar(
+        select(User).where(
+            User.id == target_owner_user_id,
+            User.role == UserRole.master,
+            User.is_active.is_(True),
+        )
+    )
+    if master is None:
+        context.web_session.target_owner_user_id = None
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "select_master_required"},
+        )
+    return master.id
+
+
+def require_effective_owner_identity(
+    session: Session,
+    request: Request,
+) -> RequestIdentity:
+    context = require_portal_session_context(session, request)
+    owner_user_id = resolve_effective_owner(session, context)
+    identity = context.identity
+    return RequestIdentity(
+        user_id=owner_user_id,
+        telegram_user_id=identity.telegram_user_id,
+        role=identity.role,
+        request_id=identity.request_id,
+    )
+
+
+def select_master_scope(
+    session: Session,
+    context: PortalSessionContext,
+    master_user_id: uuid.UUID,
+) -> User:
+    identity = context.identity
+    if identity.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "admin_required"},
+        )
+    master = session.scalar(
+        select(User).where(
+            User.id == master_user_id,
+            User.role == UserRole.master,
+            User.is_active.is_(True),
+        )
+    )
+    if master is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "active_master_not_found"},
+        )
+
+    context.web_session.target_owner_user_id = master.id
+    _audit(
+        session,
+        action="admin.master.scope.enter",
+        request_id=identity.request_id,
+        object_type="web_session",
+        owner_user_id=master.id,
+        actor_user_id=identity.user_id,
+        object_id=context.web_session.id,
+    )
+    session.commit()
+    return master
