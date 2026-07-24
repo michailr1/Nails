@@ -125,7 +125,10 @@ def test_web_assets_are_served(client, clean_database):
     assert "localStorage.setItem(LOGIN_CHALLENGE_STORAGE_KEY" in login_enhancements.text
     assert "localStorage.removeItem(LOGIN_CHALLENGE_STORAGE_KEY)" in login_enhancements.text
     assert "async function restoreStoredChallenge()" in login_enhancements.text
-    assert '["pending", "approved"].includes(current.status)' in login_enhancements.text
+    assert "clearPoll();\n    await pollChallenge();" in login_enhancements.text
+    assert 'api(`/web/api/auth/challenges/${encodeURIComponent(stored.challenge_id)}`)' not in (
+        login_enhancements.text
+    )
     assert 'renderConfirmation("Проверяем подтверждение' in login_enhancements.text
     assert "releaseInitialSessionCheck()" in login_enhancements.text
     assert "wrapAuthenticatedRender()" in login_enhancements.text
