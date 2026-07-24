@@ -23,12 +23,14 @@ from app.services.web_auth import (
     approve_challenge,
     challenge_status,
     clear_auth_cookies,
-    consume_challenge,
     logout_web_session,
-    require_web_session_identity,
     set_session_cookie,
     set_start_cookies,
     start_challenge,
+)
+from app.services.web_portal_auth import (
+    consume_portal_challenge,
+    require_portal_session_identity,
 )
 from app.web_auth_identity import require_web_approval_identity
 
@@ -87,7 +89,7 @@ def consume(
     response: Response,
     session: SessionDependency,
 ) -> ChallengeConsumeResponse:
-    result = consume_challenge(session, request, body.challenge_id)
+    result = consume_portal_challenge(session, request, body.challenge_id)
     if result.authenticated and result.session_token is not None:
         set_session_cookie(response, result.session_token)
     return ChallengeConsumeResponse(
@@ -123,7 +125,7 @@ def session_state(
     session: SessionDependency,
 ) -> WebSessionStateResponse | JSONResponse:
     try:
-        require_web_session_identity(session, request)
+        require_portal_session_identity(session, request)
     except HTTPException as exc:
         if exc.status_code != status.HTTP_401_UNAUTHORIZED:
             raise
