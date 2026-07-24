@@ -420,7 +420,7 @@ def approve_challenge(
     verification_number: str,
 ) -> bool:
     settings = _settings()
-    if identity.role != UserRole.master:
+    if identity.role not in {UserRole.master, UserRole.admin}:
         return False
 
     now = _now()
