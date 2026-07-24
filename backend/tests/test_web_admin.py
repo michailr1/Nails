@@ -58,15 +58,31 @@ def test_admin_can_create_and_list_isolated_master(client, create_user, auth_hea
 
     listed = client.get("/web/api/admin/masters")
     assert listed.status_code == 200
-    assert [item["telegram_user_id"] for item in listed.json()["masters"]] == [700000002]
+    assert [item["telegram_user_id"] for item in listed.json()["masters"]] == [
+        700000002
+    ]
 
     with get_session_factory()() as session:
-        master = session.scalar(select(User).where(User.telegram_user_id == 700000002))
+        master = session.scalar(
+            select(User).where(User.telegram_user_id == 700000002)
+        )
         assert master is not None
         assert master.role == UserRole.master
-        assert session.scalar(select(OnboardingState).where(OnboardingState.user_id == master.id)).status == OnboardingStatus.not_started
-        assert session.scalar(select(User).where(User.id == admin.id)).role == UserRole.admin
-        assert session.scalar(select(AuditEvent).where(AuditEvent.action == "admin.master.create")) is not None
+
+        onboarding = session.scalar(
+            select(OnboardingState).where(OnboardingState.user_id == master.id)
+        )
+        assert onboarding is not None
+        assert onboarding.status == OnboardingStatus.not_started
+
+        stored_admin = session.scalar(select(User).where(User.id == admin.id))
+        assert stored_admin is not None
+        assert stored_admin.role == UserRole.admin
+
+        audit = session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "admin.master.create")
+        )
+        assert audit is not None
 
 
 def test_admin_create_is_idempotent(client, create_user, auth_headers):
@@ -83,7 +99,9 @@ def test_admin_create_is_idempotent(client, create_user, auth_headers):
     assert response.json()["created"] is False
 
     with get_session_factory()() as session:
-        users = session.scalars(select(User).where(User.telegram_user_id == 710000002)).all()
+        users = session.scalars(
+            select(User).where(User.telegram_user_id == 710000002)
+        ).all()
         assert len(users) == 1
 
 
@@ -117,7 +135,10 @@ def test_master_cannot_access_admin_endpoints(client, create_user, auth_headers)
     assert created.json()["detail"]["code"] == "admin_required"
 
     with get_session_factory()() as session:
-        assert session.scalar(select(User).where(User.telegram_user_id == 730000002)) is None
+        stored = session.scalar(
+            select(User).where(User.telegram_user_id == 730000002)
+        )
+        assert stored is None
 
 
 def test_admin_write_requires_web_boundary(client, create_user, auth_headers):
