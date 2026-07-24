@@ -27,3 +27,13 @@ class AdminMasterListResponse(BaseModel):
 class AdminMasterCreateResponse(BaseModel):
     master: AdminMasterCard
     created: bool
+
+
+class AdminMasterSelectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    master_user_id: uuid.UUID
+
+
+class AdminMasterSelectResponse(BaseModel):
+    master: AdminMasterCard
