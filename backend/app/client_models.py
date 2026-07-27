@@ -86,6 +86,23 @@ class ClientTelegramIdentity(Base):
     )
 
 
+class ClientTelegramContext(Base):
+    __tablename__ = "client_telegram_contexts"
+
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    active_binding_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("client_telegram_identities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class MasterPublicProfile(Base):
     __tablename__ = "master_public_profile"
 
