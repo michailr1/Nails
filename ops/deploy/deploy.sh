@@ -31,6 +31,7 @@ API_BASE="http://127.0.0.1:8210"
 WEB_BASE="http://127.0.0.1:8220"
 API_IMAGE="nails-nails-api:latest"
 WEB_IMAGE="nails-nails-web:latest"
+CLIENT_BOT_IMAGE="nails-nails-client-bot:latest"
 PROFILE="/root/.hermes/profiles/nails"
 HERMES_BIN="/usr/local/lib/hermes-agent/venv/bin/hermes"
 GATEWAY="hermes-gateway-nails.service"
@@ -49,6 +50,7 @@ RUNTIME_BACKUP="${PROFILE}/backups/deploy-${STAMP}"
 DB_BACKUP="${BACKUP_ROOT}/nails-before-deploy-${STAMP}.sql.gz"
 ROLLBACK_API_IMAGE="nails-nails-api:rollback-${STAMP}"
 ROLLBACK_WEB_IMAGE="nails-nails-web:rollback-${STAMP}"
+ROLLBACK_CLIENT_BOT_IMAGE="nails-nails-client-bot:rollback-${STAMP}"
 
 log() { printf '== deploy %s: %s ==\n' "$STAMP" "$*"; }
 user_systemctl() { XDG_RUNTIME_DIR="$USER_RUNTIME_DIR" systemctl --user "$@"; }
@@ -64,6 +66,10 @@ API_IMAGE_RETAGGED="false"
 WEB_IMAGE_RETAGGED="false"
 WEB_IMAGE_EXISTED="false"
 WEB_CONTAINER_EXISTED="false"
+CLIENT_RUNTIME_ENABLED="false"
+CLIENT_BOT_IMAGE_RETAGGED="false"
+CLIENT_BOT_IMAGE_EXISTED="false"
+CLIENT_BOT_CONTAINER_EXISTED="false"
 RUNTIME_MUTATED="false"
 
 restore_backup_runtime() {
@@ -106,6 +112,12 @@ restore_images() {
   elif [[ "$WEB_IMAGE_EXISTED" == "false" ]]; then
     docker image rm "$WEB_IMAGE" >/dev/null 2>&1 || true
   fi
+  if [[ "$CLIENT_BOT_IMAGE_RETAGGED" == "true" ]]; then
+    docker image tag "$ROLLBACK_CLIENT_BOT_IMAGE" "$CLIENT_BOT_IMAGE" >/dev/null 2>&1
+    printf 'DEPLOY_CLIENT_BOT_IMAGE_TAG_RESTORED=true\n'
+  elif [[ "$CLIENT_BOT_IMAGE_EXISTED" == "false" ]]; then
+    docker image rm "$CLIENT_BOT_IMAGE" >/dev/null 2>&1 || true
+  fi
 }
 
 restore_containers() {
@@ -114,6 +126,11 @@ restore_containers() {
     compose up -d --no-deps --force-recreate --no-build nails-web >/dev/null 2>&1
   else
     compose rm -sf nails-web >/dev/null 2>&1 || true
+  fi
+  if [[ "$CLIENT_BOT_CONTAINER_EXISTED" == "true" ]]; then
+    compose up -d --no-deps --force-recreate --no-build nails-client-bot >/dev/null 2>&1
+  else
+    compose rm -sf nails-client-bot >/dev/null 2>&1 || true
   fi
 }
 
@@ -139,6 +156,8 @@ on_error() {
     restore_backup_runtime
     NAILS_DEPLOY_WORKTREE="$WORKTREE" \
       bash "$WORKTREE/ops/digest/deploy_runtime.sh" restore "$RUNTIME_BACKUP" "$SOURCE_REF"
+    NAILS_DEPLOY_WORKTREE="$WORKTREE" \
+      bash "$WORKTREE/ops/client_forward/deploy_runtime.sh" restore "$RUNTIME_BACKUP" "$SOURCE_REF"
     user_systemctl start "$GATEWAY" >/dev/null 2>&1
     printf 'DEPLOY_ROLLED_BACK=true prev_sha=%s\n' "$PREV_SHA"
   else
@@ -148,6 +167,7 @@ on_error() {
   [[ -d "$RUNTIME_BACKUP" ]] && mv "$RUNTIME_BACKUP" "${PROFILE}/backups/deploy-failed-${STAMP}"
   docker image rm "$ROLLBACK_API_IMAGE" >/dev/null 2>&1 || true
   docker image rm "$ROLLBACK_WEB_IMAGE" >/dev/null 2>&1 || true
+  docker image rm "$ROLLBACK_CLIENT_BOT_IMAGE" >/dev/null 2>&1 || true
   git -C "$REPO" worktree remove --force "$WORKTREE" >/dev/null 2>&1
   exit "$exit_code"
 }
@@ -175,12 +195,47 @@ wait_web_ready() {
   return 1
 }
 
+read_client_runtime_state() {
+  /usr/local/lib/hermes-agent/venv/bin/python - "$BACKEND_ENV" <<'PY'
+import sys
+
+path = sys.argv[1]
+values = {}
+with open(path, encoding="utf-8") as handle:
+    for raw in handle:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        values[key.strip()] = value
+
+api_enabled = values.get("CLIENT_API_ENABLED", "false").lower() == "true"
+bot_enabled = values.get("CLIENT_BOT_ENABLED", "false").lower() == "true"
+if bot_enabled and not api_enabled:
+    raise SystemExit("client bot enabled while client API disabled")
+if bot_enabled:
+    if len(values.get("CLIENT_INTERNAL_API_KEY", "")) < 32:
+        raise SystemExit("client internal API key missing or too short")
+    if not values.get("CLIENT_TELEGRAM_BOT_TOKEN", ""):
+        raise SystemExit("client Telegram bot token missing")
+print("true" if bot_enabled else "false")
+PY
+}
+
 log "0. Предусловия"
 [[ "$(id -u)" -eq 0 ]] || die "root is required"
 [[ "$(hostname -f)" == "de.funti.cc" ]] || die "unexpected hostname"
 [[ -f "$BACKEND_ENV" ]] || die "backend env file is missing"
 [[ "$(git -C "$REPO" branch --show-current)" == "main" ]] || die "production checkout is not on main"
 [[ -z "$(git -C "$REPO" status --porcelain)" ]] || die "production checkout is not clean"
+
+if ! CLIENT_RUNTIME_ENABLED="$(read_client_runtime_state)"; then
+  die "invalid client runtime configuration"
+fi
+printf 'client_runtime_enabled=%s\n' "$CLIENT_RUNTIME_ENABLED"
 
 if [[ "$SOURCE_REF" == "origin/main" ]]; then
   git -C "$REPO" fetch origin main
@@ -221,6 +276,8 @@ systemctl is-enabled nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-enabled
 systemctl is-active nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-active.before" 2>/dev/null || true
 NAILS_DEPLOY_WORKTREE="$WORKTREE" \
   bash "$WORKTREE/ops/digest/deploy_runtime.sh" snapshot "$RUNTIME_BACKUP" "$SOURCE_REF"
+NAILS_DEPLOY_WORKTREE="$WORKTREE" \
+  bash "$WORKTREE/ops/client_forward/deploy_runtime.sh" snapshot "$RUNTIME_BACKUP" "$SOURCE_REF"
 
 if docker image inspect "$WEB_IMAGE" >/dev/null 2>&1; then
   WEB_IMAGE_EXISTED="true"
@@ -228,7 +285,14 @@ fi
 if docker ps -aq --filter 'name=^/nails-nails-web-1$' | grep -q .; then
   WEB_CONTAINER_EXISTED="true"
 fi
-printf 'web_image_existed=%s web_container_existed=%s\n' "$WEB_IMAGE_EXISTED" "$WEB_CONTAINER_EXISTED"
+if docker image inspect "$CLIENT_BOT_IMAGE" >/dev/null 2>&1; then
+  CLIENT_BOT_IMAGE_EXISTED="true"
+fi
+if docker ps -aq --filter 'name=^/nails-nails-client-bot-1$' | grep -q .; then
+  CLIENT_BOT_CONTAINER_EXISTED="true"
+fi
+printf 'web_image_existed=%s web_container_existed=%s client_bot_image_existed=%s client_bot_container_existed=%s\n' \
+  "$WEB_IMAGE_EXISTED" "$WEB_CONTAINER_EXISTED" "$CLIENT_BOT_IMAGE_EXISTED" "$CLIENT_BOT_CONTAINER_EXISTED"
 
 log "3. Сборка образов из точного дерева"
 docker image tag "$API_IMAGE" "$ROLLBACK_API_IMAGE"
@@ -237,7 +301,15 @@ if [[ "$WEB_IMAGE_EXISTED" == "true" ]]; then
   docker image tag "$WEB_IMAGE" "$ROLLBACK_WEB_IMAGE"
   WEB_IMAGE_RETAGGED="true"
 fi
-compose build --build-arg GIT_SHA="$RELEASE_SHA" nails-api nails-web >/dev/null
+if [[ "$CLIENT_RUNTIME_ENABLED" == "true" && "$CLIENT_BOT_IMAGE_EXISTED" == "true" ]]; then
+  docker image tag "$CLIENT_BOT_IMAGE" "$ROLLBACK_CLIENT_BOT_IMAGE"
+  CLIENT_BOT_IMAGE_RETAGGED="true"
+fi
+BUILD_SERVICES=(nails-api nails-web)
+if [[ "$CLIENT_RUNTIME_ENABLED" == "true" ]]; then
+  BUILD_SERVICES+=(nails-client-bot)
+fi
+compose build --build-arg GIT_SHA="$RELEASE_SHA" "${BUILD_SERVICES[@]}" >/dev/null
 
 log "4. Проверка собранных образов ДО остановки runtime"
 docker run --rm -i --network none --read-only --tmpfs /tmp:size=16m \
@@ -275,6 +347,9 @@ bash -n "$WORKTREE/ops/digest/deploy_runtime.sh"
 systemd-analyze verify \
   "$WORKTREE/ops/digest/nails-finalization-digest.service" \
   "$WORKTREE/ops/digest/nails-finalization-digest.timer" >/dev/null
+bash -n "$WORKTREE/ops/client_forward/deploy_runtime.sh"
+"/usr/local/lib/hermes-agent/venv/bin/python" -m py_compile "$WORKTREE/ops/client_forward/send.py"
+systemd-analyze verify "$WORKTREE/ops/client_forward/nails-client-forward.service" >/dev/null
 
 docker run --rm --network none --read-only --tmpfs /var/cache/nginx:size=16m \
   --tmpfs /var/run:size=1m --tmpfs /tmp:size=8m \
@@ -283,12 +358,27 @@ WEB_BUILT_SHA="$(docker run --rm --network none "$WEB_IMAGE" sh -c 'printf %s "$
 [[ "$WEB_BUILT_SHA" == "$RELEASE_SHA" ]] || die "WEB image built from wrong tree"
 printf 'BUILT_WEB_IMAGE_OK=true sha=%s\n' "$WEB_BUILT_SHA"
 
-log "5. Остановка digest timer, gateway и перезапуск nails-api + nails-web"
+if [[ "$CLIENT_RUNTIME_ENABLED" == "true" ]]; then
+  CLIENT_BUILT_SHA="$(
+    docker run --rm --network none --read-only --tmpfs /tmp:size=8m \
+      "$CLIENT_BOT_IMAGE" python -c 'import os; print(os.environ.get("NAILS_GIT_SHA", "unknown"))'
+  )"
+  [[ "$CLIENT_BUILT_SHA" == "$RELEASE_SHA" ]] || die "client bot image built from wrong tree"
+  printf 'BUILT_CLIENT_BOT_IMAGE_OK=true sha=%s\n' "$CLIENT_BUILT_SHA"
+fi
+
+log "5. Остановка runtime и перезапуск контейнеров"
 RUNTIME_MUTATED="true"
 NAILS_DEPLOY_WORKTREE="$WORKTREE" \
   bash "$WORKTREE/ops/digest/deploy_runtime.sh" stop "$RUNTIME_BACKUP" "$SOURCE_REF"
+NAILS_DEPLOY_WORKTREE="$WORKTREE" \
+  bash "$WORKTREE/ops/client_forward/deploy_runtime.sh" stop "$RUNTIME_BACKUP" "$SOURCE_REF"
 user_systemctl stop "$GATEWAY"
-compose up -d --no-deps --force-recreate --no-build nails-api nails-web >/dev/null
+RUN_SERVICES=(nails-api nails-web)
+if [[ "$CLIENT_RUNTIME_ENABLED" == "true" ]]; then
+  RUN_SERVICES+=(nails-client-bot)
+fi
+compose up -d --no-deps --force-recreate --no-build "${RUN_SERVICES[@]}" >/dev/null
 wait_api_ready
 wait_web_ready
 RUNNING_SHA="$(
@@ -307,8 +397,20 @@ RUNNING_WEB_SHA="$(
   echo "ERROR: running WEB container SHA mismatch: ${RUNNING_WEB_SHA}" >&2
   exit 1
 }
+RUNNING_CLIENT_SHA="disabled"
+if [[ "$CLIENT_RUNTIME_ENABLED" == "true" ]]; then
+  RUNNING_CLIENT_SHA="$(
+    compose exec -T nails-client-bot \
+      python -c 'import os; print(os.environ.get("NAILS_GIT_SHA", "unknown"))' \
+      < /dev/null
+  )"
+  [[ "$RUNNING_CLIENT_SHA" == "$RELEASE_SHA" ]] || {
+    echo "ERROR: running client bot container SHA mismatch: ${RUNNING_CLIENT_SHA}" >&2
+    exit 1
+  }
+fi
 
-log "6. Установка plugins, skills, backup и digest runtime из релизного дерева"
+log "6. Установка plugins, skills, backup, digest и client-forward runtime из релизного дерева"
 for name in "${PLUGINS[@]}"; do
   src="${WORKTREE}/hermes/plugins/${name}"
   dst="${PROFILE}/plugins/${name}"
@@ -336,6 +438,11 @@ systemctl is-enabled --quiet nails-backup.timer
 systemctl is-active --quiet nails-backup.timer
 NAILS_DEPLOY_WORKTREE="$WORKTREE" \
   bash "$WORKTREE/ops/digest/deploy_runtime.sh" install "$RUNTIME_BACKUP" "$SOURCE_REF"
+if [[ "$CLIENT_RUNTIME_ENABLED" == "true" ]]; then
+  NAILS_DEPLOY_WORKTREE="$WORKTREE" \
+    bash "$WORKTREE/ops/client_forward/deploy_runtime.sh" install "$RUNTIME_BACKUP" "$SOURCE_REF"
+  systemctl is-active --quiet nails-client-forward.service
+fi
 
 log "7. Старт gateway"
 user_systemctl start "$GATEWAY"
@@ -367,12 +474,13 @@ fi
 mv "$RUNTIME_BACKUP" "${PROFILE}/backups/deploy-success-${STAMP}"
 docker image rm "$ROLLBACK_API_IMAGE" >/dev/null 2>&1 || true
 docker image rm "$ROLLBACK_WEB_IMAGE" >/dev/null 2>&1 || true
+docker image rm "$ROLLBACK_CLIENT_BOT_IMAGE" >/dev/null 2>&1 || true
 trap - ERR
 
 if [[ "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]]; then
-  printf 'CANDIDATE_DEPLOY_OK=true candidate_sha=%s baseline_sha=%s running_sha=%s running_web_sha=%s db_backup=%s\n' \
-    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_SHA" "$RUNNING_WEB_SHA" "$DB_BACKUP"
+  printf 'CANDIDATE_DEPLOY_OK=true candidate_sha=%s baseline_sha=%s running_sha=%s running_web_sha=%s running_client_sha=%s client_runtime_enabled=%s db_backup=%s\n' \
+    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_SHA" "$RUNNING_WEB_SHA" "$RUNNING_CLIENT_SHA" "$CLIENT_RUNTIME_ENABLED" "$DB_BACKUP"
 else
-  printf 'DEPLOY_OK=true sha=%s prev_sha=%s running_web_sha=%s db_backup=%s\n' \
-    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_WEB_SHA" "$DB_BACKUP"
+  printf 'DEPLOY_OK=true sha=%s prev_sha=%s running_web_sha=%s running_client_sha=%s client_runtime_enabled=%s db_backup=%s\n' \
+    "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_WEB_SHA" "$RUNNING_CLIENT_SHA" "$CLIENT_RUNTIME_ENABLED" "$DB_BACKUP"
 fi
