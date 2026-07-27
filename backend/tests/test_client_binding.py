@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import secrets
-
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.client_models import ClientTelegramIdentity, MasterPublicProfile
 from app.db import get_session_factory
+from app.models import UserRole
 from app.services.client_binding import (
     ClientBindingError,
     create_master_link_token,
@@ -29,13 +28,16 @@ def _profile(session, owner, name: str, contact: str | None = None) -> None:
 
 def test_start_token_resolves_owner_server_side_without_identity_leak(create_user):
     master = create_user(telegram_user_id=810000001)
-    token = secrets.token_urlsafe(24)
     with get_session_factory()() as session:
         _profile(session, master, "Студия Лак", "@studio_lak")
-        create_master_link_token(session, owner_user_id=master.id, token=token)
+        link = create_master_link_token(session, owner_user_id=master.id)
         session.commit()
 
-        context = resolve_start_token(session, start_token=token, telegram_user_id=910000001)
+        context = resolve_start_token(
+            session,
+            start_token=link.token,
+            telegram_user_id=910000001,
+        )
         assert context.owner_user_id == master.id
         assert context.master.display_name == "Студия Лак"
         assert context.master.public_contact == "@studio_lak"
@@ -50,12 +52,15 @@ def test_start_token_resolves_owner_server_side_without_identity_leak(create_use
 
 def test_public_contact_is_opt_in_only(create_user):
     master = create_user(telegram_user_id=810000002)
-    token = secrets.token_urlsafe(24)
     with get_session_factory()() as session:
         _profile(session, master, "Мастер А")
-        create_master_link_token(session, owner_user_id=master.id, token=token)
+        link = create_master_link_token(session, owner_user_id=master.id)
         session.commit()
-        context = resolve_start_token(session, start_token=token, telegram_user_id=910000002)
+        context = resolve_start_token(
+            session,
+            start_token=link.token,
+            telegram_user_id=910000002,
+        )
         assert context.master.public_contact is None
 
 
@@ -65,26 +70,41 @@ def test_link_activation_requires_public_display_name(create_user):
         get_session_factory()() as session,
         pytest.raises(ClientBindingError, match="master_link_inactive"),
     ):
-        create_master_link_token(
-            session,
-            owner_user_id=master.id,
-            token=secrets.token_urlsafe(24),
-        )
+        create_master_link_token(session, owner_user_id=master.id)
+
+
+def test_link_activation_requires_active_master(create_user):
+    inactive_master = create_user(telegram_user_id=810000008, is_active=False)
+    with get_session_factory()() as session:
+        _profile(session, inactive_master, "Отключённый мастер")
+        with pytest.raises(ClientBindingError, match="master_unavailable"):
+            create_master_link_token(session, owner_user_id=inactive_master.id)
+
+
+def test_link_activation_rejects_non_master(create_user):
+    admin = create_user(telegram_user_id=810000009, role=UserRole.admin)
+    with get_session_factory()() as session:
+        _profile(session, admin, "Администратор")
+        with pytest.raises(ClientBindingError, match="master_unavailable"):
+            create_master_link_token(session, owner_user_id=admin.id)
 
 
 def test_invalid_and_revoked_tokens_are_safe(create_user):
     master = create_user(telegram_user_id=810000004)
-    token = secrets.token_urlsafe(24)
     with get_session_factory()() as session:
         _profile(session, master, "Мастер Б")
-        create_master_link_token(session, owner_user_id=master.id, token=token)
+        link = create_master_link_token(session, owner_user_id=master.id)
         session.commit()
         with pytest.raises(ClientBindingError, match="invalid_master_link"):
             resolve_start_token(session, start_token="missing", telegram_user_id=910000004)
-        revoke_master_link_token(session, token=token)
+        revoke_master_link_token(session, token=link.token)
         session.commit()
         with pytest.raises(ClientBindingError, match="invalid_master_link"):
-            resolve_start_token(session, start_token=token, telegram_user_id=910000004)
+            resolve_start_token(
+                session,
+                start_token=link.token,
+                telegram_user_id=910000004,
+            )
 
 
 def test_multi_binding_keeps_owner_relationships_isolated(create_user):
