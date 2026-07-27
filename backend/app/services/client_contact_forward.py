@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import ClientTransportIdentity
 from app.client_models import ClientContactForward, ClientTelegramIdentity
-from app.models import User
+from app.models import User, UserRole
 from app.schemas.client_contour import (
     ClientContactForwardAckResponse,
     ClientContactForwardClaim,
@@ -56,7 +56,7 @@ def enqueue_client_contact_forward(
     session.commit()
     return ClientContactForwardResponse(
         accepted=True,
-        message="Передам мастеру. Ответ придёт отдельно, когда мастер будет на связи.",
+        message="Передам мастеру.",
     )
 
 
@@ -65,8 +65,11 @@ def claim_client_contact_forward(session: Session) -> ClientContactForwardClaim:
     stale_before = now - CLAIM_TTL
     row = session.scalar(
         select(ClientContactForward)
+        .join(User, User.id == ClientContactForward.owner_user_id)
         .where(
             ClientContactForward.sent_at.is_(None),
+            User.is_active.is_(True),
+            User.role == UserRole.master,
             (
                 ClientContactForward.claimed_at.is_(None)
                 | (ClientContactForward.claimed_at < stale_before)
@@ -80,7 +83,7 @@ def claim_client_contact_forward(session: Session) -> ClientContactForwardClaim:
         return ClientContactForwardClaim(claimed=False)
 
     master = session.get(User, row.owner_user_id)
-    if master is None or not master.is_active:
+    if master is None:
         return ClientContactForwardClaim(claimed=False)
 
     claim_id = uuid.uuid4()
