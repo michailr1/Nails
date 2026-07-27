@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -29,6 +30,13 @@ class ResolvedClientContext:
     master: PublicMaster
 
 
+def _available_master(session: Session, owner_user_id: object) -> User:
+    owner = session.get(User, owner_user_id)
+    if owner is None or owner.role != UserRole.master or not owner.is_active:
+        raise ClientBindingError("master_unavailable")
+    return owner
+
+
 def _public_master(session: Session, owner_user_id: object) -> PublicMaster:
     profile = session.get(MasterPublicProfile, owner_user_id)
     if profile is None or not profile.display_name.strip():
@@ -53,10 +61,7 @@ def resolve_start_token(
     if link is None or link.revoked_at is not None:
         raise ClientBindingError("invalid_master_link")
 
-    owner = session.get(User, link.owner_user_id)
-    if owner is None or owner.role != UserRole.master or not owner.is_active:
-        raise ClientBindingError("master_unavailable")
-
+    owner = _available_master(session, link.owner_user_id)
     master = _public_master(session, owner.id)
     return ResolvedClientContext(
         owner_user_id=owner.id,
@@ -95,13 +100,18 @@ def create_master_link_token(
     session: Session,
     *,
     owner_user_id: object,
-    token: str,
 ) -> MasterLinkToken:
-    _public_master(session, owner_user_id)
-    link = MasterLinkToken(token=token, owner_user_id=owner_user_id)
-    session.add(link)
-    session.flush()
-    return link
+    owner = _available_master(session, owner_user_id)
+    _public_master(session, owner.id)
+
+    for _ in range(5):
+        token = secrets.token_urlsafe(32)
+        if session.get(MasterLinkToken, token) is None:
+            link = MasterLinkToken(token=token, owner_user_id=owner.id)
+            session.add(link)
+            session.flush()
+            return link
+    raise ClientBindingError("master_link_token_generation_failed")
 
 
 def revoke_master_link_token(session: Session, *, token: str) -> None:
