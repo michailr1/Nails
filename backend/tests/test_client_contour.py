@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 
 from app.client_models import ClientTelegramIdentity, MasterPublicProfile
 from app.db import get_session_factory
@@ -131,7 +132,7 @@ def test_revoked_binding_uses_exact_adr009_text(client, create_user):
     token = _master_link(master, "Мастер Б")
     first = _start(client, 920000006, token)
     assert first.status_code == 200
-    binding_id = first.json()["master"]["binding_id"]
+    binding_id = uuid.UUID(first.json()["master"]["binding_id"])
 
     with get_session_factory()() as session:
         row = session.get(ClientTelegramIdentity, binding_id)
