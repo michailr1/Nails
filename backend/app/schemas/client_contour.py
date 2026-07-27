@@ -54,6 +54,44 @@ class ClientStartRequest(BaseModel):
         return candidate
 
 
+class ClientContactForwardRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message_text: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("message_text")
+    @classmethod
+    def normalize_message_text(cls, value: str) -> str:
+        candidate = value.strip()
+        if not candidate:
+            raise ValueError("message_text must not be empty")
+        return candidate
+
+
+class ClientContactForwardResponse(BaseModel):
+    accepted: bool
+    message: str
+
+
+class ClientContactForwardClaim(BaseModel):
+    claimed: bool
+    claim_id: uuid.UUID | None = None
+    forward_id: uuid.UUID | None = None
+    master_telegram_user_id: int | None = None
+    client_public_name: str | None = None
+    message_text: str | None = None
+
+
+class ClientContactForwardAckRequest(BaseModel):
+    claim_id: uuid.UUID
+    sent: bool
+
+
+class ClientContactForwardAckResponse(BaseModel):
+    changed: bool
+    sent: bool
+
+
 class ClientPublicCatalogItem(BaseModel):
     public_name: str
     public_description: str | None
