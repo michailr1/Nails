@@ -94,7 +94,7 @@ services:
       CLIENT_TELEGRAM_POLL_TIMEOUT_SECONDS: ${CLIENT_TELEGRAM_POLL_TIMEOUT_SECONDS:-30}
     command: >-
       sh -c 'if [ "$$CLIENT_BOT_ENABLED" = "true" ]; then
-      python -m app.client_bot;
+      python -m app.client_bot_runtime;
       else echo "CLIENT_BOT_DISABLED=true" && exec sleep infinity;
       fi'
     depends_on:
