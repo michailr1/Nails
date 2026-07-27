@@ -57,7 +57,18 @@ jobs:
         run: alembic upgrade head
 
       - name: Client contract - no binding
-        run: pytest tests/test_client_contour.py::test_cold_entry_without_binding_uses_exact_adr009_text
+        run: >-
+          pytest
+          tests/test_client_contour.py::test_cold_entry_without_binding_uses_exact_adr009_text
+          --junitxml=client-no-binding.xml
+
+      - name: Upload no-binding pytest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-no-binding-report
+          path: backend/client-no-binding.xml
+          if-no-files-found: error
 
       - name: Client contract - internal key
         run: pytest tests/test_client_contour.py::test_client_api_rejects_missing_internal_key
