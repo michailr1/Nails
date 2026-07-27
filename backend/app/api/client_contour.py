@@ -29,6 +29,7 @@ ClientIdentityDependency = Annotated[
     ClientTransportIdentity,
     Depends(require_client_transport_identity),
 ]
+BindingHeader = Annotated[str, Header(alias="X-Client-Binding-ID", min_length=1)]
 
 
 def _translate_domain_error(exc: SchedulingDomainError) -> HTTPException:
@@ -38,9 +39,9 @@ def _translate_domain_error(exc: SchedulingDomainError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=detail)
 
 
-def _binding_id(value: str | None) -> uuid.UUID:
+def _binding_id(value: str) -> uuid.UUID:
     try:
-        return uuid.UUID(value or "")
+        return uuid.UUID(value)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
@@ -72,10 +73,7 @@ def client_context(
 def public_catalog(
     session: SessionDependency,
     identity: ClientIdentityDependency,
-    binding_header: Annotated[
-        str | None,
-        Header(default=None, alias="X-Client-Binding-ID"),
-    ],
+    binding_header: BindingHeader,
 ) -> ClientPublicCatalogResponse:
     try:
         context = require_client_binding(
@@ -92,10 +90,7 @@ def public_catalog(
 def public_slots(
     session: SessionDependency,
     identity: ClientIdentityDependency,
-    binding_header: Annotated[
-        str | None,
-        Header(default=None, alias="X-Client-Binding-ID"),
-    ],
+    binding_header: BindingHeader,
     day: date,
     service_name: Annotated[str, Query(min_length=1, max_length=160)],
 ) -> ClientPublicSlotsResponse:
