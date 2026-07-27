@@ -56,8 +56,11 @@ jobs:
       - name: Verify repeated migration is safe
         run: alembic upgrade head
 
-      - name: Test
-        run: pytest
+      - name: Test client contour contract
+        run: pytest tests/test_client_contour.py
+
+      - name: Test remaining backend suite
+        run: pytest --ignore=tests/test_client_contour.py
 
   hermes-plugin:
     runs-on: ubuntu-latest
