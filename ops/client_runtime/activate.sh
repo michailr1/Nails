@@ -4,7 +4,6 @@ umask 077
 
 REPO="/opt/nails/repo"
 ENV_FILE="/opt/nails/.env"
-API_BASE="http://127.0.0.1:8210"
 FORWARD_INSTALLER="ops/client_forward/deploy_runtime.sh"
 RUNTIME_BACKUP_ROOT="/root/.hermes/profiles/nails/backups"
 
@@ -25,11 +24,17 @@ set -a
 source "$ENV_FILE"
 set +a
 
-[[ "${CLIENT_API_ENABLED:-false}" == "true" ]] || fail "client_api_disabled"
-[[ "${CLIENT_BOT_ENABLED:-false}" == "true" ]] || fail "client_bot_disabled"
-[[ ${#CLIENT_INTERNAL_API_KEY} -ge 32 ]] || fail "client_internal_key_missing_or_short"
-[[ -n "${CLIENT_TELEGRAM_BOT_TOKEN:-}" ]] || fail "client_bot_token_missing"
-[[ "$CLIENT_TELEGRAM_BOT_TOKEN" != "${TELEGRAM_BOT_TOKEN:-}" ]] || fail "client_and_master_bot_tokens_must_differ"
+client_api_enabled="${CLIENT_API_ENABLED:-false}"
+client_bot_enabled="${CLIENT_BOT_ENABLED:-false}"
+client_internal_key="${CLIENT_INTERNAL_API_KEY:-}"
+client_bot_token="${CLIENT_TELEGRAM_BOT_TOKEN:-}"
+master_bot_token="${TELEGRAM_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}"
+
+[[ "$client_api_enabled" == "true" ]] || fail "client_api_disabled"
+[[ "$client_bot_enabled" == "true" ]] || fail "client_bot_disabled"
+[[ ${#client_internal_key} -ge 32 ]] || fail "client_internal_key_missing_or_short"
+[[ -n "$client_bot_token" ]] || fail "client_bot_token_missing"
+[[ "$client_bot_token" != "$master_bot_token" ]] || fail "client_and_master_bot_tokens_must_differ"
 
 CURRENT_SHA="$(git -C "$REPO" rev-parse HEAD)"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -56,8 +61,7 @@ python - <<'PY'
 import os
 import urllib.request
 
-base = "http://127.0.0.1:8210"
-with urllib.request.urlopen(f"{base}/ready", timeout=5) as response:
+with urllib.request.urlopen("http://127.0.0.1:8210/ready", timeout=5) as response:
     if response.status != 200:
         raise SystemExit("API readiness failed")
 
@@ -75,12 +79,13 @@ docker compose --project-directory "$REPO" --file "$REPO/compose.yaml" \
 docker compose --project-directory "$REPO" --file "$REPO/compose.yaml" \
   --env-file "$ENV_FILE" up -d --no-deps --force-recreate nails-client-bot >/dev/null
 
+state=""
 for _ in $(seq 1 30); do
   state="$(docker inspect -f '{{.State.Status}}' nails-nails-client-bot-1 2>/dev/null || true)"
   [[ "$state" == "running" ]] && break
   sleep 1
 done
-[[ "${state:-}" == "running" ]] || fail "client_bot_not_running"
+[[ "$state" == "running" ]] || fail "client_bot_not_running"
 systemctl is-active --quiet nails-client-forward.service || fail "client_forward_not_running"
 
 BOT_SHA="$(
