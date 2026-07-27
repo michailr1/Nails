@@ -6,9 +6,15 @@ MODE="${1:?usage: deploy_runtime.sh <snapshot|stop|install|restore> <runtime-bac
 RUNTIME_BACKUP="${2:?runtime backup directory is required}"
 SOURCE_REF="${3:-origin/main}"
 WORKTREE="${NAILS_DEPLOY_WORKTREE:-}"
+DESIRED_ACTIVE="${NAILS_CLIENT_FORWARD_DESIRED_ACTIVE:-preserve}"
 
 FORWARD_RUNTIME="/opt/nails/client-forward"
 FORWARD_SERVICE="/etc/systemd/system/nails-client-forward.service"
+
+[[ "$DESIRED_ACTIVE" == "preserve" || "$DESIRED_ACTIVE" == "true" || "$DESIRED_ACTIVE" == "false" ]] || {
+  printf 'invalid NAILS_CLIENT_FORWARD_DESIRED_ACTIVE: %s\n' "$DESIRED_ACTIVE" >&2
+  exit 2
+}
 
 snapshot() {
   [[ -d "$RUNTIME_BACKUP" ]]
@@ -48,18 +54,18 @@ restore() {
   fi
 }
 
-install_runtime() {
-  [[ -n "$WORKTREE" && -d "$WORKTREE" ]]
-  local source="$WORKTREE/ops/client_forward"
-  local python_bin="/usr/local/lib/hermes-agent/venv/bin/python"
-  "$python_bin" -m py_compile "$source/send.py"
-  systemd-analyze verify "$source/nails-client-forward.service" >/dev/null
-
-  rm -rf "$FORWARD_RUNTIME"
-  install -d -o root -g root -m 700 "$FORWARD_RUNTIME"
-  install -o root -g root -m 700 "$source/send.py" "$FORWARD_RUNTIME/send.py"
-  install -o root -g root -m 644 "$source/nails-client-forward.service" "$FORWARD_SERVICE"
-  systemctl daemon-reload
+apply_desired_state() {
+  local desired="$1"
+  if [[ "$desired" == "true" ]]; then
+    systemctl enable --now nails-client-forward.service >/dev/null
+    systemctl is-enabled --quiet nails-client-forward.service
+    systemctl is-active --quiet nails-client-forward.service
+    return
+  fi
+  if [[ "$desired" == "false" ]]; then
+    systemctl disable --now nails-client-forward.service >/dev/null 2>&1 || true
+    return
+  fi
 
   if [[ "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]]; then
     if [[ "$(cat "$RUNTIME_BACKUP/client-forward-enabled.before" 2>/dev/null)" == enabled ]]; then
@@ -77,6 +83,21 @@ install_runtime() {
     systemctl is-enabled --quiet nails-client-forward.service
     systemctl is-active --quiet nails-client-forward.service
   fi
+}
+
+install_runtime() {
+  [[ -n "$WORKTREE" && -d "$WORKTREE" ]]
+  local source="$WORKTREE/ops/client_forward"
+  local python_bin="/usr/local/lib/hermes-agent/venv/bin/python"
+  "$python_bin" -m py_compile "$source/send.py"
+  systemd-analyze verify "$source/nails-client-forward.service" >/dev/null
+
+  rm -rf "$FORWARD_RUNTIME"
+  install -d -o root -g root -m 700 "$FORWARD_RUNTIME"
+  install -o root -g root -m 700 "$source/send.py" "$FORWARD_RUNTIME/send.py"
+  install -o root -g root -m 644 "$source/nails-client-forward.service" "$FORWARD_SERVICE"
+  systemctl daemon-reload
+  apply_desired_state "$DESIRED_ACTIVE"
 }
 
 case "$MODE" in
