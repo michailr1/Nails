@@ -18,8 +18,8 @@ os.environ.setdefault(
     "postgresql+psycopg://nails_app:nails_test@127.0.0.1:55432/nails_test",
 )
 os.environ.setdefault("INTERNAL_API_KEY", TEST_INTERNAL_API_KEY)
-os.environ.setdefault("CLIENT_API_ENABLED", "true")
-os.environ.setdefault("CLIENT_INTERNAL_API_KEY", TEST_CLIENT_INTERNAL_API_KEY)
+os.environ["CLIENT_API_ENABLED"] = "true"
+os.environ["CLIENT_INTERNAL_API_KEY"] = TEST_CLIENT_INTERNAL_API_KEY
 os.environ.setdefault("WEB_AUTH_ENABLED", "true")
 os.environ.setdefault("WEB_AUTH_HMAC_KEY", TEST_WEB_AUTH_HMAC_KEY)
 os.environ.setdefault("WEB_ALLOWED_HOSTS", "testserver")
