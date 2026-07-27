@@ -103,6 +103,40 @@ class ClientTelegramContext(Base):
     )
 
 
+class ClientContactForward(Base):
+    __tablename__ = "client_contact_forwards"
+    __table_args__ = (
+        Index(
+            "ix_client_contact_forwards_pending",
+            "sent_at",
+            "claimed_at",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    binding_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("client_telegram_identities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    client_public_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    message_text: Mapped[str] = mapped_column(String(2000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    claim_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class MasterPublicProfile(Base):
     __tablename__ = "master_public_profile"
 
