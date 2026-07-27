@@ -19,6 +19,8 @@ def test_activation_requires_separate_client_credentials_and_clean_main():
     assert 'CLIENT_BOT_ENABLED' in text
     assert 'CLIENT_INTERNAL_API_KEY' in text
     assert 'CLIENT_TELEGRAM_BOT_TOKEN' in text
+    assert 'HERMES_ENV="/root/.hermes/profiles/nails/.env"' in text
+    assert 'master_bot_token_missing' in text
     assert 'client_and_master_bot_tokens_must_differ' in text
 
 
