@@ -4,6 +4,7 @@ umask 077
 
 REPO="/opt/nails/repo"
 ENV_FILE="/opt/nails/.env"
+HERMES_ENV="/root/.hermes/profiles/nails/.env"
 FORWARD_INSTALLER="ops/client_forward/deploy_runtime.sh"
 RUNTIME_BACKUP_ROOT="/root/.hermes/profiles/nails/backups"
 
@@ -15,6 +16,7 @@ fail() {
 [[ "$(id -u)" -eq 0 ]] || fail "root_required"
 [[ "$(hostname -f)" == "de.funti.cc" ]] || fail "unexpected_hostname"
 [[ -f "$ENV_FILE" ]] || fail "env_missing"
+[[ -f "$HERMES_ENV" ]] || fail "hermes_env_missing"
 [[ -d "$REPO/.git" ]] || fail "repo_missing"
 [[ "$(git -C "$REPO" branch --show-current)" == "main" ]] || fail "production_not_main"
 [[ -z "$(git -C "$REPO" status --porcelain)" ]] || fail "production_tree_dirty"
@@ -22,18 +24,20 @@ fail() {
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
-set +a
-
 client_api_enabled="${CLIENT_API_ENABLED:-false}"
 client_bot_enabled="${CLIENT_BOT_ENABLED:-false}"
 client_internal_key="${CLIENT_INTERNAL_API_KEY:-}"
 client_bot_token="${CLIENT_TELEGRAM_BOT_TOKEN:-}"
+# shellcheck disable=SC1090
+source "$HERMES_ENV"
+set +a
 master_bot_token="${TELEGRAM_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}"
 
 [[ "$client_api_enabled" == "true" ]] || fail "client_api_disabled"
 [[ "$client_bot_enabled" == "true" ]] || fail "client_bot_disabled"
 [[ ${#client_internal_key} -ge 32 ]] || fail "client_internal_key_missing_or_short"
 [[ -n "$client_bot_token" ]] || fail "client_bot_token_missing"
+[[ -n "$master_bot_token" ]] || fail "master_bot_token_missing"
 [[ "$client_bot_token" != "$master_bot_token" ]] || fail "client_and_master_bot_tokens_must_differ"
 
 CURRENT_SHA="$(git -C "$REPO" rev-parse HEAD)"
