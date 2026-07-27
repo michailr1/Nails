@@ -40,9 +40,54 @@ class StickyNailsClientApi(NailsClientApi):
             binding_id=binding_id,
         )
 
+    def forward_contact(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+        message_text: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/client/contact-forward",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+            json={"message_text": message_text},
+        )
+
 
 class StickyPlatformBot(PlatformBot):
     _nails: StickyNailsClientApi
+
+    def _handle_free_text(
+        self,
+        chat_id: int,
+        telegram_user_id: int,
+        text: str,
+    ) -> None:
+        context = self._nails.context(telegram_user_id)
+        master = context.get("master") if context.get("state") == "ready" else None
+        if not isinstance(master, dict):
+            self._show_context(chat_id, telegram_user_id, context)
+            return
+
+        public_contact = str(master.get("public_contact") or "").strip()
+        if public_contact:
+            self._send(
+                chat_id,
+                f"Связаться с мастером можно напрямую: {public_contact}",
+            )
+            return
+
+        binding_id = str(uuid.UUID(str(master.get("binding_id") or "")))
+        response = self._nails.forward_contact(
+            telegram_user_id,
+            binding_id,
+            text,
+        )
+        self._send(
+            chat_id,
+            str(response.get("message") or "Передам мастеру."),
+        )
 
     def handle_message(self, message: dict[str, Any]) -> None:
         user = message.get("from") or {}
@@ -80,7 +125,11 @@ class StickyPlatformBot(PlatformBot):
                 self._nails.context(telegram_user_id),
             )
             return
-        super().handle_message(message)
+        if text.startswith("/"):
+            self._send(chat_id, "Откройте /menu или /masters.")
+            return
+        if text:
+            self._handle_free_text(chat_id, telegram_user_id, text)
 
     def handle_callback(self, callback: dict[str, Any]) -> None:
         data = str(callback.get("data") or "")
