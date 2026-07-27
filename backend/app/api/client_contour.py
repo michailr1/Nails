@@ -9,9 +9,14 @@ from app.auth import ClientTransportIdentity, require_client_transport_identity
 from app.db import get_db_session
 from app.schemas.client_contour import (
     ClientContextResponse,
+    ClientEntryState,
     ClientPublicCatalogResponse,
     ClientPublicSlotsResponse,
     ClientStartRequest,
+)
+from app.services.client_context_selection import (
+    apply_sticky_context,
+    remember_client_binding,
 )
 from app.services.client_contour import (
     find_public_slots,
@@ -49,6 +54,17 @@ def _binding_id(value: str) -> uuid.UUID:
         ) from exc
 
 
+def _ready_for_master(master) -> ClientContextResponse:
+    return ClientContextResponse(
+        state=ClientEntryState.ready,
+        message=(
+            f"👋 Здравствуйте! Вы записываетесь к **{master.display_name}**.\n"
+            "[💅 Прайс] [📅 Записаться] [🗂 Мои записи]"
+        ),
+        master=master,
+    )
+
+
 @router.post("/start", response_model=ClientContextResponse)
 def client_start(
     body: ClientStartRequest,
@@ -56,7 +72,14 @@ def client_start(
     identity: ClientIdentityDependency,
 ) -> ClientContextResponse:
     try:
-        return start_client_context(session, identity, body)
+        response = start_client_context(session, identity, body)
+        if response.state == ClientEntryState.ready and response.master is not None:
+            remember_client_binding(
+                session,
+                identity,
+                binding_id=response.master.binding_id,
+            )
+        return response
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
 
@@ -66,7 +89,33 @@ def client_context(
     session: SessionDependency,
     identity: ClientIdentityDependency,
 ) -> ClientContextResponse:
+    response = get_client_context(session, identity)
+    return apply_sticky_context(session, identity, response)
+
+
+@router.get("/masters", response_model=ClientContextResponse)
+def client_masters(
+    session: SessionDependency,
+    identity: ClientIdentityDependency,
+) -> ClientContextResponse:
     return get_client_context(session, identity)
+
+
+@router.post("/context/select", response_model=ClientContextResponse)
+def select_client_context(
+    session: SessionDependency,
+    identity: ClientIdentityDependency,
+    binding_header: BindingHeader,
+) -> ClientContextResponse:
+    try:
+        master = remember_client_binding(
+            session,
+            identity,
+            binding_id=_binding_id(binding_header),
+        )
+        return _ready_for_master(master)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
 
 
 @router.get("/catalog", response_model=ClientPublicCatalogResponse)
