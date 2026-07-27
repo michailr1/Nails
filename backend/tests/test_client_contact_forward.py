@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
+
 from app.client_models import MasterPublicProfile
 from app.db import get_session_factory
 from app.services.client_binding import create_master_link_token
 
 CLIENT_KEY = "c" * 64
-INTERNAL_KEY = "i" * 64
+INTERNAL_KEY = os.environ["INTERNAL_API_KEY"]
 
 
 def _client_headers(telegram_user_id: int, binding_id: str | None = None) -> dict[str, str]:
