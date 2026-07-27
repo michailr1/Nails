@@ -91,7 +91,12 @@ def list_client_masters(session: Session, *, telegram_user_id: int) -> list[Publ
     ]
 
 
-def create_master_link_token(session: Session, *, owner_user_id: object, token: str) -> MasterLinkToken:
+def create_master_link_token(
+    session: Session,
+    *,
+    owner_user_id: object,
+    token: str,
+) -> MasterLinkToken:
     _public_master(session, owner_user_id)
     link = MasterLinkToken(token=token, owner_user_id=owner_user_id)
     session.add(link)
