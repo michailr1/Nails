@@ -39,7 +39,10 @@ def test_start_token_resolves_owner_server_side_without_identity_leak(create_use
         assert context.owner_user_id == master.id
         assert context.master.display_name == "Студия Лак"
         assert context.master.public_contact == "@studio_lak"
-        public_projection = {"display_name": context.master.display_name, "public_contact": context.master.public_contact}
+        public_projection = {
+            "display_name": context.master.display_name,
+            "public_contact": context.master.public_contact,
+        }
         serialized = str(public_projection)
         assert str(master.telegram_user_id) not in serialized
         assert "telegram_user_id" not in public_projection
@@ -58,9 +61,15 @@ def test_public_contact_is_opt_in_only(create_user):
 
 def test_link_activation_requires_public_display_name(create_user):
     master = create_user(telegram_user_id=810000003)
-    with get_session_factory()() as session:
-        with pytest.raises(ClientBindingError, match="master_link_inactive"):
-            create_master_link_token(session, owner_user_id=master.id, token=secrets.token_urlsafe(24))
+    with (
+        get_session_factory()() as session,
+        pytest.raises(ClientBindingError, match="master_link_inactive"),
+    ):
+        create_master_link_token(
+            session,
+            owner_user_id=master.id,
+            token=secrets.token_urlsafe(24),
+        )
 
 
 def test_invalid_and_revoked_tokens_are_safe(create_user):
