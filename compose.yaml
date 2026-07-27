@@ -29,6 +29,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       APP_TIMEZONE: ${APP_TIMEZONE:?APP_TIMEZONE is required}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
+      CLIENT_API_ENABLED: ${CLIENT_API_ENABLED:-false}
+      CLIENT_INTERNAL_API_KEY: ${CLIENT_INTERNAL_API_KEY:-}
       WEB_AUTH_ENABLED: ${WEB_AUTH_ENABLED:-false}
       WEB_AUTH_HMAC_KEY: ${WEB_AUTH_HMAC_KEY:-}
       WEB_ALLOWED_HOSTS: ${WEB_ALLOWED_HOSTS:-localhost,127.0.0.1,testserver}
@@ -79,6 +81,34 @@ services:
     networks:
       - nails-edge
       - nails-internal
+
+  nails-client-bot:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      CLIENT_BOT_ENABLED: ${CLIENT_BOT_ENABLED:-false}
+      CLIENT_TELEGRAM_BOT_TOKEN: ${CLIENT_TELEGRAM_BOT_TOKEN:-}
+      CLIENT_INTERNAL_API_KEY: ${CLIENT_INTERNAL_API_KEY:-}
+      NAILS_CLIENT_API_URL: http://nails-api:8000
+      CLIENT_TELEGRAM_POLL_TIMEOUT_SECONDS: ${CLIENT_TELEGRAM_POLL_TIMEOUT_SECONDS:-30}
+    command: >-
+      sh -c 'if [ "$$CLIENT_BOT_ENABLED" = "true" ]; then
+      python -m app.client_bot;
+      else echo "CLIENT_BOT_DISABLED=true" && exec sleep infinity;
+      fi'
+    depends_on:
+      nails-api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - nails-edge
 
   nails-web:
     build:
