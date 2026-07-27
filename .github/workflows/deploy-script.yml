@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "ops/deploy/**"
+      - "ops/client_forward/**"
       - "backend/Dockerfile"
       - "web/**"
       - "compose.yaml"
@@ -12,6 +13,7 @@ on:
   pull_request:
     paths:
       - "ops/deploy/**"
+      - "ops/client_forward/**"
       - "backend/Dockerfile"
       - "web/**"
       - "compose.yaml"
@@ -28,10 +30,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate Bash syntax
-        run: bash -n ops/deploy/deploy.sh
+        run: |
+          bash -n ops/deploy/deploy.sh
+          bash -n ops/client_forward/deploy_runtime.sh
 
       - name: ShellCheck
-        run: shellcheck --severity=warning ops/deploy/deploy.sh
+        run: |
+          shellcheck --severity=warning ops/deploy/deploy.sh
+          shellcheck --severity=warning ops/client_forward/deploy_runtime.sh
 
       - name: Enforce ADR-003 single permanent entrypoint
         run: |
@@ -66,21 +72,34 @@ jobs:
               "docker run --rm -i --network none",
               "from app.api.onboarding import router as onboarding_router",
               "from app.api.scheduling import router as scheduling_router",
+              "from app.api.client_contour import router as client_contour_router",
+              "from app.api.client_forward import router as client_forward_router",
               'path.startswith("/api/v1/onboarding")',
               'path.startswith("/api/v1/scheduling")',
+              '"/api/v1/client/start"',
+              '"/api/v1/client/contact-forward"',
               "BUILT_API_IMAGE_OK=true",
               "BUILT_WEB_IMAGE_OK=true",
+              "BUILT_CLIENT_BOT_IMAGE_OK=true",
               "pg_dump",
               "gzip -t",
               'API_IMAGE_RETAGGED="true"',
               'WEB_IMAGE_RETAGGED="true"',
+              'CLIENT_BOT_IMAGE_RETAGGED="true"',
               'docker image tag "$ROLLBACK_API_IMAGE" "$API_IMAGE"',
               'docker image tag "$ROLLBACK_WEB_IMAGE" "$WEB_IMAGE"',
-              'compose build --build-arg GIT_SHA="$RELEASE_SHA" nails-api nails-web',
+              'docker image tag "$ROLLBACK_CLIENT_BOT_IMAGE" "$CLIENT_BOT_IMAGE"',
+              'compose build --build-arg GIT_SHA="$RELEASE_SHA" nails-api nails-web nails-client-bot',
               'compose up -d --no-deps --force-recreate --no-build nails-api nails-web',
+              'compose up -d --no-deps --force-recreate --no-build nails-client-bot',
               'compose rm -sf nails-web',
+              'compose rm -sf nails-client-bot',
               'wait_api_ready',
               'wait_web_ready',
+              'wait_client_bot_running',
+              'CLIENT_RUNTIME_ENABLED="$(validate_client_runtime_config)"',
+              'NAILS_CLIENT_FORWARD_DESIRED_ACTIVE="$CLIENT_RUNTIME_ENABLED"',
+              'running_client_bot_sha=%s',
               'reset --hard "$RELEASE_SHA"',
               '-e APP_TIMEZONE=UTC',
               '-e DATABASE_URL=postgresql+psycopg://smoke:smoke@127.0.0.1:5432/smoke',
@@ -91,7 +110,7 @@ jobs:
           assert deploy.count("docker compose") == 1, (
               "all compose operations must use the permanent worktree wrapper"
           )
-          assert deploy.count("< /dev/null") == 3, (
+          assert deploy.count("< /dev/null") == 4, (
               "every compose exec in deploy.sh must have isolated stdin"
           )
           assert deploy.count('git -C "$REPO" merge --ff-only') == 1, (
@@ -106,6 +125,16 @@ jobs:
           assert deploy.index("docker run --rm -i --network none") < deploy.index(
               'compose up -d --no-deps --force-recreate --no-build nails-api nails-web'
           )
+
+          forward = Path("ops/client_forward/deploy_runtime.sh").read_text(encoding="utf-8")
+          for phrase in (
+              'NAILS_CLIENT_FORWARD_DESIRED_ACTIVE',
+              'systemctl enable --now nails-client-forward.service',
+              'systemctl disable --now nails-client-forward.service',
+              'client-forward-runtime.before',
+              'client-forward-service.before',
+          ):
+              assert phrase in forward, f"client forward runtime lost safeguard: {phrase}"
 
           api_dockerfile = Path("backend/Dockerfile").read_text(encoding="utf-8")
           assert "ARG GIT_SHA" in api_dockerfile
