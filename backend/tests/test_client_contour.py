@@ -3,9 +3,11 @@ from __future__ import annotations
 import os
 import uuid
 
+from app.auth import ClientTransportIdentity
 from app.client_models import ClientTelegramIdentity, MasterPublicProfile
 from app.db import get_session_factory
 from app.services.client_binding import create_master_link_token
+from app.services.client_contour import get_client_context
 
 CLIENT_KEY = "c" * 64
 os.environ.setdefault("CLIENT_API_ENABLED", "true")
@@ -61,14 +63,19 @@ def _start(client, telegram_user_id: int, token: str, name: str = "Анна"):
     )
 
 
-def test_cold_entry_without_binding_uses_exact_adr009_text(client):
-    response = client.get("/api/v1/client/context", headers=_headers(920000001))
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["state"] == "no_binding"
-    assert payload["message"] == NO_BINDING_MESSAGE
-    assert payload["master"] is None
-    assert payload["masters"] == []
+def test_cold_entry_without_binding_uses_exact_adr009_text():
+    with get_session_factory()() as session:
+        payload = get_client_context(
+            session,
+            ClientTransportIdentity(
+                telegram_user_id=920000001,
+                request_id="no-binding-domain",
+            ),
+        )
+    assert payload.state == "no_binding"
+    assert payload.message == NO_BINDING_MESSAGE
+    assert payload.master is None
+    assert payload.masters == []
 
 
 def test_client_api_rejects_missing_internal_key(client):
@@ -86,7 +93,6 @@ def test_start_token_resolves_owner_and_never_projects_master_telegram_id(
 ):
     master = create_user(telegram_user_id=820000001)
     token = _master_link(master, "Ногти у Насти", "@nails_nastya")
-
     response = _start(client, 920000003, token)
     assert response.status_code == 200
     payload = response.json()
@@ -133,13 +139,11 @@ def test_revoked_binding_uses_exact_adr009_text(client, create_user):
     first = _start(client, 920000006, token)
     assert first.status_code == 200
     binding_id = uuid.UUID(first.json()["master"]["binding_id"])
-
     with get_session_factory()() as session:
         row = session.get(ClientTelegramIdentity, binding_id)
         assert row is not None
         row.status = "revoked"
         session.commit()
-
     response = _start(client, 920000006, token)
     assert response.status_code == 200
     assert response.json()["state"] == "revoked"
@@ -151,11 +155,9 @@ def test_multi_binding_menu_contains_only_callers_own_masters(client, create_use
     master_b = create_user(telegram_user_id=820000005)
     token_a = _master_link(master_a, "Мастер А")
     token_b = _master_link(master_b, "Мастер Б")
-
     assert _start(client, 920000007, token_a).status_code == 200
     assert _start(client, 920000007, token_b).status_code == 200
     assert _start(client, 920000008, token_b).status_code == 200
-
     response = client.get("/api/v1/client/context", headers=_headers(920000007))
     assert response.status_code == 200
     payload = response.json()
@@ -164,7 +166,6 @@ def test_multi_binding_menu_contains_only_callers_own_masters(client, create_use
         "Мастер А",
         "Мастер Б",
     ]
-
     other = client.get("/api/v1/client/context", headers=_headers(920000008))
     assert other.status_code == 200
     assert other.json()["state"] == "ready"
@@ -182,7 +183,6 @@ def test_catalog_is_selected_by_owned_binding_not_owner_input(
     _master_link(master_b, "Мастер Б")
     create_service(master_a.id, public_name="Маникюр А")
     create_service(master_b.id, public_name="Маникюр Б")
-
     start = _start(client, 920000009, token_a)
     binding_id = start.json()["master"]["binding_id"]
     response = client.get(
@@ -202,7 +202,6 @@ def test_binding_handle_cannot_be_used_by_another_telegram_identity(client, crea
     token = _master_link(master, "Мастер В")
     start = _start(client, 920000010, token)
     binding_id = start.json()["master"]["binding_id"]
-
     response = client.get(
         "/api/v1/client/catalog",
         headers=_headers(920000011, binding_id=binding_id),
