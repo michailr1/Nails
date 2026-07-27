@@ -3,11 +3,9 @@ from __future__ import annotations
 import os
 import uuid
 
-from app.auth import ClientTransportIdentity
 from app.client_models import ClientTelegramIdentity, MasterPublicProfile
 from app.db import get_session_factory
 from app.services.client_binding import create_master_link_token
-from app.services.client_contour import get_client_context
 
 CLIENT_KEY = "c" * 64
 os.environ.setdefault("CLIENT_API_ENABLED", "true")
@@ -63,19 +61,14 @@ def _start(client, telegram_user_id: int, token: str, name: str = "Анна"):
     )
 
 
-def test_cold_entry_without_binding_uses_exact_adr009_text():
-    with get_session_factory()() as session:
-        payload = get_client_context(
-            session,
-            ClientTransportIdentity(
-                telegram_user_id=920000001,
-                request_id="no-binding-domain",
-            ),
-        )
-    assert payload.state == "no_binding"
-    assert payload.message == NO_BINDING_MESSAGE
-    assert payload.master is None
-    assert payload.masters == []
+def test_cold_entry_without_binding_uses_exact_adr009_text(client):
+    response = client.get("/api/v1/client/context", headers=_headers(920000001))
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["state"] == "no_binding"
+    assert payload["message"] == NO_BINDING_MESSAGE
+    assert payload["master"] is None
+    assert payload["masters"] == []
 
 
 def test_client_api_rejects_missing_internal_key(client):
