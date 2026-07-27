@@ -151,7 +151,7 @@ def test_multi_binding_menu_contains_only_callers_own_masters(client, create_use
     assert _start(client, 920000007, token_a).status_code == 200
     assert _start(client, 920000007, token_b).status_code == 200
     assert _start(client, 920000008, token_b).status_code == 200
-    response = client.get("/api/v1/client/context", headers=_headers(920000007))
+    response = client.get("/api/v1/client/masters", headers=_headers(920000007))
     assert response.status_code == 200
     payload = response.json()
     assert payload["state"] == "choose_master"
