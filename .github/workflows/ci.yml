@@ -56,46 +56,8 @@ jobs:
       - name: Verify repeated migration is safe
         run: alembic upgrade head
 
-      - name: Client contract - no binding
-        run: >-
-          pytest
-          tests/test_client_contour.py::test_cold_entry_without_binding_uses_exact_adr009_text
-          --junitxml=client-no-binding.xml
-
-      - name: Upload no-binding pytest report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: client-no-binding-report
-          path: backend/client-no-binding.xml
-          if-no-files-found: error
-
-      - name: Client contract - internal key
-        run: pytest tests/test_client_contour.py::test_client_api_rejects_missing_internal_key
-
-      - name: Client contract - start token
-        run: pytest tests/test_client_contour.py::test_start_token_resolves_owner_and_never_projects_master_telegram_id
-
-      - name: Client contract - reject owner injection
-        run: pytest tests/test_client_contour.py::test_start_body_cannot_override_owner
-
-      - name: Client contract - invalid link
-        run: pytest tests/test_client_contour.py::test_invalid_link_uses_exact_adr009_text
-
-      - name: Client contract - revoked binding
-        run: pytest tests/test_client_contour.py::test_revoked_binding_uses_exact_adr009_text
-
-      - name: Client contract - multi binding
-        run: pytest tests/test_client_contour.py::test_multi_binding_menu_contains_only_callers_own_masters
-
-      - name: Client contract - owner scoped catalog
-        run: pytest tests/test_client_contour.py::test_catalog_is_selected_by_owned_binding_not_owner_input
-
-      - name: Client contract - foreign binding denied
-        run: pytest tests/test_client_contour.py::test_binding_handle_cannot_be_used_by_another_telegram_identity
-
-      - name: Test remaining backend suite
-        run: pytest --ignore=tests/test_client_contour.py
+      - name: Test
+        run: pytest
 
   hermes-plugin:
     runs-on: ubuntu-latest
