@@ -6,12 +6,13 @@ from app.client_models import ClientTelegramIdentity, MasterPublicProfile
 from app.db import get_session_factory
 from app.models import Client
 from app.services.normalization import normalize_public_name
-from conftest import TEST_CLIENT_INTERNAL_API_KEY
+
+CLIENT_KEY = "c" * 64
 
 
 def _client_headers(telegram_user_id: int, binding_id) -> dict[str, str]:
     return {
-        "X-Nails-Client-Internal-Key": TEST_CLIENT_INTERNAL_API_KEY,
+        "X-Nails-Client-Internal-Key": CLIENT_KEY,
         "X-Telegram-User-ID": str(telegram_user_id),
         "X-Client-Binding-ID": str(binding_id),
         "X-Request-ID": "client-booking-request-test",
