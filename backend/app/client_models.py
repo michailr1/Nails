@@ -100,6 +100,10 @@ class BookingRequest(Base):
             "status IN ('pending', 'approved', 'rejected', 'cancelled')",
             name="booking_request_status_valid",
         ),
+        CheckConstraint(
+            "status <> 'approved' OR booking_id IS NOT NULL",
+            name="booking_request_approved_has_booking",
+        ),
         UniqueConstraint(
             "owner_user_id",
             "binding_id",
@@ -132,11 +136,12 @@ class BookingRequest(Base):
         ForeignKey("client_telegram_identities.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    client_id: Mapped[uuid.UUID] = mapped_column(
+    client_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("clients.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
+    requested_public_name: Mapped[str | None] = mapped_column(String(160))
     service_name: Mapped[str] = mapped_column(String(160), nullable=False)
     addon_names: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")

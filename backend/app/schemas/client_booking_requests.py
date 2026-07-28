@@ -14,6 +14,11 @@ class BookingRequestStatusValue(StrEnum):
     cancelled = "cancelled"
 
 
+class BookingRequestResolutionValue(StrEnum):
+    link_existing = "link_existing"
+    create_new = "create_new"
+
+
 class ClientBookingRequestCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -78,9 +83,26 @@ class ClientBookingRequestCreate(BaseModel):
         return self
 
 
+class MasterBookingRequestApprove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolution: BookingRequestResolutionValue
+    client_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_resolution(self) -> MasterBookingRequestApprove:
+        if self.resolution == BookingRequestResolutionValue.link_existing:
+            if self.client_id is None:
+                raise ValueError("client_id is required when linking an existing client")
+        elif self.client_id is not None:
+            raise ValueError("client_id is not allowed when creating a new client")
+        return self
+
+
 class BookingRequestPublic(BaseModel):
     id: uuid.UUID
     status: BookingRequestStatusValue
+    requested_public_name: str | None = None
     service_name: str
     addon_names: list[str]
     addon_quantities: dict[str, int]
