@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
 from app.client_models import BookingRequest, ClientTelegramIdentity, MasterPublicProfile
 from app.db import get_session_factory
@@ -430,18 +432,28 @@ def test_master_status_filter_returns_only_pending(
     ]
 
 
-def test_approved_request_db_constraint_exists(create_user):
-    create_user(telegram_user_id=830000011)
+def test_approved_request_requires_booking_id_at_database_boundary(
+    client,
+    create_user,
+    create_service,
+):
+    master = create_user(telegram_user_id=830000011)
+    create_service(master.id, public_name="Маникюр")
+    binding_id = _start_binding(client, master, 930000011)
+    _, starts_at = _future_start()
+    created = _create_request(client, 930000011, binding_id, starts_at)
+    assert created.status_code == 200
+
     with get_session_factory()() as session:
-        exists = session.scalar(
-            text(
-                "SELECT EXISTS ("
-                "SELECT 1 FROM pg_constraint "
-                "WHERE conname = 'booking_request_approved_has_booking'"
-                ")"
+        with pytest.raises(IntegrityError):
+            session.execute(
+                text(
+                    "UPDATE booking_requests SET status = 'approved' "
+                    "WHERE id = :request_id"
+                ),
+                {"request_id": created.json()["id"]},
             )
-        )
-        assert exists is True
+            session.commit()
 
 
 def test_request_payload_forbids_owner_client_and_role_override(
