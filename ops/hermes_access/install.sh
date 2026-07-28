@@ -46,6 +46,16 @@ wait_for_socket() {
   return 1
 }
 
+verify_runtime_access() {
+  local runtime_path="/run/nails-hermes-access"
+  local socket_path="${runtime_path}/access.sock"
+  [[ -d "$runtime_path" ]] || fail "helper runtime directory missing"
+  [[ "$(stat -c %g "$runtime_path")" == "$GROUP_GID" ]] || fail "helper runtime directory gid mismatch"
+  [[ $(( 8#$(stat -c %a "$runtime_path") & 8#050 )) -eq $((8#050)) ]] || fail "helper runtime directory is not group traversable"
+  [[ -S "$socket_path" ]] || fail "helper socket missing"
+  [[ "$(stat -c %g "$socket_path")" == "$GROUP_GID" ]] || fail "helper socket gid mismatch"
+}
+
 case "$ACTION" in
   install)
     [[ -f "$SOURCE_ROOT/ops/hermes_access/helper.py" ]] || fail "helper source missing"
@@ -72,7 +82,7 @@ case "$ACTION" in
     systemctl enable nails-hermes-access.service >/dev/null
     systemctl restart nails-hermes-access.service
     wait_for_socket || fail "helper socket missing"
-    [[ "$(stat -c %g /run/nails-hermes-access/access.sock)" == "$GROUP_GID" ]] || fail "helper socket gid mismatch"
+    verify_runtime_access
     printf 'HERMES_ACCESS_INSTALL_OK=true backup=%s\n' "$BACKUP_DIR"
     ;;
   restore)
