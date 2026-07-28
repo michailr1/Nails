@@ -193,6 +193,12 @@ function bindCatalogFields() {
   });
 }
 
+function focusCatalogDraft(index) {
+  const nameInput = document.querySelector(`[data-service-index="${index}"][data-service-field="public_name"]`);
+  nameInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+  nameInput?.focus({ preventScroll: true });
+}
+
 function renderServiceCatalogBody(message = "") {
   const content = document.querySelector("#page-content");
   if (!content) return;
@@ -202,12 +208,17 @@ function renderServiceCatalogBody(message = "") {
     <div class="catalog-list">${renderCatalogList()}</div>
     ${renderRemovedCatalog()}`;
   document.querySelector("#add-service").addEventListener("click", () => {
+    const existingDraftIndex = serviceCatalogDraft.findIndex((service) => service.is_new === true);
+    if (existingDraftIndex !== -1) {
+      expandedServiceIndex = existingDraftIndex;
+      renderServiceCatalogBody("Сначала заполните или удалите открытую новую позицию");
+      focusCatalogDraft(existingDraftIndex);
+      return;
+    }
     serviceCatalogDraft.unshift(emptyCatalogService());
     expandedServiceIndex = 0;
     renderServiceCatalogBody();
-    const nameInput = document.querySelector('[data-service-index="0"][data-service-field="public_name"]');
-    nameInput?.scrollIntoView({ behavior: "smooth", block: "center" });
-    nameInput?.focus({ preventScroll: true });
+    focusCatalogDraft(0);
   });
   document.querySelector("#save-catalog").addEventListener("click", saveServiceCatalog);
   document.querySelectorAll("[data-edit-service]").forEach((button) => {
@@ -228,8 +239,13 @@ function renderServiceCatalogBody(message = "") {
   document.querySelectorAll("[data-remove-service]").forEach((button) => {
     button.addEventListener("click", () => {
       const index = Number(button.dataset.removeService);
+      const removedWasDraft = serviceCatalogDraft[index]?.is_new === true;
       serviceCatalogDraft.splice(index, 1);
       expandedServiceIndex = null;
+      if (removedWasDraft) {
+        renderServiceCatalogBody("Черновик удалён");
+        return;
+      }
       renderServiceCatalogBody(serviceCatalogDraft.length ? "Позиция убрана. Проверьте изменения и сохраните прайс." : "Прайс пуст. Добавьте хотя бы одну позицию перед сохранением.");
     });
   });
