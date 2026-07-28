@@ -105,14 +105,16 @@ def list_requests(
             identity,
             binding_id=_uuid(binding_header, code="invalid_client_binding_id"),
         )
-        return BookingRequestListResponse(
-            requests=[_public(row) for row in list_client_booking_requests(session, context)]
-        )
+        rows = list_client_booking_requests(session, context)
+        return BookingRequestListResponse(requests=[_public(row) for row in rows])
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
 
 
-@router.post("/api/v1/client/requests/{request_id}/cancel", response_model=BookingRequestPublic)
+@router.post(
+    "/api/v1/client/requests/{request_id}/cancel",
+    response_model=BookingRequestPublic,
+)
 def cancel_request(
     request_id: str,
     session: SessionDependency,
@@ -137,17 +139,22 @@ def cancel_request(
         raise _translate_domain_error(exc) from exc
 
 
-@router.get("/api/v1/scheduling/client-requests", response_model=BookingRequestListResponse)
+@router.get(
+    "/api/v1/scheduling/client-requests",
+    response_model=BookingRequestListResponse,
+)
 def master_list_requests(
     session: SessionDependency,
     identity: TrustedIdentityDependency,
 ) -> BookingRequestListResponse:
-    return BookingRequestListResponse(
-        requests=[_public(row) for row in list_master_booking_requests(session, identity)]
-    )
+    rows = list_master_booking_requests(session, identity)
+    return BookingRequestListResponse(requests=[_public(row) for row in rows])
 
 
-@router.post("/api/v1/scheduling/client-requests/{request_id}/approve", response_model=BookingRequestPublic)
+@router.post(
+    "/api/v1/scheduling/client-requests/{request_id}/approve",
+    response_model=BookingRequestPublic,
+)
 def master_approve_request(
     request_id: str,
     session: SessionDependency,
@@ -165,7 +172,10 @@ def master_approve_request(
         raise _translate_domain_error(exc) from exc
 
 
-@router.post("/api/v1/scheduling/client-requests/{request_id}/reject", response_model=BookingRequestPublic)
+@router.post(
+    "/api/v1/scheduling/client-requests/{request_id}/reject",
+    response_model=BookingRequestPublic,
+)
 def master_reject_request(
     request_id: str,
     session: SessionDependency,
