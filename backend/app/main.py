@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.client_booking_requests import router as client_booking_requests_router
 from app.api.client_contour import router as client_contour_router
 from app.api.client_forward import router as client_forward_router
 from app.api.feedback import router as feedback_router
@@ -91,6 +92,7 @@ app.include_router(scheduling_catalog_batch_router)
 app.include_router(scheduling_digest_router)
 app.include_router(feedback_router)
 app.include_router(client_contour_router)
+app.include_router(client_booking_requests_router)
 app.include_router(client_forward_router)
 app.include_router(web_auth_router)
 app.include_router(web_auth_conversation_router)
