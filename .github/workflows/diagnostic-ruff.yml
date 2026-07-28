@@ -1,9 +1,7 @@
 name: Diagnostic Ruff
 
 on:
-  push:
-    branches:
-      - feat/client-booking-requests-171
+  pull_request:
 
 permissions:
   contents: read
