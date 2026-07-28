@@ -48,7 +48,12 @@ def test_pending_request_does_not_reserve_slot_and_client_can_cancel(
     create_availability,
 ):
     master = create_user(telegram_user_id=830000001)
-    create_service(master.id, public_name="Маникюр", duration_minutes=60, buffer_after_minutes=0)
+    create_service(
+        master.id,
+        public_name="Маникюр",
+        duration_minutes=60,
+        buffer_after_minutes=0,
+    )
     create_availability(master.id)
     binding_id = _active_binding(master, 930000001)
     headers = _client_headers(930000001, binding_id)
@@ -120,7 +125,12 @@ def test_master_approve_reuses_booking_domain_and_is_recoverably_idempotent(
     auth_headers,
 ):
     master = create_user(telegram_user_id=830000004)
-    create_service(master.id, public_name="Маникюр", duration_minutes=60, buffer_after_minutes=0)
+    create_service(
+        master.id,
+        public_name="Маникюр",
+        duration_minutes=60,
+        buffer_after_minutes=0,
+    )
     create_availability(master.id)
     binding_id = _active_binding(master, 930000004)
 
