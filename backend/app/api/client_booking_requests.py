@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -14,7 +14,9 @@ from app.db import get_db_session
 from app.schemas.client_booking_requests import (
     BookingRequestListResponse,
     BookingRequestPublic,
+    BookingRequestStatusValue,
     ClientBookingRequestCreate,
+    MasterBookingRequestApprove,
 )
 from app.services.client_booking_requests import (
     approve_master_booking_request,
@@ -56,6 +58,7 @@ def _public(row) -> BookingRequestPublic:
     return BookingRequestPublic(
         id=row.id,
         status=row.status,
+        requested_public_name=row.requested_public_name,
         service_name=row.service_name,
         addon_names=list(row.addon_names),
         addon_quantities=dict(row.addon_quantities),
@@ -146,8 +149,13 @@ def cancel_request(
 def master_list_requests(
     session: SessionDependency,
     identity: TrustedIdentityDependency,
+    status: Annotated[BookingRequestStatusValue | None, Query()] = None,
 ) -> BookingRequestListResponse:
-    rows = list_master_booking_requests(session, identity)
+    rows = list_master_booking_requests(
+        session,
+        identity,
+        status=status.value if status is not None else None,
+    )
     return BookingRequestListResponse(requests=[_public(row) for row in rows])
 
 
@@ -157,6 +165,7 @@ def master_list_requests(
 )
 def master_approve_request(
     booking_request_id: str,
+    body: MasterBookingRequestApprove,
     session: SessionDependency,
     identity: TrustedIdentityDependency,
 ) -> BookingRequestPublic:
@@ -166,6 +175,8 @@ def master_approve_request(
                 session,
                 identity,
                 _uuid(booking_request_id, code="invalid_booking_request_id"),
+                resolution=body.resolution,
+                selected_client_id=body.client_id,
             )
         )
     except SchedulingDomainError as exc:
