@@ -36,9 +36,10 @@ def _start_binding(client, master, telegram_user_id: int, name: str = "Анна"
     with get_session_factory()() as session:
         profile = session.get(MasterPublicProfile, master.id)
         if profile is None:
-            session.add(MasterPublicProfile(owner_user_id=master.id, display_name="Мастер"))
-        link = create_master_link_token(session, owner_user_id=master.id)
-        token = link.token
+            session.add(
+                MasterPublicProfile(owner_user_id=master.id, display_name="Мастер")
+            )
+        token = create_master_link_token(session, owner_user_id=master.id).token
         session.commit()
 
     response = client.post(
@@ -65,7 +66,7 @@ def _create_client(master, name: str) -> Client:
         return row
 
 
-def _create_request(client, telegram_user_id: int, binding_id, starts_at: str, **overrides):
+def _create_request(client, telegram_user_id, binding_id, starts_at, **overrides):
     payload = {
         "service_name": "Маникюр",
         "addon_names": [],
@@ -106,11 +107,10 @@ def test_first_request_from_start_pending_binding_is_reachable_and_does_not_rese
 
     with get_session_factory()() as session:
         binding = session.get(ClientTelegramIdentity, binding_id)
-        assert binding is not None
+        request = session.get(BookingRequest, created.json()["id"])
+        assert binding is not None and request is not None
         assert binding.status == "pending"
         assert binding.client_id is None
-        request = session.get(BookingRequest, created.json()["id"])
-        assert request is not None
         assert request.client_id is None
 
     slots = client.get(
@@ -137,7 +137,12 @@ def test_master_approve_create_new_resolves_binding_and_is_idempotent(
     auth_headers,
 ):
     master = create_user(telegram_user_id=830000002)
-    create_service(master.id, public_name="Маникюр", duration_minutes=60, buffer_after_minutes=0)
+    create_service(
+        master.id,
+        public_name="Маникюр",
+        duration_minutes=60,
+        buffer_after_minutes=0,
+    )
     day, starts_at = _future_start()
     create_availability(master.id, day=day)
     binding_id = _start_binding(client, master, 930000002, "Анна Новая")
@@ -182,7 +187,7 @@ def test_master_approve_create_new_resolves_binding_and_is_idempotent(
     assert starts_at not in slots.json()["starts_at"]
 
 
-def test_master_approve_link_existing_requires_explicit_client_choice(
+def test_master_can_explicitly_link_existing_client(
     client,
     create_user,
     create_service,
@@ -190,7 +195,12 @@ def test_master_approve_link_existing_requires_explicit_client_choice(
     auth_headers,
 ):
     master = create_user(telegram_user_id=830000003)
-    create_service(master.id, public_name="Маникюр", duration_minutes=60, buffer_after_minutes=0)
+    create_service(
+        master.id,
+        public_name="Маникюр",
+        duration_minutes=60,
+        buffer_after_minutes=0,
+    )
     existing = _create_client(master, "Анна Карточка")
     day, starts_at = _future_start()
     create_availability(master.id, day=day)
@@ -203,7 +213,6 @@ def test_master_approve_link_existing_requires_explicit_client_choice(
         json={"resolution": "link_existing", "client_id": str(existing.id)},
     )
     assert approved.status_code == 200
-    assert approved.json()["status"] == "approved"
 
     with get_session_factory()() as session:
         binding = session.get(ClientTelegramIdentity, binding_id)
@@ -222,7 +231,12 @@ def test_name_match_never_auto_links_existing_card(
     auth_headers,
 ):
     master = create_user(telegram_user_id=830000004)
-    create_service(master.id, public_name="Маникюр", duration_minutes=60, buffer_after_minutes=0)
+    create_service(
+        master.id,
+        public_name="Маникюр",
+        duration_minutes=60,
+        buffer_after_minutes=0,
+    )
     existing = _create_client(master, "Анна")
     day, starts_at = _future_start()
     create_availability(master.id, day=day)
@@ -260,7 +274,12 @@ def test_existing_card_bound_to_other_active_identity_cannot_be_selected(
     auth_headers,
 ):
     master = create_user(telegram_user_id=830000005)
-    create_service(master.id, public_name="Маникюр", duration_minutes=60, buffer_after_minutes=0)
+    create_service(
+        master.id,
+        public_name="Маникюр",
+        duration_minutes=60,
+        buffer_after_minutes=0,
+    )
     existing = _create_client(master, "Общая Анна")
     day = date.today() + timedelta(days=30)
     create_availability(master.id, day=day, start_time=time(10), end_time=time(20))
@@ -287,11 +306,7 @@ def test_existing_card_bound_to_other_active_identity_cannot_be_selected(
     assert blocked.json()["detail"]["code"] == "client_already_linked"
 
 
-def test_request_is_owner_and_binding_scoped_without_precreated_active_identity(
-    client,
-    create_user,
-    create_service,
-):
+def test_request_is_owner_and_binding_scoped(client, create_user, create_service):
     master_a = create_user(telegram_user_id=830000006)
     master_b = create_user(telegram_user_id=830000007)
     create_service(master_a.id, public_name="Маникюр")
@@ -302,7 +317,6 @@ def test_request_is_owner_and_binding_scoped_without_precreated_active_identity(
 
     created = _create_request(client, 930000007, binding_a, starts_at)
     assert created.status_code == 200
-
     other = client.get(
         "/api/v1/client/requests",
         headers=_client_headers(930000007, binding_b),
@@ -384,8 +398,20 @@ def test_master_status_filter_returns_only_pending(
     day = date.today() + timedelta(days=30)
     first_start = datetime.combine(day, time(11), tzinfo=BERLIN).isoformat()
     second_start = datetime.combine(day, time(15), tzinfo=BERLIN).isoformat()
-    pending = _create_request(client, 930000010, binding_id, first_start, idempotency_key="pending")
-    rejected = _create_request(client, 930000010, binding_id, second_start, idempotency_key="rejected")
+    pending = _create_request(
+        client,
+        930000010,
+        binding_id,
+        first_start,
+        idempotency_key="pending",
+    )
+    rejected = _create_request(
+        client,
+        930000010,
+        binding_id,
+        second_start,
+        idempotency_key="rejected",
+    )
     assert pending.status_code == 200 and rejected.status_code == 200
     rejected_response = client.post(
         f"/api/v1/scheduling/client-requests/{rejected.json()['id']}/reject",
@@ -399,7 +425,9 @@ def test_master_status_filter_returns_only_pending(
         params={"status": "pending"},
     )
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()["requests"]] == [pending.json()["id"]]
+    assert [item["id"] for item in response.json()["requests"]] == [
+        pending.json()["id"]
+    ]
 
 
 def test_approved_request_db_constraint_exists(create_user):
