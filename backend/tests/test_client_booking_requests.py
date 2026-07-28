@@ -444,16 +444,15 @@ def test_approved_request_requires_booking_id_at_database_boundary(
     created = _create_request(client, 930000011, binding_id, starts_at)
     assert created.status_code == 200
 
-    with get_session_factory()() as session:
-        with pytest.raises(IntegrityError):
-            session.execute(
-                text(
-                    "UPDATE booking_requests SET status = 'approved' "
-                    "WHERE id = :request_id"
-                ),
-                {"request_id": created.json()["id"]},
-            )
-            session.commit()
+    with get_session_factory()() as session, pytest.raises(IntegrityError):
+        session.execute(
+            text(
+                "UPDATE booking_requests SET status = 'approved' "
+                "WHERE id = :request_id"
+            ),
+            {"request_id": created.json()["id"]},
+        )
+        session.commit()
 
 
 def test_request_payload_forbids_owner_client_and_role_override(
