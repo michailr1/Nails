@@ -107,7 +107,6 @@ class BookingRequestPublic(BaseModel):
     addon_names: list[str]
     addon_quantities: dict[str, int]
     starts_at: datetime
-    client_id: uuid.UUID | None = None
     booking_id: uuid.UUID | None = None
     created_at: datetime
 
