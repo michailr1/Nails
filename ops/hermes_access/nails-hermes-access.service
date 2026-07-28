@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
+Group=nails-hermes-access
 Environment=NAILS_HERMES_ACCESS_GID=42891
 ExecStart=/usr/bin/python3 /opt/nails/hermes-access/helper.py
 Restart=on-failure
