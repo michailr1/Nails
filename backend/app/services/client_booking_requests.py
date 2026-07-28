@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -75,7 +75,7 @@ def create_client_booking_request(
             or existing.service_name != service_name
             or existing.addon_names != addon_names
             or existing.addon_quantities != addon_quantities
-            or existing.starts_at != starts_at
+            or existing.starts_at.astimezone(UTC) != starts_at.astimezone(UTC)
         ):
             raise SchedulingDomainError("idempotency_conflict", status_code=409)
         return existing
@@ -223,7 +223,10 @@ def approve_master_booking_request(
     )
     if request is None:
         raise SchedulingDomainError("booking_request_not_found", status_code=404)
-    if request.status == BookingRequestStatus.approved and request.booking_id is not None:
+    if (
+        request.status == BookingRequestStatus.approved
+        and request.booking_id is not None
+    ):
         return request
     if request.status != BookingRequestStatus.pending:
         raise SchedulingDomainError("booking_request_not_pending", status_code=409)
@@ -235,7 +238,12 @@ def approve_master_booking_request(
         )
     )
     owner = session.get(User, identity.user_id)
-    if client is None or owner is None or owner.role != UserRole.master or not owner.is_active:
+    if (
+        client is None
+        or owner is None
+        or owner.role != UserRole.master
+        or not owner.is_active
+    ):
         raise SchedulingDomainError("booking_request_context_invalid", status_code=409)
 
     booking_body = CatalogBookingCreateRequest(
