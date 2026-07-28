@@ -112,11 +112,11 @@ def list_requests(
 
 
 @router.post(
-    "/api/v1/client/requests/{request_id}/cancel",
+    "/api/v1/client/requests/{booking_request_id}/cancel",
     response_model=BookingRequestPublic,
 )
 def cancel_request(
-    request_id: str,
+    booking_request_id: str,
     session: SessionDependency,
     identity: ClientIdentityDependency,
     binding_header: BindingHeader,
@@ -132,7 +132,7 @@ def cancel_request(
                 session,
                 identity,
                 context,
-                _uuid(request_id, code="invalid_booking_request_id"),
+                _uuid(booking_request_id, code="invalid_booking_request_id"),
             )
         )
     except SchedulingDomainError as exc:
@@ -152,11 +152,11 @@ def master_list_requests(
 
 
 @router.post(
-    "/api/v1/scheduling/client-requests/{request_id}/approve",
+    "/api/v1/scheduling/client-requests/{booking_request_id}/approve",
     response_model=BookingRequestPublic,
 )
 def master_approve_request(
-    request_id: str,
+    booking_request_id: str,
     session: SessionDependency,
     identity: TrustedIdentityDependency,
 ) -> BookingRequestPublic:
@@ -165,7 +165,7 @@ def master_approve_request(
             approve_master_booking_request(
                 session,
                 identity,
-                _uuid(request_id, code="invalid_booking_request_id"),
+                _uuid(booking_request_id, code="invalid_booking_request_id"),
             )
         )
     except SchedulingDomainError as exc:
@@ -173,11 +173,11 @@ def master_approve_request(
 
 
 @router.post(
-    "/api/v1/scheduling/client-requests/{request_id}/reject",
+    "/api/v1/scheduling/client-requests/{booking_request_id}/reject",
     response_model=BookingRequestPublic,
 )
 def master_reject_request(
-    request_id: str,
+    booking_request_id: str,
     session: SessionDependency,
     identity: TrustedIdentityDependency,
 ) -> BookingRequestPublic:
@@ -186,7 +186,7 @@ def master_reject_request(
             reject_master_booking_request(
                 session,
                 identity,
-                _uuid(request_id, code="invalid_booking_request_id"),
+                _uuid(booking_request_id, code="invalid_booking_request_id"),
             )
         )
     except SchedulingDomainError as exc:
