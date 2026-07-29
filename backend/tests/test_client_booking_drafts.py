@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -114,13 +114,15 @@ def test_draft_composition_price_duration_and_slots(
 
     draft = _create_draft(client, 950000001, binding_id)
     assert draft["duration_minutes"] == 60
-    repair_option = next(item for item in draft["addons"] if item["public_name"] == "Ремонт")
+    repair_option = next(
+        item for item in draft["addons"] if item["public_name"] == "Ремонт"
+    )
     assert repair_option["quantity_supported"] is True
     assert repair_option["time_per_unit"] is True
 
     base_slots = client.get(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/slots",
-        headers=_headers(950000001, binding_id),
+        headers=_headers(950000001),
         params={"day": day.isoformat()},
     )
     assert base_slots.status_code == 200
@@ -128,7 +130,7 @@ def test_draft_composition_price_duration_and_slots(
 
     changed = client.put(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/composition",
-        headers=_headers(950000001, binding_id),
+        headers=_headers(950000001),
         json={"addon_names": ["Ремонт"], "addon_quantities": {"ремонт": 2}},
     )
     assert changed.status_code == 200
@@ -140,7 +142,7 @@ def test_draft_composition_price_duration_and_slots(
 
     composition_slots = client.get(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/slots",
-        headers=_headers(950000001, binding_id),
+        headers=_headers(950000001),
         params={"day": day.isoformat()},
     )
     assert composition_slots.status_code == 200
@@ -162,26 +164,26 @@ def test_draft_submit_persists_composition_without_reserving(
 
     changed = client.put(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/composition",
-        headers=_headers(950000002, binding_id),
+        headers=_headers(950000002),
         json={"addon_names": ["Снятие"], "addon_quantities": {}},
     )
     assert changed.status_code == 200
     slots = client.get(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/slots",
-        headers=_headers(950000002, binding_id),
+        headers=_headers(950000002),
         params={"day": day.isoformat()},
     ).json()["starts_at"]
     chosen = slots[0]
 
     selected = client.put(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/slot",
-        headers=_headers(950000002, binding_id),
+        headers=_headers(950000002),
         json={"starts_at": chosen},
     )
     assert selected.status_code == 200
     submitted = client.post(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/submit",
-        headers=_headers(950000002, binding_id),
+        headers=_headers(950000002),
     )
     assert submitted.status_code == 200
     payload = submitted.json()
@@ -196,14 +198,14 @@ def test_draft_submit_persists_composition_without_reserving(
 
     fresh = client.get(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/slots",
-        headers=_headers(950000002, binding_id),
+        headers=_headers(950000002),
         params={"day": day.isoformat()},
     )
     assert chosen in fresh.json()["starts_at"]
 
     retried = client.post(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/submit",
-        headers=_headers(950000002, binding_id),
+        headers=_headers(950000002),
     )
     assert retried.status_code == 200
     assert retried.json()["request_id"] == payload["request_id"]
@@ -223,12 +225,12 @@ def test_composition_change_clears_selected_slot_and_stale_addon_blocks_submit(
     draft = _create_draft(client, 950000003, binding_id)
     slots = client.get(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/slots",
-        headers=_headers(950000003, binding_id),
+        headers=_headers(950000003),
         params={"day": day.isoformat()},
     ).json()["starts_at"]
     selected = client.put(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/slot",
-        headers=_headers(950000003, binding_id),
+        headers=_headers(950000003),
         json={"starts_at": slots[0]},
     )
     assert selected.status_code == 200
@@ -236,7 +238,7 @@ def test_composition_change_clears_selected_slot_and_stale_addon_blocks_submit(
 
     changed = client.put(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/composition",
-        headers=_headers(950000003, binding_id),
+        headers=_headers(950000003),
         json={"addon_names": ["Снятие"], "addon_quantities": {}},
     )
     assert changed.status_code == 200
@@ -244,7 +246,7 @@ def test_composition_change_clears_selected_slot_and_stale_addon_blocks_submit(
 
     no_slot = client.post(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/submit",
-        headers=_headers(950000003, binding_id),
+        headers=_headers(950000003),
     )
     assert no_slot.status_code == 422
     assert no_slot.json()["detail"]["code"] == "client_booking_slot_required"
@@ -255,7 +257,7 @@ def test_composition_change_clears_selected_slot_and_stale_addon_blocks_submit(
         session.commit()
     stale = client.get(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}",
-        headers=_headers(950000003, binding_id),
+        headers=_headers(950000003),
     )
     assert stale.status_code == 404
     assert stale.json()["detail"]["code"] == "addon_not_found"
@@ -274,13 +276,13 @@ def test_draft_is_binding_scoped_and_quantity_rules_are_enforced(
 
     foreign = client.get(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}",
-        headers=_headers(950000005, binding_b),
+        headers=_headers(950000005),
     )
     assert foreign.status_code == 404
 
     invalid = client.put(
         f"/api/v1/client/booking-drafts/{draft['draft_id']}/composition",
-        headers=_headers(950000004, binding_a),
+        headers=_headers(950000004),
         json={"addon_names": ["Снятие"], "addon_quantities": {"снятие": 2}},
     )
     assert invalid.status_code == 422
