@@ -15,7 +15,8 @@ from app.client_models import (
 )
 from app.config import get_settings
 from app.db import get_session_factory
-from app.models import Booking, Client
+from app.models import Booking, Client, ClientProfileStatus
+from app.services.normalization import normalize_public_name
 from app.services.web_auth import _keyed_hash
 from app.web_auth_models import WebSession
 
@@ -48,7 +49,13 @@ def _authenticate(client, user_id: uuid.UUID) -> None:
     client.cookies.set("__Host-nails_session", token)
 
 
-def _seed_pending_request(owner_id: uuid.UUID, *, telegram_user_id: int, name: str, starts_at: datetime) -> BookingRequest:
+def _seed_pending_request(
+    owner_id: uuid.UUID,
+    *,
+    telegram_user_id: int,
+    name: str,
+    starts_at: datetime,
+) -> BookingRequest:
     with get_session_factory()() as session:
         binding = ClientTelegramIdentity(
             owner_user_id=owner_id,
@@ -77,12 +84,37 @@ def _seed_pending_request(owner_id: uuid.UUID, *, telegram_user_id: int, name: s
         return request
 
 
+def _seed_client(owner_id: uuid.UUID, name: str) -> Client:
+    with get_session_factory()() as session:
+        client = Client(
+            owner_user_id=owner_id,
+            public_name=name,
+            normalized_public_name=normalize_public_name(name),
+            profile_status=ClientProfileStatus.active,
+        )
+        session.add(client)
+        session.commit()
+        session.refresh(client)
+        session.expunge(client)
+        return client
+
+
 def test_web_client_requests_list_is_owner_scoped(client, create_user):
     owner = create_user(telegram_user_id=840000001)
     other = create_user(telegram_user_id=840000002)
     starts_at = datetime.now(BERLIN) + timedelta(days=7)
-    own = _seed_pending_request(owner.id, telegram_user_id=940000001, name="Анна", starts_at=starts_at)
-    _seed_pending_request(other.id, telegram_user_id=940000002, name="Мария", starts_at=starts_at)
+    own = _seed_pending_request(
+        owner.id,
+        telegram_user_id=940000001,
+        name="Анна",
+        starts_at=starts_at,
+    )
+    _seed_pending_request(
+        other.id,
+        telegram_user_id=940000002,
+        name="Мария",
+        starts_at=starts_at,
+    )
     _authenticate(client, owner.id)
 
     response = client.get("/web/api/client-requests", headers=WEB_ORIGIN_HEADERS)
@@ -100,11 +132,21 @@ def test_web_client_request_approve_create_new_uses_existing_lifecycle(
     create_availability,
 ):
     owner = create_user(telegram_user_id=840000003)
-    create_service(owner.id, public_name="Маникюр", duration_minutes=60, buffer_after_minutes=0)
+    create_service(
+        owner.id,
+        public_name="Маникюр",
+        duration_minutes=60,
+        buffer_after_minutes=0,
+    )
     day = date.today() + timedelta(days=20)
     create_availability(owner.id, day=day, start_time=time(10), end_time=time(20))
     starts_at = datetime.combine(day, time(12), tzinfo=BERLIN)
-    request = _seed_pending_request(owner.id, telegram_user_id=940000003, name="Анна Новая", starts_at=starts_at)
+    request = _seed_pending_request(
+        owner.id,
+        telegram_user_id=940000003,
+        name="Анна Новая",
+        starts_at=starts_at,
+    )
     _authenticate(client, owner.id)
 
     response = client.post(
@@ -133,8 +175,18 @@ def test_web_client_request_reject_keeps_other_owner_untouched(client, create_us
     owner = create_user(telegram_user_id=840000004)
     other = create_user(telegram_user_id=840000005)
     starts_at = datetime.now(BERLIN) + timedelta(days=8)
-    own = _seed_pending_request(owner.id, telegram_user_id=940000004, name="Анна", starts_at=starts_at)
-    foreign = _seed_pending_request(other.id, telegram_user_id=940000005, name="Мария", starts_at=starts_at)
+    own = _seed_pending_request(
+        owner.id,
+        telegram_user_id=940000004,
+        name="Анна",
+        starts_at=starts_at,
+    )
+    foreign = _seed_pending_request(
+        other.id,
+        telegram_user_id=940000005,
+        name="Мария",
+        starts_at=starts_at,
+    )
     _authenticate(client, owner.id)
 
     rejected = client.post(
@@ -161,15 +213,24 @@ def test_web_client_request_approve_can_link_explicit_existing_client(
     create_user,
     create_service,
     create_availability,
-    create_client,
 ):
     owner = create_user(telegram_user_id=840000006)
-    create_service(owner.id, public_name="Маникюр", duration_minutes=60, buffer_after_minutes=0)
-    existing = create_client(owner.id, public_name="Постоянная Анна")
+    create_service(
+        owner.id,
+        public_name="Маникюр",
+        duration_minutes=60,
+        buffer_after_minutes=0,
+    )
+    existing = _seed_client(owner.id, "Постоянная Анна")
     day = date.today() + timedelta(days=21)
     create_availability(owner.id, day=day, start_time=time(10), end_time=time(20))
     starts_at = datetime.combine(day, time(14), tzinfo=BERLIN)
-    request = _seed_pending_request(owner.id, telegram_user_id=940000006, name="Анна Telegram", starts_at=starts_at)
+    request = _seed_pending_request(
+        owner.id,
+        telegram_user_id=940000006,
+        name="Анна Telegram",
+        starts_at=starts_at,
+    )
     _authenticate(client, owner.id)
 
     response = client.post(
@@ -184,4 +245,7 @@ def test_web_client_request_approve_can_link_explicit_existing_client(
         stored = session.get(BookingRequest, request.id)
         assert stored is not None
         assert stored.client_id == existing.id
-        assert session.scalar(select(Booking).where(Booking.id == stored.booking_id)) is not None
+        booking = session.scalar(
+            select(Booking).where(Booking.id == stored.booking_id)
+        )
+        assert booking is not None
