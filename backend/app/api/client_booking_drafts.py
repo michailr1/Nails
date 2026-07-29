@@ -13,8 +13,8 @@ from app.db import get_db_session
 from app.schemas.client_booking_drafts import (
     ClientBookingDraftCompositionUpdate,
     ClientBookingDraftCreate,
-    ClientBookingDraftSlotUpdate,
     ClientBookingDraftSlotsResponse,
+    ClientBookingDraftSlotUpdate,
     ClientBookingDraftSubmitResponse,
     ClientBookingDraftSummary,
 )
