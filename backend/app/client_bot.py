@@ -5,7 +5,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -144,11 +144,7 @@ def format_service_price(service: dict[str, Any]) -> str:
     suffix = " ₽" if currency == "RUB" else f" {currency}"
     if price_type == "fixed":
         amount = _amount(service.get("price_amount"))
-        return (
-            f"{amount}{suffix}"
-            if amount is not None
-            else "цена уточняется"
-        )
+        return f"{amount}{suffix}" if amount is not None else "цена уточняется"
     if price_type == "range":
         low = _amount(service.get("price_min_amount"))
         high = _amount(service.get("price_max_amount"))
@@ -238,6 +234,68 @@ def base_services(payload: dict[str, Any]) -> list[dict[str, Any]]:
         for service in payload.get("services", [])
         if service.get("kind") == "base"
     ]
+
+
+def _parse_slot(value: Any) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError as exc:
+        raise RemoteCallError("client API returned an invalid slot") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise RemoteCallError("client API returned a timezone-naive slot")
+    return parsed
+
+
+def compact_slot(value: Any) -> str:
+    return _parse_slot(value).strftime("%Y%m%d%H%M")
+
+
+def slot_picker_keyboard(
+    binding_id: str,
+    service_index: int,
+    starts_at: list[Any],
+    *,
+    selected_day: date,
+) -> dict[str, Any]:
+    uuid.UUID(binding_id)
+    rows: list[list[dict[str, str]]] = []
+    for value in starts_at[:24]:
+        parsed = _parse_slot(value)
+        if parsed.date() != selected_day:
+            continue
+        callback = f"slot:{binding_id}:{service_index}:{compact_slot(value)}"
+        button = {
+            "text": parsed.strftime("%H:%M"),
+            "callback_data": callback,
+        }
+        if len(rows) == 0 or len(rows[-1]) >= 4:
+            rows.append([])
+        rows[-1].append(button)
+    rows.append(
+        [
+            {
+                "text": "← К датам",
+                "callback_data": f"svc:{binding_id}:{service_index}",
+            }
+        ]
+    )
+    return {"inline_keyboard": rows}
+
+
+def resolve_current_slot(starts_at: list[Any], compact: str) -> str | None:
+    for value in starts_at:
+        if compact_slot(value) == compact:
+            return str(value)
+    return None
+
+
+def booking_request_idempotency_key(
+    binding_id: str,
+    service_index: int,
+    compact: str,
+) -> str:
+    uuid.UUID(binding_id)
+    return f"tg:{binding_id}:{service_index}:{compact}"
 
 
 class NailsClientApi:
@@ -335,6 +393,29 @@ class NailsClientApi:
             telegram_user_id=telegram_user_id,
             binding_id=binding_id,
             params={"day": day.isoformat(), "service_name": service_name},
+        )
+
+    def create_booking_request(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+        *,
+        service_name: str,
+        starts_at: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/client/requests",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+            json={
+                "service_name": service_name,
+                "addon_names": [],
+                "addon_quantities": {},
+                "starts_at": starts_at,
+                "idempotency_key": idempotency_key,
+            },
         )
 
 
@@ -445,6 +526,18 @@ class PlatformBot:
             master_menu_keyboard(master),
         )
 
+    def _catalog_service(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+        index: int,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        catalog = self._nails.catalog(telegram_user_id, binding_id)
+        services = base_services(catalog)
+        if not 0 <= index < len(services):
+            raise RemoteCallError("service callback is stale")
+        return catalog, services[index]
+
     def handle_callback(self, callback: dict[str, Any]) -> None:
         callback_id = str(callback.get("id") or "")
         user = callback.get("from") or {}
@@ -489,11 +582,12 @@ class PlatformBot:
             binding_id, index_text = rest.rsplit(":", 1)
             binding_id = str(uuid.UUID(binding_id))
             index = int(index_text)
-            catalog = self._nails.catalog(telegram_user_id, binding_id)
-            services = base_services(catalog)
-            if not 0 <= index < len(services):
-                raise RemoteCallError("service callback is stale")
-            name = str(services[index].get("public_name") or "Услуга")
+            _catalog, service = self._catalog_service(
+                telegram_user_id,
+                binding_id,
+                index,
+            )
+            name = str(service.get("public_name") or "Услуга")
             self._send(
                 chat_id,
                 f"{name}\nВыберите дату:",
@@ -508,11 +602,12 @@ class PlatformBot:
             selected_day = date.fromisoformat(
                 f"{compact_day[0:4]}-{compact_day[4:6]}-{compact_day[6:8]}"
             )
-            catalog = self._nails.catalog(telegram_user_id, binding_id)
-            services = base_services(catalog)
-            if not 0 <= index < len(services):
-                raise RemoteCallError("service callback is stale")
-            service_name = str(services[index].get("public_name") or "")
+            _catalog, service = self._catalog_service(
+                telegram_user_id,
+                binding_id,
+                index,
+            )
+            service_name = str(service.get("public_name") or "")
             slots = self._nails.slots(
                 telegram_user_id,
                 binding_id,
@@ -521,16 +616,74 @@ class PlatformBot:
             )
             starts = slots.get("starts_at") or []
             if starts:
-                times = ", ".join(
-                    str(value)[11:16]
-                    for value in starts[:24]
+                text = f"Свободное время на {selected_day:%d.%m}:"
+                keyboard = slot_picker_keyboard(
+                    binding_id,
+                    index,
+                    starts,
+                    selected_day=selected_day,
                 )
-                text = f"Свободное время на {selected_day:%d.%m}:\n{times}"
             else:
                 text = f"На {selected_day:%d.%m} свободного времени нет."
+                keyboard = date_picker_keyboard(binding_id, index)
+            self._send(chat_id, text, keyboard)
+            return
+
+        if action == "slot":
+            binding_id, index_text, compact = rest.split(":", 2)
+            binding_id = str(uuid.UUID(binding_id))
+            index = int(index_text)
+            if len(compact) != 12 or not compact.isdigit():
+                raise RemoteCallError("slot callback is invalid")
+            selected_day = date.fromisoformat(
+                f"{compact[0:4]}-{compact[4:6]}-{compact[6:8]}"
+            )
+            catalog, service = self._catalog_service(
+                telegram_user_id,
+                binding_id,
+                index,
+            )
+            service_name = str(service.get("public_name") or "")
+            slots = self._nails.slots(
+                telegram_user_id,
+                binding_id,
+                selected_day,
+                service_name,
+            )
+            starts = slots.get("starts_at") or []
+            starts_at = resolve_current_slot(starts, compact)
+            if starts_at is None:
+                self._send(
+                    chat_id,
+                    "Это время уже недоступно. Выберите другое.",
+                    slot_picker_keyboard(
+                        binding_id,
+                        index,
+                        starts,
+                        selected_day=selected_day,
+                    ),
+                )
+                return
+            request = self._nails.create_booking_request(
+                telegram_user_id,
+                binding_id,
+                service_name=service_name,
+                starts_at=starts_at,
+                idempotency_key=booking_request_idempotency_key(
+                    binding_id,
+                    index,
+                    compact,
+                ),
+            )
+            if request.get("status") != "pending":
+                raise RemoteCallError("client API returned an unexpected request status")
+            parsed = _parse_slot(starts_at)
             self._send(
                 chat_id,
-                text,
+                "✅ Заявка отправлена\n"
+                f"{service_name}\n"
+                f"{parsed:%d.%m} в {parsed:%H:%M}\n\n"
+                "Мастер подтвердит запись. Пока время не забронировано.",
                 master_menu_keyboard(catalog["master"]),
             )
 
