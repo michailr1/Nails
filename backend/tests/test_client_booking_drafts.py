@@ -271,7 +271,7 @@ def test_draft_is_binding_scoped_and_quantity_rules_are_enforced(
     _service(master.id, "Маникюр", kind="base", price="2500", duration=60)
     _service(master.id, "Снятие", kind="addon", price="300", extra=30)
     binding_a = _start_binding(client, master, 950000004, "Анна")
-    binding_b = _start_binding(client, master, 950000005, "Мария")
+    _start_binding(client, master, 950000005, "Мария")
     draft = _create_draft(client, 950000004, binding_a)
 
     foreign = client.get(
