@@ -30,7 +30,10 @@ def _headers(telegram_user_id: int, binding_id=None) -> dict[str, str]:
 
 def _start_binding(client, master, telegram_user_id: int, name: str = "Анна"):
     with get_session_factory()() as session:
-        session.add(MasterPublicProfile(owner_user_id=master.id, display_name="Мастер"))
+        if session.get(MasterPublicProfile, master.id) is None:
+            session.add(
+                MasterPublicProfile(owner_user_id=master.id, display_name="Мастер")
+            )
         token = create_master_link_token(session, owner_user_id=master.id).token
         session.commit()
     response = client.post(
@@ -48,7 +51,7 @@ def _service(
     *,
     kind: str,
     price: str,
-    duration: int = 0,
+    duration: int = 1,
     extra: int = 0,
     price_type: str = "fixed",
 ) -> Service:
