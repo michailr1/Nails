@@ -140,7 +140,7 @@ def draft_addon_keyboard(draft: dict[str, Any]) -> dict[str, Any]:
             rows.append(
                 [
                     {"text": "−", "callback_data": f"qm:{draft_id}:{index}"},
-                    {"text": str(quantity), "callback_data": f"a:{draft_id}:{index}"},
+                    {"text": str(quantity), "callback_data": f"addons:{draft_id}"},
                     {"text": "+", "callback_data": f"qp:{draft_id}:{index}"},
                 ]
             )
@@ -196,7 +196,13 @@ def draft_summary_text(draft: dict[str, Any]) -> str:
             }
         )
     )
-    lines.extend(["", "После отправки мастер подтвердит заявку.", "Пока время не забронировано."])
+    lines.extend(
+        [
+            "",
+            "После отправки мастер подтвердит заявку.",
+            "Пока время не забронировано.",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -262,7 +268,17 @@ class DraftPlatformBot(PlatformBot):
     def handle_callback(self, callback: dict[str, Any]) -> None:
         data = str(callback.get("data") or "")
         action, _, rest = data.partition(":")
-        if action not in {"svc", "a", "qm", "qp", "addons", "dates", "d", "t", "send"}:
+        if action not in {
+            "svc",
+            "a",
+            "qm",
+            "qp",
+            "addons",
+            "dates",
+            "d",
+            "t",
+            "send",
+        }:
             return super().handle_callback(callback)
 
         callback_id = str(callback.get("id") or "")
@@ -299,7 +315,9 @@ class DraftPlatformBot(PlatformBot):
             selected, quantities = _composition_values(
                 draft,
                 toggle_index=int(index_text),
-                quantity_delta=-1 if action == "qm" else 1 if action == "qp" else 0,
+                quantity_delta=(
+                    -1 if action == "qm" else 1 if action == "qp" else 0
+                ),
             )
             updated = api.update_draft(
                 telegram_user_id,
