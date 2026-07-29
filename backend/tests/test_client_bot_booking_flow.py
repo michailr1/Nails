@@ -68,6 +68,17 @@ def test_draft_callbacks_are_compact_and_do_not_carry_business_identity():
     assert "Ремонт" not in serialized
 
 
+def test_quantity_label_is_non_destructive():
+    keyboard = draft_addon_keyboard(_draft())
+    quantity_row = next(
+        row for row in keyboard["inline_keyboard"] if row[0]["text"] == "−"
+    )
+    assert quantity_row[1] == {
+        "text": "2",
+        "callback_data": f"addons:{DRAFT_ID}",
+    }
+
+
 def test_quantity_controls_change_server_side_composition_values_only():
     draft = _draft()
     selected, quantities = _composition_values(
