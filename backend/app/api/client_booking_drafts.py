@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth import ClientTransportIdentity, require_client_transport_identity
+from app.client_booking_draft_models import ClientBookingDraft
 from app.db import get_db_session
 from app.schemas.client_booking_drafts import (
     ClientBookingDraftCompositionUpdate,
@@ -28,7 +29,10 @@ from app.services.client_booking_drafts import (
 from app.services.client_contour import require_client_binding
 from app.services.scheduling_common import SchedulingDomainError
 
-router = APIRouter(prefix="/api/v1/client/booking-drafts", tags=["client-booking-drafts"])
+router = APIRouter(
+    prefix="/api/v1/client/booking-drafts",
+    tags=["client-booking-drafts"],
+)
 SessionDependency = Annotated[Session, Depends(get_db_session)]
 ClientIdentityDependency = Annotated[
     ClientTransportIdentity,
@@ -51,11 +55,26 @@ def _translate(exc: SchedulingDomainError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=detail)
 
 
-def _context(session, identity, binding_header):
+def _binding_context(session, identity, binding_header):
     return require_client_binding(
         session,
         identity,
         binding_id=_uuid(binding_header, "invalid_client_binding_id"),
+    )
+
+
+def _draft_context(
+    session: Session,
+    identity: ClientTransportIdentity,
+    draft_id: uuid.UUID,
+):
+    draft = session.get(ClientBookingDraft, draft_id)
+    if draft is None:
+        raise SchedulingDomainError("client_booking_draft_not_found", status_code=404)
+    return require_client_binding(
+        session,
+        identity,
+        binding_id=draft.binding_id,
     )
 
 
@@ -67,7 +86,7 @@ def create_draft(
     binding_header: BindingHeader,
 ) -> ClientBookingDraftSummary:
     try:
-        context = _context(session, identity, binding_header)
+        context = _binding_context(session, identity, binding_header)
         return create_booking_draft(session, context, body.service_name)
     except SchedulingDomainError as exc:
         raise _translate(exc) from exc
@@ -78,10 +97,9 @@ def get_draft(
     draft_id: uuid.UUID,
     session: SessionDependency,
     identity: ClientIdentityDependency,
-    binding_header: BindingHeader,
 ) -> ClientBookingDraftSummary:
     try:
-        context = _context(session, identity, binding_header)
+        context = _draft_context(session, identity, draft_id)
         return get_booking_draft(session, context, draft_id)
     except SchedulingDomainError as exc:
         raise _translate(exc) from exc
@@ -93,10 +111,9 @@ def update_composition(
     body: ClientBookingDraftCompositionUpdate,
     session: SessionDependency,
     identity: ClientIdentityDependency,
-    binding_header: BindingHeader,
 ) -> ClientBookingDraftSummary:
     try:
-        context = _context(session, identity, binding_header)
+        context = _draft_context(session, identity, draft_id)
         return update_booking_draft_composition(
             session,
             context,
@@ -114,10 +131,9 @@ def get_slots(
     day: date,
     session: SessionDependency,
     identity: ClientIdentityDependency,
-    binding_header: BindingHeader,
 ) -> ClientBookingDraftSlotsResponse:
     try:
-        context = _context(session, identity, binding_header)
+        context = _draft_context(session, identity, draft_id)
         return draft_slots(session, context, draft_id, day)
     except SchedulingDomainError as exc:
         raise _translate(exc) from exc
@@ -129,10 +145,9 @@ def choose_slot(
     body: ClientBookingDraftSlotUpdate,
     session: SessionDependency,
     identity: ClientIdentityDependency,
-    binding_header: BindingHeader,
 ) -> ClientBookingDraftSummary:
     try:
-        context = _context(session, identity, binding_header)
+        context = _draft_context(session, identity, draft_id)
         return select_booking_draft_slot(
             session,
             context,
@@ -148,10 +163,9 @@ def submit_draft(
     draft_id: uuid.UUID,
     session: SessionDependency,
     identity: ClientIdentityDependency,
-    binding_header: BindingHeader,
 ) -> ClientBookingDraftSubmitResponse:
     try:
-        context = _context(session, identity, binding_header)
+        context = _draft_context(session, identity, draft_id)
         request = submit_booking_draft(session, identity, context, draft_id)
         return ClientBookingDraftSubmitResponse(
             request_id=request.id,
