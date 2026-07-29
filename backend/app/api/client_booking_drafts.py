@@ -18,12 +18,12 @@ from app.schemas.client_booking_drafts import (
     ClientBookingDraftSubmitResponse,
     ClientBookingDraftSummary,
 )
+from app.services.client_booking_draft_submit import submit_booking_draft_idempotent
 from app.services.client_booking_drafts import (
     create_booking_draft,
     draft_slots,
     get_booking_draft,
     select_booking_draft_slot,
-    submit_booking_draft,
     update_booking_draft_composition,
 )
 from app.services.client_contour import require_client_binding
@@ -166,7 +166,12 @@ def submit_draft(
 ) -> ClientBookingDraftSubmitResponse:
     try:
         context = _draft_context(session, identity, draft_id)
-        request = submit_booking_draft(session, identity, context, draft_id)
+        request = submit_booking_draft_idempotent(
+            session,
+            identity,
+            context,
+            draft_id,
+        )
         return ClientBookingDraftSubmitResponse(
             request_id=request.id,
             status=request.status,
