@@ -1,5 +1,6 @@
-from pathlib import Path
+from __future__ import annotations
 
+from pathlib import Path
 
 WEB_STATIC = Path(__file__).resolve().parents[1] / "app" / "web_static"
 
