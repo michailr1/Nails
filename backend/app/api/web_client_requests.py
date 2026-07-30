@@ -55,6 +55,7 @@ def _public(row) -> BookingRequestPublic:
     return BookingRequestPublic(
         id=row.id,
         status=row.status,
+        client_id=row.client_id,
         requested_public_name=row.requested_public_name,
         service_name=row.service_name,
         addon_names=list(row.addon_names),
