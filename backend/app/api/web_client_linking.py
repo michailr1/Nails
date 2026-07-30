@@ -13,10 +13,9 @@ from app.schemas.client_linking import (
     ClientLinkUndoResponse,
     ClientPhonePreselect,
     ClientReachabilityListResponse,
-    PersonalClientLinkResponse,
+    PersonalClientInviteResponse,
     PersonalClientLinkRevokeResponse,
 )
-from app.schemas.client_notifications import ClientNotificationSentItem
 from app.services.client_linking import (
     create_personal_client_link,
     list_link_notices,
@@ -26,8 +25,8 @@ from app.services.scheduling_common import SchedulingDomainError
 from app.services.web_auth import require_web_session_identity, validate_web_boundary
 from app.services.web_client_linking import (
     booking_request_phone_preselect,
+    client_invitation_url,
     list_client_reachability,
-    list_sent_notifications,
     revoke_open_personal_links,
 )
 from app.services.web_portal_auth import require_effective_owner_identity
@@ -74,14 +73,6 @@ def reachability(
     )
 
 
-@router.get("/sent", response_model=list[ClientNotificationSentItem])
-def sent_log(
-    session: SessionDependency,
-    identity: ReadIdentityDependency,
-) -> list[ClientNotificationSentItem]:
-    return list_sent_notifications(session, identity)
-
-
 @router.get("/notices", response_model=ClientLinkNoticeListResponse)
 def notices(
     session: SessionDependency,
@@ -111,23 +102,34 @@ def request_preselect(
 
 @router.post(
     "/clients/{client_id}/personal-link",
-    response_model=PersonalClientLinkResponse,
+    response_model=PersonalClientInviteResponse,
 )
 def personal_link_create(
     client_id: uuid.UUID,
     request: Request,
     session: SessionDependency,
     identity: WriteIdentityDependency,
-) -> PersonalClientLinkResponse:
+) -> PersonalClientInviteResponse:
     validate_web_boundary(request)
     try:
-        return create_personal_client_link(
+        created = create_personal_client_link(
             session,
             identity,
             client_id=client_id,
         )
     except SchedulingDomainError as exc:
         raise _translate(exc) from exc
+    invitation_url = client_invitation_url(created.token)
+    if invitation_url is None:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "client_bot_username_not_configured"},
+        )
+    return PersonalClientInviteResponse(
+        invitation_url=invitation_url,
+        expires_at=created.expires_at,
+        client_id=created.client_id,
+    )
 
 
 @router.post(
