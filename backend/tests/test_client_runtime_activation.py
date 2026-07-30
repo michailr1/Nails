@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,6 +33,17 @@ def test_systemd_service_is_separate_and_uses_client_v1_entrypoint():
     assert "CLIENT_BOT_STATUS_PATH=/run/nails/client-bot-status.json" in unit
     assert "WorkingDirectory=/opt/nails/repo/backend" in unit
     assert "hermes-gateway" not in unit
+
+
+def test_runtime_shell_scripts_and_systemd_unit_are_valid():
+    for name in ("activate.sh", "deactivate.sh", "deploy_runtime.sh"):
+        subprocess.run(["bash", "-n", str(OPS / name)], check=True)
+    subprocess.run(
+        ["systemd-analyze", "verify", str(OPS / "nails-client-bot.service")],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def test_activation_requires_separate_client_credentials_and_singleton_runtime():
