@@ -32,6 +32,13 @@ class ClientNotificationAckResponse(BaseModel):
     next_attempt_at: datetime | None = None
 
 
+class ClientNotificationQueueHealth(BaseModel):
+    pending_count: int
+    claimed_count: int
+    failed_count: int
+    oldest_pending_age_seconds: int | None = None
+
+
 class ClientNotificationSentItem(BaseModel):
     notification_id: uuid.UUID
     event_type: str
