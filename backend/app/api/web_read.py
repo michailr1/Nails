@@ -263,7 +263,11 @@ def booking_create(
         created = create_booking(session, identity, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
-    return WebBookingCreateResponse(booking=web_booking_summary(created.summary, client_id=created.client_id))
+    summary = web_booking_summary(
+        created.summary,
+        client_id=created.client_id,
+    )
+    return WebBookingCreateResponse(booking=summary)
 
 
 @router.post("/exports/calendar")
@@ -276,7 +280,13 @@ def calendar_export(
     format: ExportFormat = "xlsx",
 ) -> Response:
     validate_web_boundary(request)
-    return export_calendar(session, identity, date_from=date_from, date_to=date_to, format=format)
+    return export_calendar(
+        session,
+        identity,
+        date_from=date_from,
+        date_to=date_to,
+        format=format,
+    )
 
 
 @router.post("/exports/calendar/all")
