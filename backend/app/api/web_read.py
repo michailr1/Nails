@@ -260,52 +260,85 @@ def booking_create(
 ) -> WebBookingCreateResponse:
     validate_web_boundary(request)
     try:
-        created = create_booking(session, identity, body)
+        client = get_active_client(
+            session,
+            identity.user_id,
+            body.client_public_name,
+        )
+        result = create_booking(session, identity, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
-    summary = web_booking_summary(
-        created.summary,
-        client_id=created.client_id,
+    return WebBookingCreateResponse(
+        booking=web_booking_summary(result.booking, client_id=client.id),
+        created=result.created,
     )
-    return WebBookingCreateResponse(booking=summary)
 
 
 @router.post("/exports/calendar")
 def calendar_export(
-    request: Request,
     session: SessionDependency,
-    identity: WriteIdentityDependency,
+    identity: ReadIdentityDependency,
     date_from: date,
     date_to: date,
-    format: ExportFormat = "xlsx",
+    format_name: Annotated[ExportFormat, Query(alias="format")] = "csv",
 ) -> Response:
-    validate_web_boundary(request)
-    return export_calendar(
-        session,
-        identity,
-        date_from=date_from,
-        date_to=date_to,
-        format=format,
+    try:
+        exported = export_calendar(
+            session,
+            identity,
+            date_from=date_from,
+            date_to=date_to,
+            format_name=format_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": str(exc)},
+        ) from exc
+    return Response(
+        content=exported.content,
+        media_type=exported.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{exported.filename}"'},
     )
 
 
 @router.post("/exports/calendar/all")
-def calendar_export_all(
-    request: Request,
+def all_calendar_export(
     session: SessionDependency,
-    identity: WriteIdentityDependency,
-    format: ExportFormat = "xlsx",
+    identity: ReadIdentityDependency,
+    format_name: Annotated[ExportFormat, Query(alias="format")] = "csv",
 ) -> Response:
-    validate_web_boundary(request)
-    return export_all_calendar(session, identity, format=format)
+    try:
+        exported = export_all_calendar(
+            session,
+            identity,
+            format_name=format_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": str(exc)},
+        ) from exc
+    return Response(
+        content=exported.content,
+        media_type=exported.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{exported.filename}"'},
+    )
 
 
 @router.post("/exports/clients")
 def clients_export(
-    request: Request,
     session: SessionDependency,
-    identity: WriteIdentityDependency,
-    format: ExportFormat = "xlsx",
+    identity: ReadIdentityDependency,
+    format_name: Annotated[ExportFormat, Query(alias="format")] = "csv",
 ) -> Response:
-    validate_web_boundary(request)
-    return export_clients(session, identity, format=format)
+    exported = export_clients(
+        session,
+        identity,
+        format_name=format_name,
+    )
+    return Response(
+        content=exported.content,
+        media_type=exported.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{exported.filename}"'},
+    )
