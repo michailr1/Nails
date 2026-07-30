@@ -56,6 +56,7 @@ def _require_draft(
     draft_id: uuid.UUID,
     *,
     lock: bool = False,
+    allow_submitted: bool = False,
 ) -> ClientBookingDraft:
     statement = select(ClientBookingDraft).where(
         ClientBookingDraft.id == draft_id,
@@ -67,6 +68,8 @@ def _require_draft(
     draft = session.scalar(statement)
     if draft is None:
         raise SchedulingDomainError("client_booking_draft_not_found", status_code=404)
+    if draft.submitted_request_id is not None and not allow_submitted:
+        raise SchedulingDomainError("client_booking_draft_submitted", status_code=409)
     if draft.expires_at <= datetime.now(UTC):
         raise SchedulingDomainError("client_booking_draft_expired", status_code=409)
     return draft
