@@ -104,8 +104,10 @@ function closeClientRequestDialog() {
   document.querySelector("#client-request-dialog")?.remove();
 }
 
-function renderClientRequestDialog(request, clients) {
+function renderClientRequestDialog(request, clients, preselect = null) {
   const activeClients = clients.filter((client) => client.profile_status === "active");
+  const preselectedClientId = preselect?.client_id || "";
+  const hasPreselect = activeClients.some((client) => client.client_id === preselectedClientId);
   const dialog = document.createElement("dialog");
   dialog.id = "client-request-dialog";
   dialog.className = "client-request-dialog";
@@ -119,13 +121,14 @@ function renderClientRequestDialog(request, clients) {
       <span>${escapeHtml(requestAddonLabel(request))}</span>
       <span>${escapeHtml(requestDateTime(request.starts_at))}</span>
     </div>
+    ${hasPreselect ? `<div class="info-note"><strong>Похоже, клиентка уже была у вас.</strong><br>${escapeHtml(preselect.reason || "Совпала карточка по указанному номеру.")} Проверьте карточку перед подтверждением.</div>` : ""}
     <fieldset class="client-resolution">
       <legend>Кто это?</legend>
-      <label><input type="radio" name="resolution" value="create_new" checked><span><strong>Новая клиентка</strong><small>Создать новую карточку «${escapeHtml(request.requested_public_name || "Клиентка") }»</small></span></label>
-      <label><input type="radio" name="resolution" value="link_existing"><span><strong>Уже была у меня</strong><small>Связать заявку с существующей карточкой</small></span></label>
+      <label><input type="radio" name="resolution" value="create_new" ${hasPreselect ? "" : "checked"}><span><strong>Новая клиентка</strong><small>Создать новую карточку «${escapeHtml(request.requested_public_name || "Клиентка") }»</small></span></label>
+      <label><input type="radio" name="resolution" value="link_existing" ${hasPreselect ? "checked" : ""}><span><strong>Уже была у меня</strong><small>Связать заявку с существующей карточкой</small></span></label>
     </fieldset>
-    <label id="existing-client-field" class="catalog-field client-request-client-select" hidden><span>Выберите клиентку</span><select name="client_id"><option value="">Выберите карточку</option>${activeClients.map((client) => `<option value="${escapeHtml(client.client_id)}">${escapeHtml(client.public_name)}</option>`).join("")}</select></label>
-    <p class="muted small">Нэйли никогда не связывает карточки автоматически по совпадению имени.</p>
+    <label id="existing-client-field" class="catalog-field client-request-client-select" ${hasPreselect ? "" : "hidden"}><span>Выберите клиентку</span><select name="client_id"><option value="">Выберите карточку</option>${activeClients.map((client) => `<option value="${escapeHtml(client.client_id)}" ${client.client_id === preselectedClientId ? "selected" : ""}>${escapeHtml(client.public_name)}</option>`).join("")}</select></label>
+    <p class="muted small">Нэйли никогда не связывает карточки автоматически по имени или по номеру, введённому вручную. Совпавший номер — только подсказка вам.</p>
     <p id="client-request-error" class="booking-edit-error" role="alert"></p>
     <div class="client-request-dialog-actions"><button id="client-request-confirm" class="primary-button" type="button">Подтвердить запись</button><button class="secondary-button" value="close" type="submit">Назад</button></div>
   </form>`;
@@ -164,8 +167,11 @@ function renderClientRequestDialog(request, clients) {
 
 async function openClientRequestDialog(request) {
   try {
-    const payload = await api("/web/api/clients");
-    renderClientRequestDialog(request, payload.clients || []);
+    const [payload, preselect] = await Promise.all([
+      api("/web/api/clients"),
+      api(`/web/api/client-linking/requests/${encodeURIComponent(request.id)}/preselect`).catch(() => null),
+    ]);
+    renderClientRequestDialog(request, payload.clients || [], preselect);
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
     window.alert("Не удалось загрузить карточки клиенток.");
