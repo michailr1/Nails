@@ -3,7 +3,12 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from app import client_booking_draft_models, client_models, models  # noqa: F401
+from app import (  # noqa: F401
+    client_booking_draft_models,
+    client_models,
+    client_notification_models,
+    models,
+)
 from app.config import get_settings
 from app.db import Base
 
