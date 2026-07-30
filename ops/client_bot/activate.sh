@@ -10,6 +10,15 @@ BACKEND_ENV="/opt/nails/.env"
 HERMES_ENV="/root/.hermes/profiles/nails/.env"
 SERVICE_SOURCE="$REPO/ops/client_bot/nails-client-bot.service"
 SERVICE_TARGET="/etc/systemd/system/nails-client-bot.service"
+API_BASE="http://127.0.0.1:8210"
+
+compose() {
+  docker compose \
+    --project-directory "$REPO" \
+    --file "$REPO/compose.yaml" \
+    --env-file "$BACKEND_ENV" \
+    "$@"
+}
 
 [[ "$(id -u)" -eq 0 ]] || { echo "root required" >&2; exit 2; }
 [[ "$(hostname -f)" == "de.funti.cc" ]] || { echo "unexpected hostname" >&2; exit 2; }
@@ -40,6 +49,21 @@ master_token="${TELEGRAM_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}"
 systemd-analyze verify "$SERVICE_SOURCE" >/dev/null
 install -o root -g root -m 644 "$SERVICE_SOURCE" "$SERVICE_TARGET"
 systemctl daemon-reload
+
+# The controlled launch uses the dedicated systemd runtime only. Ensure the legacy
+# compose service cannot become a second long-poll consumer for the same token.
+compose stop nails-client-bot >/dev/null 2>&1 || true
+compose rm -sf nails-client-bot >/dev/null 2>&1 || true
+
+# Recreate only the API so it reads CLIENT_API_ENABLED / CLIENT_INTERNAL_API_KEY.
+# This is runtime activation, not a code deploy: checkout/image SHA stays unchanged.
+compose up -d --no-deps --force-recreate --no-build nails-api >/dev/null
+for _ in $(seq 1 30); do
+  curl -fsS "$API_BASE/ready" >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -fsS "$API_BASE/ready" >/dev/null
+
 systemctl enable --now nails-client-forward.service >/dev/null
 systemctl enable --now nails-client-bot.service >/dev/null
 systemctl is-active --quiet nails-client-forward.service
@@ -47,7 +71,7 @@ systemctl is-active --quiet nails-client-bot.service
 
 for _ in $(seq 1 6); do
   if /usr/local/lib/hermes-agent/venv/bin/python "$REPO/ops/client_bot/health.py"; then
-    echo "CLIENT_RUNTIME_ACTIVATED=true sha=$EXPECTED_SHA"
+    echo "CLIENT_RUNTIME_ACTIVATED=true sha=$EXPECTED_SHA runtime=systemd"
     exit 0
   fi
   sleep 10
