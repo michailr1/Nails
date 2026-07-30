@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,11 @@ class ClientBookingDraft(Base):
             "ix_client_booking_drafts_binding_expires",
             "binding_id",
             "expires_at",
+        ),
+        CheckConstraint(
+            "(submitted_request_id IS NULL AND submitted_at IS NULL) OR "
+            "(submitted_request_id IS NOT NULL AND submitted_at IS NOT NULL)",
+            name="client_booking_draft_submission_consistent",
         ),
     )
 
@@ -42,6 +47,11 @@ class ClientBookingDraft(Base):
     )
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    submitted_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("booking_requests.id", ondelete="RESTRICT"),
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
