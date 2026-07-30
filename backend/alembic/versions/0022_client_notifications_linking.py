@@ -38,6 +38,25 @@ def upgrade() -> None:
         "(submitted_request_id IS NULL AND submitted_at IS NULL) OR "
         "(submitted_request_id IS NOT NULL AND submitted_at IS NOT NULL)",
     )
+    op.add_column(
+        "booking_requests",
+        sa.Column("source_draft_id", postgresql.UUID(as_uuid=True), nullable=True),
+    )
+    op.create_foreign_key(
+        "fk_booking_requests_source_draft",
+        "booking_requests",
+        "client_booking_drafts",
+        ["source_draft_id"],
+        ["id"],
+        ondelete="RESTRICT",
+    )
+    op.create_index(
+        "uq_booking_requests_source_draft",
+        "booking_requests",
+        ["source_draft_id"],
+        unique=True,
+        postgresql_where=sa.text("source_draft_id IS NOT NULL"),
+    )
 
     op.add_column(
         "client_telegram_identities",
@@ -237,6 +256,13 @@ def downgrade() -> None:
     )
     op.drop_column("client_telegram_identities", "last_delivery_at")
     op.drop_column("client_telegram_identities", "bot_reachability")
+    op.drop_index("uq_booking_requests_source_draft", table_name="booking_requests")
+    op.drop_constraint(
+        "fk_booking_requests_source_draft",
+        "booking_requests",
+        type_="foreignkey",
+    )
+    op.drop_column("booking_requests", "source_draft_id")
     op.drop_constraint(
         "client_booking_draft_submission_consistent",
         "client_booking_drafts",
