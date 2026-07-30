@@ -19,16 +19,7 @@ class ClientBotConfigError(RuntimeError):
 
 
 class RemoteCallError(RuntimeError):
-    def __init__(
-        self,
-        message: str,
-        *,
-        code: str | None = None,
-        status_code: int | None = None,
-    ) -> None:
-        super().__init__(message)
-        self.code = code
-        self.status_code = status_code
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +72,10 @@ def parse_start_token(text: str) -> str | None:
 
 
 def telegram_public_name(user: dict[str, Any]) -> str:
-    parts = [str(user.get(key, "")).strip() for key in ("first_name", "last_name")]
+    parts = [
+        str(user.get(key, "")).strip()
+        for key in ("first_name", "last_name")
+    ]
     display = " ".join(part for part in parts if part)
     if display:
         return display[:160]
@@ -198,9 +192,16 @@ def service_picker_keyboard(payload: dict[str, Any]) -> dict[str, Any]:
     for index, service in enumerate(base_items[:40]):
         name = str(service.get("public_name") or "Услуга").strip()
         rows.append(
-            [{"text": name[:48], "callback_data": f"svc:{binding_id}:{index}"}]
+            [
+                {
+                    "text": name[:48],
+                    "callback_data": f"svc:{binding_id}:{index}",
+                }
+            ]
         )
-    rows.append([{"text": "← Назад", "callback_data": f"master:{binding_id}"}])
+    rows.append(
+        [{"text": "← Назад", "callback_data": f"master:{binding_id}"}]
+    )
     return {"inline_keyboard": rows}
 
 
@@ -221,7 +222,9 @@ def date_picker_keyboard(
         if offset % 4 == 0:
             rows.append([])
         rows[-1].append(button)
-    rows.append([{"text": "← К услугам", "callback_data": f"book:{binding_id}"}])
+    rows.append(
+        [{"text": "← К услугам", "callback_data": f"book:{binding_id}"}]
+    )
     return {"inline_keyboard": rows}
 
 
@@ -261,7 +264,10 @@ def slot_picker_keyboard(
         if parsed.date() != selected_day:
             continue
         callback = f"slot:{binding_id}:{service_index}:{compact_slot(value)}"
-        button = {"text": parsed.strftime("%H:%M"), "callback_data": callback}
+        button = {
+            "text": parsed.strftime("%H:%M"),
+            "callback_data": callback,
+        }
         if len(rows) == 0 or len(rows[-1]) >= 4:
             rows.append([])
         rows[-1].append(button)
@@ -334,18 +340,8 @@ class NailsClientApi:
             **kwargs,
         )
         if response.status_code >= 400:
-            code = None
-            try:
-                body = response.json()
-                detail = body.get("detail") if isinstance(body, dict) else None
-                if isinstance(detail, dict):
-                    code = str(detail.get("code") or "") or None
-            except ValueError:
-                pass
             raise RemoteCallError(
-                f"client API {path} returned {response.status_code}",
-                code=code,
-                status_code=response.status_code,
+                f"client API {path} returned {response.status_code}"
             )
         payload = response.json()
         if not isinstance(payload, dict):
@@ -367,7 +363,9 @@ class NailsClientApi:
 
     def context(self, telegram_user_id: int) -> dict[str, Any]:
         return self._request(
-            "GET", "/api/v1/client/context", telegram_user_id=telegram_user_id
+            "GET",
+            "/api/v1/client/context",
+            telegram_user_id=telegram_user_id,
         )
 
     def catalog(
@@ -450,7 +448,10 @@ class PlatformBot:
         text: str,
         keyboard: dict[str, Any] | None = None,
     ) -> None:
-        payload: dict[str, Any] = {"chat_id": chat_id, "text": _plain_message(text)}
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": _plain_message(text),
+        }
         if keyboard:
             payload["reply_markup"] = keyboard
         self._telegram.call("sendMessage", **payload)
@@ -476,7 +477,10 @@ class PlatformBot:
                 master_picker_keyboard(payload.get("masters") or []),
             )
             return
-        self._send(chat_id, str(payload.get("message") or "Запись сейчас недоступна."))
+        self._send(
+            chat_id,
+            str(payload.get("message") or "Запись сейчас недоступна."),
+        )
 
     def handle_message(self, message: dict[str, Any]) -> None:
         user = message.get("from") or {}
@@ -502,7 +506,10 @@ class PlatformBot:
             context = self._nails.context(telegram_user_id)
             self._show_context(chat_id, telegram_user_id, context)
             return
-        self._send(chat_id, "Откройте /menu или ссылку для записи вашего мастера.")
+        self._send(
+            chat_id,
+            "Откройте /menu или ссылку для записи вашего мастера.",
+        )
 
     def _show_master(
         self,
@@ -539,7 +546,10 @@ class PlatformBot:
         telegram_user_id = int(user.get("id") or 0)
         data = str(callback.get("data") or "")
         if callback_id:
-            self._telegram.call("answerCallbackQuery", callback_query_id=callback_id)
+            self._telegram.call(
+                "answerCallbackQuery",
+                callback_query_id=callback_id,
+            )
         if telegram_user_id <= 0 or chat_id == 0:
             return
         if data == "masters":
@@ -548,99 +558,108 @@ class PlatformBot:
             return
 
         action, _, rest = data.partition(":")
-        if action == "master":
+        if action in {"master", "price", "book"}:
             binding_id = str(uuid.UUID(rest))
-            self._show_master(chat_id, telegram_user_id, binding_id)
-            return
-        if action in {"price", "book"}:
-            binding_id = str(uuid.UUID(rest))
-            catalog = self._nails.catalog(telegram_user_id, binding_id)
-            if action == "price":
+            if action == "master":
+                self._show_master(chat_id, telegram_user_id, binding_id)
+            elif action == "price":
+                catalog = self._nails.catalog(telegram_user_id, binding_id)
                 self._send(
                     chat_id,
                     format_catalog(catalog),
                     master_menu_keyboard(catalog["master"]),
                 )
             else:
+                catalog = self._nails.catalog(telegram_user_id, binding_id)
                 self._send(
                     chat_id,
-                    "Выберите процедуру:",
+                    "Выберите услугу:",
                     service_picker_keyboard(catalog),
                 )
             return
+
         if action == "svc":
             binding_id, index_text = rest.rsplit(":", 1)
-            catalog, service = self._catalog_service(
+            binding_id = str(uuid.UUID(binding_id))
+            index = int(index_text)
+            _catalog, service = self._catalog_service(
                 telegram_user_id,
-                str(uuid.UUID(binding_id)),
-                int(index_text),
+                binding_id,
+                index,
             )
+            name = str(service.get("public_name") or "Услуга")
             self._send(
                 chat_id,
-                f"{service['public_name']} — {format_service_price(service)}\nВыберите дату:",
-                date_picker_keyboard(binding_id, int(index_text)),
+                f"{name}\nВыберите дату:",
+                date_picker_keyboard(binding_id, index),
             )
             return
+
         if action == "day":
-            binding_id, index_text, compact_day = rest.rsplit(":", 2)
-            catalog, service = self._catalog_service(
-                telegram_user_id,
-                str(uuid.UUID(binding_id)),
-                int(index_text),
-            )
+            binding_id, index_text, compact_day = rest.split(":", 2)
+            binding_id = str(uuid.UUID(binding_id))
+            index = int(index_text)
             selected_day = date.fromisoformat(
                 f"{compact_day[0:4]}-{compact_day[4:6]}-{compact_day[6:8]}"
             )
+            _catalog, service = self._catalog_service(
+                telegram_user_id,
+                binding_id,
+                index,
+            )
+            service_name = str(service.get("public_name") or "")
             slots = self._nails.slots(
                 telegram_user_id,
                 binding_id,
                 selected_day,
-                str(service["public_name"]),
+                service_name,
             )
-            starts_at = slots.get("starts_at") or []
-            if not starts_at:
-                self._send(
-                    chat_id,
-                    f"На {selected_day:%d.%m} свободного времени нет.",
-                    date_picker_keyboard(binding_id, int(index_text)),
-                )
-                return
-            self._send(
-                chat_id,
-                f"Свободное время на {selected_day:%d.%m}:",
-                slot_picker_keyboard(
+            starts = slots.get("starts_at") or []
+            if starts:
+                text = f"Свободное время на {selected_day:%d.%m}:"
+                keyboard = slot_picker_keyboard(
                     binding_id,
-                    int(index_text),
-                    starts_at,
+                    index,
+                    starts,
                     selected_day=selected_day,
-                ),
-            )
+                )
+            else:
+                text = f"На {selected_day:%d.%m} свободного времени нет."
+                keyboard = date_picker_keyboard(binding_id, index)
+            self._send(chat_id, text, keyboard)
             return
+
         if action == "slot":
-            binding_id, index_text, compact = rest.rsplit(":", 2)
-            catalog, service = self._catalog_service(
-                telegram_user_id,
-                str(uuid.UUID(binding_id)),
-                int(index_text),
-            )
+            binding_id, index_text, compact = rest.split(":", 2)
+            binding_id = str(uuid.UUID(binding_id))
+            index = int(index_text)
+            if len(compact) != 12 or not compact.isdigit():
+                raise RemoteCallError("slot callback is invalid")
             selected_day = date.fromisoformat(
                 f"{compact[0:4]}-{compact[4:6]}-{compact[6:8]}"
             )
+            catalog, service = self._catalog_service(
+                telegram_user_id,
+                binding_id,
+                index,
+            )
+            service_name = str(service.get("public_name") or "")
             slots = self._nails.slots(
                 telegram_user_id,
                 binding_id,
                 selected_day,
-                str(service["public_name"]),
+                service_name,
             )
-            starts_at = resolve_current_slot(slots.get("starts_at") or [], compact)
+            starts = slots.get("starts_at") or []
+            starts_at = resolve_current_slot(starts, compact)
             if starts_at is None:
                 self._send(
                     chat_id,
-                    "Это время уже заняли. Выберите другое.",
+                    "Это время уже недоступно. Выберите другое.",
                     slot_picker_keyboard(
                         binding_id,
-                        int(index_text),
-                        slots.get("starts_at") or [],
+                        index,
+                        starts,
                         selected_day=selected_day,
                     ),
                 )
@@ -648,27 +667,67 @@ class PlatformBot:
             request = self._nails.create_booking_request(
                 telegram_user_id,
                 binding_id,
-                service_name=str(service["public_name"]),
+                service_name=service_name,
                 starts_at=starts_at,
                 idempotency_key=booking_request_idempotency_key(
                     binding_id,
-                    int(index_text),
+                    index,
                     compact,
                 ),
             )
+            if request.get("status") != "pending":
+                raise RemoteCallError("client API returned an unexpected request status")
+            parsed = _parse_slot(starts_at)
             self._send(
                 chat_id,
-                "Заявка отправлена ✅\n"
-                f"{request.get('service_name')}\n"
-                f"{_parse_slot(request['starts_at']):%d.%m в %H:%M}\n\n"
+                "✅ Заявка отправлена\n"
+                f"{service_name}\n"
+                f"{parsed:%d.%m} в {parsed:%H:%M}\n\n"
                 "Мастер подтвердит запись. Пока время не забронировано.",
                 master_menu_keyboard(catalog["master"]),
             )
-            return
 
     def handle_update(self, update: dict[str, Any]) -> None:
-        if isinstance(update.get("callback_query"), dict):
-            self.handle_callback(update["callback_query"])
-            return
         if isinstance(update.get("message"), dict):
             self.handle_message(update["message"])
+        elif isinstance(update.get("callback_query"), dict):
+            self.handle_callback(update["callback_query"])
+
+
+def run() -> None:
+    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+    config = BotConfig.from_env()
+    offset = 0
+    with httpx.Client() as client:
+        telegram = TelegramApi(client, config.telegram_token)
+        nails = NailsClientApi(
+            client,
+            base_url=config.client_api_url,
+            api_key=config.client_api_key,
+        )
+        bot = PlatformBot(telegram, nails)
+        while True:
+            try:
+                updates = telegram.call(
+                    "getUpdates",
+                    offset=offset,
+                    timeout=config.poll_timeout_seconds,
+                    allowed_updates=["message", "callback_query"],
+                )
+                for update in updates or []:
+                    update_id = int(update.get("update_id") or 0)
+                    offset = max(offset, update_id + 1)
+                    try:
+                        bot.handle_update(update)
+                    except Exception:
+                        LOGGER.exception(
+                            "CLIENT_BOT_UPDATE_FAILED update_id=%s",
+                            update_id,
+                        )
+            except Exception:
+                LOGGER.exception("CLIENT_BOT_POLL_FAILED")
+                time.sleep(3)
+
+
+if __name__ == "__main__":
+    run()
