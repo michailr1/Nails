@@ -190,8 +190,11 @@ class Settings(BaseSettings):
         candidate = value.strip().removeprefix("@")
         if not candidate:
             return ""
-        if not _CLIENT_BOT_USERNAME_RE.fullmatch(candidate) or not candidate.lower().endswith("bot"):
-            raise ValueError("CLIENT_TELEGRAM_BOT_USERNAME must be a valid Telegram bot username")
+        valid_name = _CLIENT_BOT_USERNAME_RE.fullmatch(candidate)
+        if not valid_name or not candidate.lower().endswith("bot"):
+            raise ValueError(
+                "CLIENT_TELEGRAM_BOT_USERNAME must be a valid Telegram bot username"
+            )
         return candidate
 
     @field_validator(
