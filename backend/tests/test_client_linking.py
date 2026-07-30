@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.auth import ClientTransportIdentity, RequestIdentity
-from app.client_models import ClientTelegramIdentity, MasterPublicProfile
+from app.client_models import BookingRequest, ClientTelegramIdentity, MasterPublicProfile
 from app.client_notification_models import ClientLinkRecord, ClientPersonalLinkToken
 from app.db import get_session_factory
 from app.models import Client, ClientProfileStatus, UserRole
@@ -19,7 +19,6 @@ from app.services.client_linking import (
 )
 from app.services.normalization import normalize_public_name
 from app.services.web_client_linking import booking_request_phone_preselect
-from app.client_models import BookingRequest
 
 
 def _client(owner_id, name: str, phone: str) -> Client:
