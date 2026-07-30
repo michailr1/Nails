@@ -35,6 +35,10 @@ class PersonalClientLinkResponse(BaseModel):
     client_id: uuid.UUID
 
 
+class PersonalClientLinkRevokeResponse(BaseModel):
+    changed: bool
+
+
 class ClientLinkNoticeItem(BaseModel):
     link_record_id: uuid.UUID
     client_id: uuid.UUID
@@ -42,6 +46,10 @@ class ClientLinkNoticeItem(BaseModel):
     source: Literal["confirmed_contact", "personal_link", "master_approval"]
     created_at: datetime
     can_undo: bool
+
+
+class ClientLinkNoticeListResponse(BaseModel):
+    items: list[ClientLinkNoticeItem]
 
 
 class ClientLinkUndoResponse(BaseModel):
@@ -56,6 +64,7 @@ class ClientReachabilityItem(BaseModel):
 class ClientReachabilityListResponse(BaseModel):
     items: list[ClientReachabilityItem]
     invitation_text: str
+    invitation_start_token: str | None = None
 
 
 class ClientPhonePreselect(BaseModel):
