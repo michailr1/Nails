@@ -11,6 +11,8 @@ from app.api.client_booking_drafts import router as client_booking_drafts_router
 from app.api.client_booking_requests import router as client_booking_requests_router
 from app.api.client_contour import router as client_contour_router
 from app.api.client_forward import router as client_forward_router
+from app.api.client_linking import router as client_linking_router
+from app.api.client_notifications import router as client_notifications_router
 from app.api.feedback import router as feedback_router
 from app.api.onboarding import router as onboarding_router
 from app.api.scheduling import router as scheduling_router
@@ -20,6 +22,7 @@ from app.api.web_admin import router as web_admin_router
 from app.api.web_auth import router as web_auth_router
 from app.api.web_auth_conversation import router as web_auth_conversation_router
 from app.api.web_booking_mutations import router as web_booking_mutations_router
+from app.api.web_client_linking import router as web_client_linking_router
 from app.api.web_client_requests import router as web_client_requests_router
 from app.api.web_read import router as web_read_router
 from app.config import get_settings
@@ -97,12 +100,15 @@ app.include_router(client_contour_router)
 app.include_router(client_booking_requests_router)
 app.include_router(client_booking_drafts_router)
 app.include_router(client_forward_router)
+app.include_router(client_linking_router)
+app.include_router(client_notifications_router)
 app.include_router(web_auth_router)
 app.include_router(web_auth_conversation_router)
 app.include_router(web_admin_router)
 app.include_router(web_read_router)
 app.include_router(web_booking_mutations_router)
 app.include_router(web_client_requests_router)
+app.include_router(web_client_linking_router)
 app.mount(
     "/web",
     StaticFiles(directory=_WEB_STATIC_DIR, html=True),

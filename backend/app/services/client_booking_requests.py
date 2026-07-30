@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.auth import ClientTransportIdentity, RequestIdentity
@@ -13,14 +13,18 @@ from app.client_models import (
     ClientTelegramIdentity,
     ClientTelegramIdentityStatus,
 )
+from app.client_notification_models import ClientLinkRecord
 from app.models import AuditEvent, Client, ClientProfileStatus, User, UserRole
 from app.schemas.client_booking_requests import BookingRequestResolutionValue
 from app.schemas.scheduling_catalog_bookings import CatalogBookingCreateRequest
 from app.services.client_contour import ClientBindingContext
+from app.services.client_notifications import enqueue_booking_request_notification
 from app.services.normalization import normalize_public_name
 from app.services.scheduling_bookings import create_booking
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_lookup import get_active_addons, get_active_service
+
+MAX_PENDING_REQUESTS_PER_BINDING = 3
 
 
 def _safe_audit(
@@ -61,6 +65,55 @@ def _validate_request_catalog(
     get_active_addons(session, owner_user_id, addon_names)
 
 
+def _existing_request(
+    session: Session,
+    *,
+    owner_user_id: uuid.UUID,
+    binding_id: uuid.UUID,
+    idempotency_key: str,
+    source_draft_id: uuid.UUID | None,
+) -> BookingRequest | None:
+    if source_draft_id is not None:
+        by_draft = session.scalar(
+            select(BookingRequest).where(
+                BookingRequest.owner_user_id == owner_user_id,
+                BookingRequest.binding_id == binding_id,
+                BookingRequest.source_draft_id == source_draft_id,
+            )
+        )
+        if by_draft is not None:
+            return by_draft
+    return session.scalar(
+        select(BookingRequest).where(
+            BookingRequest.owner_user_id == owner_user_id,
+            BookingRequest.binding_id == binding_id,
+            BookingRequest.idempotency_key == idempotency_key,
+        )
+    )
+
+
+def _lock_binding_request_creation(session: Session, binding_id: uuid.UUID) -> None:
+    session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 7))"),
+        {"key": f"client-pending:{binding_id}"},
+    )
+
+
+def _enforce_pending_limit(session: Session, binding_id: uuid.UUID) -> None:
+    pending_count = session.scalar(
+        select(func.count(BookingRequest.id)).where(
+            BookingRequest.binding_id == binding_id,
+            BookingRequest.status == BookingRequestStatus.pending,
+        )
+    )
+    if int(pending_count or 0) >= MAX_PENDING_REQUESTS_PER_BINDING:
+        raise SchedulingDomainError(
+            "client_pending_request_limit",
+            status_code=429,
+            details={"limit": MAX_PENDING_REQUESTS_PER_BINDING},
+        )
+
+
 def create_client_booking_request(
     session: Session,
     identity: ClientTransportIdentity,
@@ -71,6 +124,7 @@ def create_client_booking_request(
     addon_quantities: dict[str, int],
     starts_at: datetime,
     idempotency_key: str,
+    source_draft_id: uuid.UUID | None = None,
 ) -> BookingRequest:
     binding = context.binding
     if binding.status == ClientTelegramIdentityStatus.revoked:
@@ -92,14 +146,16 @@ def create_client_booking_request(
         addon_names=addon_names,
     )
 
-    existing = session.scalar(
-        select(BookingRequest).where(
-            BookingRequest.owner_user_id == context.owner_user_id,
-            BookingRequest.binding_id == binding.id,
-            BookingRequest.idempotency_key == idempotency_key,
-        )
+    existing = _existing_request(
+        session,
+        owner_user_id=context.owner_user_id,
+        binding_id=binding.id,
+        idempotency_key=idempotency_key,
+        source_draft_id=source_draft_id,
     )
     if existing is not None:
+        if source_draft_id is not None and existing.source_draft_id == source_draft_id:
+            return existing
         if (
             existing.service_name != service_name
             or existing.addon_names != addon_names
@@ -109,10 +165,32 @@ def create_client_booking_request(
             raise SchedulingDomainError("idempotency_conflict", status_code=409)
         return existing
 
+    _lock_binding_request_creation(session, binding.id)
+    existing = _existing_request(
+        session,
+        owner_user_id=context.owner_user_id,
+        binding_id=binding.id,
+        idempotency_key=idempotency_key,
+        source_draft_id=source_draft_id,
+    )
+    if existing is not None:
+        if source_draft_id is not None and existing.source_draft_id == source_draft_id:
+            return existing
+        if (
+            existing.service_name != service_name
+            or existing.addon_names != addon_names
+            or existing.addon_quantities != addon_quantities
+            or existing.starts_at.astimezone(UTC) != starts_at.astimezone(UTC)
+        ):
+            raise SchedulingDomainError("idempotency_conflict", status_code=409)
+        return existing
+
+    _enforce_pending_limit(session, binding.id)
     request = BookingRequest(
         owner_user_id=context.owner_user_id,
         binding_id=binding.id,
         client_id=binding.client_id,
+        source_draft_id=source_draft_id,
         requested_public_name=binding.requested_public_name,
         service_name=service_name,
         addon_names=list(addon_names),
@@ -184,6 +262,7 @@ def cancel_client_booking_request(
         actor_user_id=None,
         actor_type="client_bot",
     )
+    enqueue_booking_request_notification(session, request, event_type="cancelled")
     session.commit()
     session.refresh(request)
     return request
@@ -236,6 +315,7 @@ def reject_master_booking_request(
         actor_user_id=identity.user_id,
         actor_type="master",
     )
+    enqueue_booking_request_notification(session, request, event_type="rejected")
     session.commit()
     session.refresh(request)
     return request
@@ -276,6 +356,32 @@ def _ensure_client_not_bound_elsewhere(
     )
     if occupied is not None:
         raise SchedulingDomainError("client_already_linked", status_code=409)
+
+
+def _record_master_approval_link(
+    session: Session,
+    *,
+    request: BookingRequest,
+    binding: ClientTelegramIdentity,
+    client: Client,
+) -> None:
+    existing = session.scalar(
+        select(ClientLinkRecord.id).where(
+            ClientLinkRecord.owner_user_id == request.owner_user_id,
+            ClientLinkRecord.binding_id == binding.id,
+            ClientLinkRecord.client_id == client.id,
+            ClientLinkRecord.undone_at.is_(None),
+        )
+    )
+    if existing is None:
+        session.add(
+            ClientLinkRecord(
+                owner_user_id=request.owner_user_id,
+                binding_id=binding.id,
+                client_id=client.id,
+                source="master_approval",
+            )
+        )
 
 
 def _resolve_client_for_approval(
@@ -353,6 +459,12 @@ def _resolve_client_for_approval(
     request.client_id = client.id
     binding.client_id = client.id
     binding.status = ClientTelegramIdentityStatus.active
+    _record_master_approval_link(
+        session,
+        request=request,
+        binding=binding,
+        client=client,
+    )
     return client
 
 
@@ -417,6 +529,7 @@ def approve_master_booking_request(
         actor_user_id=identity.user_id,
         actor_type="master",
     )
+    enqueue_booking_request_notification(session, request, event_type="approved")
     session.commit()
     session.refresh(request)
     return request

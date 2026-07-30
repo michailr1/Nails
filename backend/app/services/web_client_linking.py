@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.auth import RequestIdentity
+from app.client_models import (
+    BookingRequest,
+    ClientTelegramIdentity,
+    ClientTelegramIdentityStatus,
+    MasterLinkToken,
+    MasterPublicProfile,
+)
+from app.client_notification_models import (
+    ClientNotificationOutbox,
+    ClientPersonalLinkToken,
+)
+from app.models import Client, ClientProfileStatus
+from app.schemas.client_linking import (
+    ClientPhonePreselect,
+    ClientReachabilityItem,
+    ClientReachabilityListResponse,
+)
+from app.schemas.client_notifications import ClientNotificationSentItem
+from app.services.client_linking import normalize_phone
+from app.services.scheduling_common import SchedulingDomainError
+
+_INVITATION_TEXT = (
+    "Запись ко мне теперь есть в Нэйли. Откройте мою ссылку для записи — "
+    "там можно посмотреть прайс и выбрать удобное время."
+)
+
+
+def booking_request_phone_preselect(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    booking_request_id: uuid.UUID,
+) -> ClientPhonePreselect:
+    request = session.scalar(
+        select(BookingRequest).where(
+            BookingRequest.id == booking_request_id,
+            BookingRequest.owner_user_id == identity.user_id,
+        )
+    )
+    if request is None:
+        raise SchedulingDomainError("booking_request_not_found", status_code=404)
+    binding = session.scalar(
+        select(ClientTelegramIdentity).where(
+            ClientTelegramIdentity.id == request.binding_id,
+            ClientTelegramIdentity.owner_user_id == identity.user_id,
+        )
+    )
+    phone = normalize_phone(binding.requested_phone if binding is not None else None)
+    if phone is None:
+        return ClientPhonePreselect()
+
+    clients = session.scalars(
+        select(Client).where(
+            Client.owner_user_id == identity.user_id,
+            Client.profile_status == ClientProfileStatus.active,
+            Client.phone.is_not(None),
+        )
+    ).all()
+    matches = [client for client in clients if normalize_phone(client.phone) == phone]
+    if len(matches) != 1:
+        return ClientPhonePreselect()
+    candidate = matches[0]
+    occupied = session.scalar(
+        select(ClientTelegramIdentity.id).where(
+            ClientTelegramIdentity.owner_user_id == identity.user_id,
+            ClientTelegramIdentity.client_id == candidate.id,
+            ClientTelegramIdentity.status == ClientTelegramIdentityStatus.active,
+            ClientTelegramIdentity.id != request.binding_id,
+        )
+    )
+    if occupied is not None:
+        return ClientPhonePreselect()
+    return ClientPhonePreselect(
+        client_id=candidate.id,
+        reason="Клиентка указала номер, совпадающий с этой карточкой",
+    )
+
+
+def list_client_reachability(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    connected_only: bool,
+) -> ClientReachabilityListResponse:
+    clients = session.scalars(
+        select(Client)
+        .where(
+            Client.owner_user_id == identity.user_id,
+            Client.profile_status == ClientProfileStatus.active,
+        )
+        .order_by(Client.public_name, Client.id)
+    ).all()
+    identities = session.scalars(
+        select(ClientTelegramIdentity).where(
+            ClientTelegramIdentity.owner_user_id == identity.user_id,
+            ClientTelegramIdentity.status == ClientTelegramIdentityStatus.active,
+            ClientTelegramIdentity.client_id.is_not(None),
+        )
+    ).all()
+    by_client = {row.client_id: row for row in identities if row.client_id is not None}
+    items: list[ClientReachabilityItem] = []
+    for client in clients:
+        binding = by_client.get(client.id)
+        state = "not_connected" if binding is None else binding.bot_reachability
+        if connected_only and state in {"not_connected", "unreachable"}:
+            continue
+        items.append(ClientReachabilityItem(client_id=client.id, state=state))
+
+    token = session.scalar(
+        select(MasterLinkToken.token)
+        .where(
+            MasterLinkToken.owner_user_id == identity.user_id,
+            MasterLinkToken.revoked_at.is_(None),
+        )
+        .order_by(MasterLinkToken.created_at.desc())
+        .limit(1)
+    )
+    return ClientReachabilityListResponse(
+        items=items,
+        invitation_text=_INVITATION_TEXT,
+        invitation_start_token=token,
+    )
+
+
+def list_sent_notifications(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    limit: int = 100,
+) -> list[ClientNotificationSentItem]:
+    rows = session.scalars(
+        select(ClientNotificationOutbox)
+        .where(ClientNotificationOutbox.owner_user_id == identity.user_id)
+        .order_by(ClientNotificationOutbox.created_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        ClientNotificationSentItem(
+            notification_id=row.id,
+            event_type=row.event_type,
+            status=row.status,
+            attempts=row.attempts,
+            created_at=row.created_at,
+            delivered_at=row.delivered_at,
+        )
+        for row in rows
+    ]
+
+
+def revoke_open_personal_links(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    client_id: uuid.UUID,
+) -> bool:
+    client = session.scalar(
+        select(Client.id).where(
+            Client.id == client_id,
+            Client.owner_user_id == identity.user_id,
+            Client.profile_status == ClientProfileStatus.active,
+        )
+    )
+    if client is None:
+        raise SchedulingDomainError("client_not_found", status_code=404)
+    rows = session.scalars(
+        select(ClientPersonalLinkToken)
+        .where(
+            ClientPersonalLinkToken.owner_user_id == identity.user_id,
+            ClientPersonalLinkToken.client_id == client_id,
+            ClientPersonalLinkToken.revoked_at.is_(None),
+            ClientPersonalLinkToken.consumed_at.is_(None),
+            ClientPersonalLinkToken.expires_at > datetime.now(UTC),
+        )
+        .with_for_update()
+    ).all()
+    if not rows:
+        return False
+    now = datetime.now(UTC)
+    for row in rows:
+        row.revoked_at = now
+    session.commit()
+    return True
+
+
+def master_public_name(session: Session, identity: RequestIdentity) -> str:
+    profile = session.get(MasterPublicProfile, identity.user_id)
+    if profile is None or not profile.display_name.strip():
+        return "мастер"
+    return profile.display_name.strip()

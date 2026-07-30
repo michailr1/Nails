@@ -56,6 +56,7 @@ def _require_draft(
     draft_id: uuid.UUID,
     *,
     lock: bool = False,
+    allow_submitted: bool = False,
 ) -> ClientBookingDraft:
     statement = select(ClientBookingDraft).where(
         ClientBookingDraft.id == draft_id,
@@ -67,6 +68,8 @@ def _require_draft(
     draft = session.scalar(statement)
     if draft is None:
         raise SchedulingDomainError("client_booking_draft_not_found", status_code=404)
+    if draft.submitted_request_id is not None and not allow_submitted:
+        raise SchedulingDomainError("client_booking_draft_submitted", status_code=409)
     if draft.expires_at <= datetime.now(UTC):
         raise SchedulingDomainError("client_booking_draft_expired", status_code=409)
     return draft
@@ -237,7 +240,7 @@ def get_booking_draft(
     context: ClientBindingContext,
     draft_id: uuid.UUID,
 ) -> ClientBookingDraftSummary:
-    draft = _require_draft(session, context, draft_id)
+    draft = _require_draft(session, context, draft_id, allow_submitted=True)
     return draft_summary(session, context, draft)
 
 
@@ -290,7 +293,7 @@ def draft_slots(
     draft_id: uuid.UUID,
     day: date,
 ) -> ClientBookingDraftSlotsResponse:
-    draft = _require_draft(session, context, draft_id)
+    draft = _require_draft(session, context, draft_id, allow_submitted=True)
     composition = _composition(session, draft)
     timezone = app_timezone()
     availability = availability_for_day(session, context.owner_user_id, day)

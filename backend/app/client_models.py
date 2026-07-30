@@ -48,6 +48,10 @@ class ClientTelegramIdentity(Base):
             "OR status = 'revoked'",
             name="client_telegram_identity_state_consistent",
         ),
+        CheckConstraint(
+            "bot_reachability IN ('unknown', 'reachable', 'unreachable')",
+            name="client_telegram_identity_reachability_valid",
+        ),
         UniqueConstraint(
             "owner_user_id",
             "telegram_user_id",
@@ -82,6 +86,10 @@ class ClientTelegramIdentity(Base):
     )
     requested_public_name: Mapped[str | None] = mapped_column(String(160))
     requested_phone: Mapped[str | None] = mapped_column(String(32))
+    bot_reachability: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unknown", server_default="unknown"
+    )
+    last_delivery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -109,6 +117,12 @@ class BookingRequest(Base):
             "binding_id",
             "idempotency_key",
             name="uq_booking_requests_binding_idempotency",
+        ),
+        Index(
+            "uq_booking_requests_source_draft",
+            "source_draft_id",
+            unique=True,
+            postgresql_where=text("source_draft_id IS NOT NULL"),
         ),
         Index(
             "ix_booking_requests_owner_status_starts",
@@ -140,6 +154,10 @@ class BookingRequest(Base):
         UUID(as_uuid=True),
         ForeignKey("clients.id", ondelete="RESTRICT"),
         nullable=True,
+    )
+    source_draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("client_booking_drafts.id", ondelete="RESTRICT"),
     )
     requested_public_name: Mapped[str | None] = mapped_column(String(160))
     service_name: Mapped[str] = mapped_column(String(160), nullable=False)
