@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
+from app.client_models import ClientTelegramIdentity, ClientTelegramIdentityStatus
 from app.config import get_settings
 from app.models import Booking, Client, ClientProfileStatus, Service
 from app.schemas.scheduling_catalog_bookings import CatalogBookingSummary
@@ -125,15 +126,25 @@ def list_calendar(
 def list_clients(
     session: Session,
     identity: RequestIdentity,
+    *,
+    connected_only: bool = False,
 ) -> WebClientListResponse:
-    clients = session.scalars(
-        select(Client)
-        .where(
-            Client.owner_user_id == identity.user_id,
-            Client.profile_status == ClientProfileStatus.active,
-        )
-        .order_by(Client.public_name, Client.id)
-    ).all()
-    return WebClientListResponse(
-        clients=[web_client_card(client) for client in clients]
+    statement = select(Client).where(
+        Client.owner_user_id == identity.user_id,
+        Client.profile_status == ClientProfileStatus.active,
     )
+    if connected_only:
+        statement = (
+            statement.join(
+                ClientTelegramIdentity,
+                ClientTelegramIdentity.client_id == Client.id,
+            )
+            .where(
+                ClientTelegramIdentity.owner_user_id == identity.user_id,
+                ClientTelegramIdentity.status == ClientTelegramIdentityStatus.active,
+                ClientTelegramIdentity.bot_reachability.in_(["reachable", "unknown"]),
+            )
+            .distinct()
+        )
+    clients = session.scalars(statement.order_by(Client.public_name, Client.id)).all()
+    return WebClientListResponse(clients=[web_client_card(client) for client in clients])
