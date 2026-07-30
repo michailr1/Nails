@@ -73,7 +73,13 @@ def submit_booking_draft_idempotent(
     context: ClientBindingContext,
     draft_id: uuid.UUID,
 ) -> BookingRequest:
-    draft = _require_draft(session, context, draft_id, lock=True)
+    draft = _require_draft(
+        session,
+        context,
+        draft_id,
+        lock=True,
+        allow_submitted=True,
+    )
     existing = _submitted_request(session, context, draft)
     if existing is not None:
         if draft.submitted_request_id is None:
