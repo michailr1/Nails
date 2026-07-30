@@ -4,10 +4,11 @@ import logging
 import os
 import threading
 import time
+from typing import Any
 
 import httpx
 
-from app.client_bot import BotConfig, TelegramApi
+from app.client_bot import BotConfig, RemoteCallError, TelegramApi
 from app.client_bot_booking_flow import DraftNailsClientApi, DraftPlatformBot
 from app.client_bot_outbox import (
     ClientBotRuntimeState,
@@ -17,6 +18,49 @@ from app.client_bot_outbox import (
 )
 
 LOGGER = logging.getLogger("nails.client_bot_v1")
+
+
+def client_error_message(error: RemoteCallError) -> str:
+    messages = {
+        "client_booking_draft_expired": (
+            "Эта заявка устарела. Начните запись заново через /menu."
+        ),
+        "client_identity_revoked": (
+            "Связь с мастером больше не активна. Откройте актуальную ссылку мастера."
+        ),
+        "client_booking_slot_stale": (
+            "Это время уже заняли. Выберите другое время."
+        ),
+        "client_pending_request_limit": (
+            "У вас уже несколько заявок ждут ответа мастера. "
+            "Дождитесь ответа или отмените одну из них."
+        ),
+        "client_booking_draft_submitted": (
+            "Эта заявка уже отправлена мастеру. Откройте /menu для новой записи."
+        ),
+    }
+    return messages.get(
+        error.code,
+        "Не получилось выполнить действие. Откройте /menu и попробуйте ещё раз.",
+    )
+
+
+def _update_chat_id(update: dict[str, Any]) -> int | None:
+    message = update.get("message")
+    if not isinstance(message, dict):
+        callback = update.get("callback_query")
+        if isinstance(callback, dict):
+            message = callback.get("message")
+    if not isinstance(message, dict):
+        return None
+    chat = message.get("chat")
+    if not isinstance(chat, dict):
+        return None
+    try:
+        chat_id = int(chat.get("id") or 0)
+    except (TypeError, ValueError):
+        return None
+    return chat_id or None
 
 
 def run() -> None:
@@ -58,6 +102,26 @@ def run() -> None:
                         offset = max(offset, update_id + 1)
                         try:
                             bot.handle_update(update)
+                        except RemoteCallError as exc:
+                            chat_id = _update_chat_id(update)
+                            if chat_id is not None:
+                                try:
+                                    telegram.call(
+                                        "sendMessage",
+                                        chat_id=chat_id,
+                                        text=client_error_message(exc),
+                                    )
+                                except Exception:
+                                    LOGGER.exception(
+                                        "CLIENT_BOT_V1_ERROR_REPLY_FAILED update_id=%s",
+                                        update_id,
+                                    )
+                            LOGGER.warning(
+                                "CLIENT_BOT_V1_DOMAIN_ERROR update_id=%s code=%s status=%s",
+                                update_id,
+                                exc.code,
+                                exc.status_code,
+                            )
                         except Exception:
                             LOGGER.exception(
                                 "CLIENT_BOT_V1_UPDATE_FAILED update_id=%s",
