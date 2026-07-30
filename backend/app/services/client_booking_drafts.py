@@ -240,7 +240,7 @@ def get_booking_draft(
     context: ClientBindingContext,
     draft_id: uuid.UUID,
 ) -> ClientBookingDraftSummary:
-    draft = _require_draft(session, context, draft_id)
+    draft = _require_draft(session, context, draft_id, allow_submitted=True)
     return draft_summary(session, context, draft)
 
 
@@ -293,7 +293,7 @@ def draft_slots(
     draft_id: uuid.UUID,
     day: date,
 ) -> ClientBookingDraftSlotsResponse:
-    draft = _require_draft(session, context, draft_id)
+    draft = _require_draft(session, context, draft_id, allow_submitted=True)
     composition = _composition(session, draft)
     timezone = app_timezone()
     availability = availability_for_day(session, context.owner_user_id, day)
