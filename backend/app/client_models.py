@@ -119,6 +119,12 @@ class BookingRequest(Base):
             name="uq_booking_requests_binding_idempotency",
         ),
         Index(
+            "uq_booking_requests_source_draft",
+            "source_draft_id",
+            unique=True,
+            postgresql_where=text("source_draft_id IS NOT NULL"),
+        ),
+        Index(
             "ix_booking_requests_owner_status_starts",
             "owner_user_id",
             "status",
@@ -148,6 +154,10 @@ class BookingRequest(Base):
         UUID(as_uuid=True),
         ForeignKey("clients.id", ondelete="RESTRICT"),
         nullable=True,
+    )
+    source_draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("client_booking_drafts.id", ondelete="RESTRICT"),
     )
     requested_public_name: Mapped[str | None] = mapped_column(String(160))
     service_name: Mapped[str] = mapped_column(String(160), nullable=False)
