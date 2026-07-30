@@ -1,0 +1,28 @@
+[Unit]
+Description=Nails client Telegram bot
+Requires=docker.service
+After=docker.service network-online.target nails-client-forward.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/nails/repo/backend
+EnvironmentFile=/opt/nails/.env
+Environment=NAILS_CLIENT_API_URL=http://127.0.0.1:8210
+Environment=CLIENT_BOT_STATUS_PATH=/run/nails/client-bot-status.json
+ExecStart=/usr/local/lib/hermes-agent/venv/bin/python -m app.client_bot_v1
+Restart=always
+RestartSec=5
+RuntimeDirectory=nails
+RuntimeDirectoryMode=0750
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/nails/repo/backend /opt/nails/.env
+ReadWritePaths=/run/nails
+
+[Install]
+WantedBy=multi-user.target

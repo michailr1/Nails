@@ -9,7 +9,9 @@ from app.schemas.client_notifications import (
     ClientNotificationAckRequest,
     ClientNotificationAckResponse,
     ClientNotificationClaim,
+    ClientNotificationQueueHealth,
 )
+from app.services.client_notification_health import notification_queue_health
 from app.services.client_notifications import (
     acknowledge_client_notification,
     claim_client_notification,
@@ -40,3 +42,11 @@ def ack_notification(
         outcome=body.outcome,
         error_code=body.error_code,
     )
+
+
+@router.get("/internal/health", response_model=ClientNotificationQueueHealth)
+def notification_health(
+    session: SessionDependency,
+    _: ClientInternalKeyDependency,
+) -> ClientNotificationQueueHealth:
+    return notification_queue_health(session)
