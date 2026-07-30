@@ -12,6 +12,7 @@ from app.services.client_binding import create_master_link_token
 from app.services.client_booking_draft_submit import submit_booking_draft_idempotent
 from app.services.client_booking_drafts import (
     create_booking_draft,
+    draft_slots,
     select_booking_draft_slot,
     update_booking_draft_composition,
 )
@@ -79,10 +80,6 @@ def test_draft_is_single_submit_and_cannot_be_mutated_after_submit(
         context = require_client_binding(session, identity, binding_id=binding_id)
         draft = create_booking_draft(session, context, "Маникюр")
         draft_id = draft.draft_id
-        selected = datetime.combine(day, time(12), tzinfo=UTC)
-        # Slot API compares the same absolute instant, so use one of the server slots.
-        from app.services.client_booking_drafts import draft_slots
-
         slots = draft_slots(session, context, draft_id, day).starts_at
         assert slots
         select_booking_draft_slot(session, context, draft_id, slots[0])
@@ -105,7 +102,11 @@ def test_draft_is_single_submit_and_cannot_be_mutated_after_submit(
             assert exc.code == "client_booking_draft_submitted"
         else:
             raise AssertionError("submitted draft must be immutable")
-        rows = session.query(BookingRequest).filter(BookingRequest.source_draft_id == draft_id).all()
+        rows = (
+            session.query(BookingRequest)
+            .filter(BookingRequest.source_draft_id == draft_id)
+            .all()
+        )
         assert len(rows) == 1
 
 
