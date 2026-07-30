@@ -22,6 +22,7 @@ from app.api.web_admin import router as web_admin_router
 from app.api.web_auth import router as web_auth_router
 from app.api.web_auth_conversation import router as web_auth_conversation_router
 from app.api.web_booking_mutations import router as web_booking_mutations_router
+from app.api.web_client_linking import router as web_client_linking_router
 from app.api.web_client_requests import router as web_client_requests_router
 from app.api.web_read import router as web_read_router
 from app.config import get_settings
@@ -107,6 +108,7 @@ app.include_router(web_admin_router)
 app.include_router(web_read_router)
 app.include_router(web_booking_mutations_router)
 app.include_router(web_client_requests_router)
+app.include_router(web_client_linking_router)
 app.mount(
     "/web",
     StaticFiles(directory=_WEB_STATIC_DIR, html=True),
