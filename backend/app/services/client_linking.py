@@ -23,17 +23,39 @@ from app.services.client_contour import require_client_binding
 from app.services.scheduling_common import SchedulingDomainError
 
 PERSONAL_LINK_TTL = timedelta(days=7)
+_PHONE_EXTENSION_RE = re.compile(
+    r"(?i)\s*(?:доб\.?|добавочный|ext\.?|extension|x)\s*\d+\s*$"
+)
 
 
 def normalize_phone(value: str | None) -> str | None:
-    digits = re.sub(r"\D", "", value or "")
-    if digits.startswith("00"):
+    """Return a canonical comparison key, not a display phone number.
+
+    Russian local forms are normalized to country code 7 so that these all match:
+    +7 999..., 7 999..., 8 999..., and a bare 10-digit mobile number.
+    Explicit international forms keep their country code.
+    """
+    raw = (value or "").strip()
+    if not raw:
+        return None
+
+    raw = _PHONE_EXTENSION_RE.sub("", raw).strip()
+    digits = "".join(character for character in raw if character.isascii() and character.isdigit())
+    if not digits:
+        return None
+
+    explicit_plus = raw.startswith("+")
+    explicit_international = raw.startswith("00")
+    if explicit_international:
         digits = digits[2:]
-    if len(digits) == 11 and digits.startswith("8"):
-        digits = "7" + digits[1:]
-    elif len(digits) == 10:
-        digits = "7" + digits
-    if len(digits) < 10 or len(digits) > 15:
+    elif not explicit_plus:
+        if len(digits) == 11 and digits.startswith("8"):
+            digits = "7" + digits[1:]
+        elif len(digits) == 10:
+            digits = "7" + digits
+
+    # E.164 allows at most 15 digits and country codes never start with zero.
+    if len(digits) < 10 or len(digits) > 15 or digits.startswith("0"):
         return None
     return digits
 
@@ -209,7 +231,7 @@ def set_manual_phone_hint(
         raise SchedulingDomainError("client_binding_not_found", status_code=404)
     if binding.status == ClientTelegramIdentityStatus.revoked:
         raise SchedulingDomainError("client_identity_revoked", status_code=403)
-    # This value is deliberately only a hint. It never calls _record_link().
+    # Canonical phone is only a master-side hint. It never calls _record_link().
     binding.requested_phone = phone
     session.add(
         AuditEvent(
