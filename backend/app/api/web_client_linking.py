@@ -60,6 +60,16 @@ def _translate(exc: SchedulingDomainError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=detail)
 
 
+def _require_client_invitation_url(start_token: str) -> str:
+    invitation_url = client_invitation_url(start_token)
+    if invitation_url is None:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "client_bot_username_not_configured"},
+        )
+    return invitation_url
+
+
 @router.get("/reachability", response_model=ClientReachabilityListResponse)
 def reachability(
     session: SessionDependency,
@@ -111,6 +121,9 @@ def personal_link_create(
     identity: WriteIdentityDependency,
 ) -> PersonalClientInviteResponse:
     validate_web_boundary(request)
+    # Check environment configuration before creating a one-time token. A UI
+    # configuration error must not leave an invisible invitation behind.
+    _require_client_invitation_url("config-check")
     try:
         created = create_personal_client_link(
             session,
@@ -119,14 +132,8 @@ def personal_link_create(
         )
     except SchedulingDomainError as exc:
         raise _translate(exc) from exc
-    invitation_url = client_invitation_url(created.token)
-    if invitation_url is None:
-        raise HTTPException(
-            status_code=503,
-            detail={"code": "client_bot_username_not_configured"},
-        )
     return PersonalClientInviteResponse(
-        invitation_url=invitation_url,
+        invitation_url=_require_client_invitation_url(created.token),
         expires_at=created.expires_at,
         client_id=created.client_id,
     )
