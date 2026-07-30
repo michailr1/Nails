@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.conftest import TEST_CLIENT_INTERNAL_API_KEY, TEST_INTERNAL_API_KEY
+import os
 
 
 def test_client_key_is_not_accepted_by_master_api(client, create_user):
@@ -8,7 +8,7 @@ def test_client_key_is_not_accepted_by_master_api(client, create_user):
     response = client.get(
         "/api/v1/onboarding",
         headers={
-            "X-Nails-Client-Internal-Key": TEST_CLIENT_INTERNAL_API_KEY,
+            "X-Nails-Client-Internal-Key": "c" * 64,
             "X-Telegram-User-ID": str(user.telegram_user_id),
         },
     )
@@ -20,7 +20,7 @@ def test_master_key_is_not_accepted_by_client_api(client):
     response = client.get(
         "/api/v1/client/context",
         headers={
-            "X-Nails-Internal-Key": TEST_INTERNAL_API_KEY,
+            "X-Nails-Internal-Key": os.environ["INTERNAL_API_KEY"],
             "X-Telegram-User-ID": "930000002",
         },
     )
