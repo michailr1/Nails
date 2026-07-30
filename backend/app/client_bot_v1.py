@@ -8,19 +8,23 @@ from typing import Any
 
 import httpx
 
-from app.client_bot import BotConfig, RemoteCallError, TelegramApi
-from app.client_bot_booking_flow import DraftNailsClientApi, DraftPlatformBot
+from app.client_bot import BotConfig, TelegramApi
+from app.client_bot_booking_flow import DraftPlatformBot
 from app.client_bot_outbox import (
     ClientBotRuntimeState,
     ClientNotificationApi,
     NotificationDrainer,
     OutboxRuntimeConfig,
 )
+from app.client_bot_runtime_api import (
+    ClientDomainRemoteCallError,
+    RuntimeDraftNailsClientApi,
+)
 
 LOGGER = logging.getLogger("nails.client_bot_v1")
 
 
-def client_error_message(error: RemoteCallError) -> str:
+def client_error_message(error: ClientDomainRemoteCallError) -> str:
     messages = {
         "client_booking_draft_expired": (
             "Эта заявка устарела. Начните запись заново через /menu."
@@ -71,7 +75,7 @@ def run() -> None:
     offset = 0
     with httpx.Client() as client:
         telegram = TelegramApi(client, config.telegram_token)
-        nails = DraftNailsClientApi(
+        nails = RuntimeDraftNailsClientApi(
             client,
             base_url=config.client_api_url,
             api_key=config.client_api_key,
@@ -102,7 +106,7 @@ def run() -> None:
                         offset = max(offset, update_id + 1)
                         try:
                             bot.handle_update(update)
-                        except RemoteCallError as exc:
+                        except ClientDomainRemoteCallError as exc:
                             chat_id = _update_chat_id(update)
                             if chat_id is not None:
                                 try:
