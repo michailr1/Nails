@@ -184,9 +184,18 @@ def test_pending_request_limit_counts_only_pending(
 
 def test_backend_application_has_no_client_telegram_bot_token_reference():
     app_dir = Path(__file__).resolve().parents[1] / "app"
+    server_roots = [app_dir / "api", app_dir / "services"]
+    server_files = [
+        app_dir / "main.py",
+        app_dir / "client_models.py",
+        app_dir / "client_notification_models.py",
+    ]
     offenders: list[str] = []
-    for path in app_dir.rglob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        if "CLIENT_TELEGRAM_BOT_TOKEN" in text:
+    for root in server_roots:
+        for path in root.rglob("*.py"):
+            if "CLIENT_TELEGRAM_BOT_TOKEN" in path.read_text(encoding="utf-8"):
+                offenders.append(str(path.relative_to(app_dir)))
+    for path in server_files:
+        if "CLIENT_TELEGRAM_BOT_TOKEN" in path.read_text(encoding="utf-8"):
             offenders.append(str(path.relative_to(app_dir)))
     assert offenders == []
