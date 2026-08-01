@@ -27,6 +27,20 @@
 .client-card-actions-spacer { flex: 1 1 auto; }
 .client-create-panel { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
 
+.client-public-profile-panel { min-width: 0; margin-bottom: 18px; padding: 22px; overflow: hidden; }
+.client-public-profile-panel > .eyebrow { margin-top: 0; }
+.client-public-profile-panel > h2 { margin: 0; font-size: 1.35rem; }
+.client-public-profile-form { display: grid; min-width: 0; gap: 16px; margin-top: 18px; }
+.client-public-profile-form[hidden] { display: none; }
+.client-public-profile-form label { display: grid; min-width: 0; gap: 7px; }
+.client-public-profile-form label > span { min-width: 0; color: var(--text); font-size: .88rem; font-weight: 650; }
+.client-public-profile-form label small { color: var(--muted); font-size: .78rem; font-weight: 450; }
+.client-public-profile-form input { display: block; width: 100%; min-width: 0; min-height: 46px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; line-height: 1.35; }
+.client-public-profile-form input:focus { outline: 2px solid color-mix(in srgb, var(--primary) 28%, transparent); border-color: var(--primary); }
+.client-public-profile-form .booking-edit-error { margin: 0; }
+.client-public-profile-form .client-invite-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.client-public-profile-form .client-invite-actions .primary-button { min-width: 0; }
+
 .client-reachability-badge { display: inline-flex; align-items: center; width: fit-content; margin: .2rem 0 .65rem; padding: .25rem .55rem; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 999px; font-size: .78rem; line-height: 1.2; }
 .reachability-reachable::before, .reachability-unknown::before { content: "●"; margin-right: .35rem; }
 .reachability-unreachable, .reachability-not_connected { opacity: .72; }
@@ -78,6 +92,10 @@
   .client-card-actions-spacer { display: none; }
   .client-card-actions .primary-button { width: 100%; }
   .client-card-open { min-height: 78px; padding: 15px 16px; }
+  .client-public-profile-panel { padding: 18px 16px; }
+  .client-public-profile-panel > h2 { font-size: 1.2rem; line-height: 1.2; }
+  .client-public-profile-form .client-invite-actions { grid-template-columns: 1fr; }
+  .client-public-profile-form .client-invite-actions button { width: 100%; }
 }
 
 @media (max-width: 720px) {

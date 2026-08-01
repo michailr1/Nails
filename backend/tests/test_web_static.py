@@ -161,7 +161,9 @@ def test_web_assets_are_served(client, clean_database):
     assert ".catalog-grid" in stylesheet.text
     assert ".catalog-card-summary" in stylesheet.text
     assert ".catalog-section" in stylesheet.text
-    assert "repeat(3, 1fr)" in stylesheet.text
+    assert "grid-auto-flow: column" in stylesheet.text
+    assert "grid-auto-columns: minmax(72px, 1fr)" in stylesheet.text
+    assert "repeat(3, 1fr)" not in stylesheet.text
     assert "display: inline-flex" in stylesheet.text
     assert "--primary" in stylesheet.text
 

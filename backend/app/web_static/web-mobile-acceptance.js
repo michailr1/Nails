@@ -18,3 +18,27 @@ renderBookingComposer = function renderBookingComposerWithLightTimeSelect() {
   wrapper.innerHTML = bookingTimeSelectMarkup("time", input.value || "11:00");
   input.replaceWith(wrapper.firstElementChild);
 };
+
+let mobileNavigationResizeObserver = null;
+
+function syncMobileNavigationInset() {
+  const sidebar = document.querySelector(".sidebar");
+  const shell = document.querySelector(".app-shell");
+  mobileNavigationResizeObserver?.disconnect();
+  mobileNavigationResizeObserver = null;
+  if (!sidebar || !shell) return;
+
+  const update = () => {
+    const height = Math.ceil(sidebar.getBoundingClientRect().height);
+    shell.style.setProperty("--mobile-nav-height", `${height}px`);
+  };
+  update();
+  mobileNavigationResizeObserver = new ResizeObserver(update);
+  mobileNavigationResizeObserver.observe(sidebar);
+}
+
+const appShellWithoutMeasuredMobileNavigation = appShell;
+appShell = function appShellWithMeasuredMobileNavigation(title, body) {
+  appShellWithoutMeasuredMobileNavigation(title, body);
+  syncMobileNavigationInset();
+};
