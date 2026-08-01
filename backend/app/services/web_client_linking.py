@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from urllib.parse import quote
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
@@ -54,6 +54,13 @@ def get_or_create_general_invitation(
             "client_bot_username_not_configured",
             status_code=503,
         )
+    session.execute(
+        select(
+            func.pg_advisory_xact_lock(
+                func.hashtext(f"general-invite:{identity.user_id}")
+            )
+        )
+    )
     token = session.scalar(
         select(MasterLinkToken.token)
         .where(
