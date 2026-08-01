@@ -92,10 +92,11 @@ services:
       CLIENT_TELEGRAM_BOT_TOKEN: ${CLIENT_TELEGRAM_BOT_TOKEN:-}
       CLIENT_INTERNAL_API_KEY: ${CLIENT_INTERNAL_API_KEY:-}
       NAILS_CLIENT_API_URL: http://nails-api:8000
+      CLIENT_BOT_STATUS_PATH: /tmp/client-bot-status.json
       CLIENT_TELEGRAM_POLL_TIMEOUT_SECONDS: ${CLIENT_TELEGRAM_POLL_TIMEOUT_SECONDS:-30}
     command: >-
       sh -c 'if [ "$$CLIENT_BOT_ENABLED" = "true" ]; then
-      python -m app.client_bot_runtime;
+      exec python -m app.client_bot_v1;
       else echo "CLIENT_BOT_DISABLED=true" && exec sleep infinity;
       fi'
     depends_on:

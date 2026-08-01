@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_APP = ROOT / "backend" / "app"
-OPS = ROOT / "ops" / "client_bot"
 
 
 def test_client_runtime_has_no_database_imports():
@@ -26,51 +24,27 @@ def test_client_runtime_has_no_database_imports():
         assert not any(marker in text for marker in forbidden), path.name
 
 
-def test_systemd_service_is_separate_and_uses_client_v1_entrypoint():
-    unit = (OPS / "nails-client-bot.service").read_text(encoding="utf-8")
-    assert "[Unit]" in unit
-    assert "[Service]" in unit
-    assert "[Install]" in unit
-    assert "ExecStart=" in unit
-    assert "-m app.client_bot_v1" in unit
-    assert "EnvironmentFile=/opt/nails/.env" in unit
-    assert "CLIENT_BOT_STATUS_PATH=/run/nails/client-bot-status.json" in unit
-    assert "WorkingDirectory=/opt/nails/repo/backend" in unit
-    assert "Restart=always" in unit
-    assert "hermes-gateway" not in unit
+def test_client_runtime_uses_only_the_compose_v1_entrypoint():
+    compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    deploy = (ROOT / "ops" / "deploy" / "deploy.sh").read_text(encoding="utf-8")
+
+    assert "exec python -m app.client_bot_v1" in compose
+    assert "app.client_bot_runtime" not in compose
+    assert "CLIENT_BOT_STATUS_PATH: /tmp/client-bot-status.json" in compose
+    assert "verify_client_bot_singleton" in deploy
+    assert "remove_legacy_client_bot_runtime" in deploy
 
 
-def test_runtime_shell_scripts_are_syntax_valid():
-    for name in ("activate.sh", "deactivate.sh", "deploy_runtime.sh"):
-        subprocess.run(["bash", "-n", str(OPS / name)], check=True)
-
-
-def test_activation_requires_separate_client_credentials_and_singleton_runtime():
-    script = (OPS / "activate.sh").read_text(encoding="utf-8")
-    assert "CLIENT_API_ENABLED must be true" in script
-    assert "CLIENT_BOT_ENABLED must be true" in script
-    assert "client and master internal keys must differ" in script
-    assert "client and master Telegram tokens must differ" in script
-    assert "CLIENT_TELEGRAM_BOT_TOKEN" in script
-    assert "compose rm -sf nails-client-bot" in script
-    assert "systemctl enable --now nails-client-bot.service" in script
-    assert "CLIENT_RUNTIME_ACTIVATED=true" in script
-
-
-def test_controlled_runtime_has_explicit_deactivation_path():
-    script = (OPS / "deactivate.sh").read_text(encoding="utf-8")
-    assert "CLIENT_API_ENABLED=false" in script
-    assert "CLIENT_BOT_ENABLED=false" in script
-    assert "systemctl disable --now nails-client-bot.service" in script
-    assert "compose rm -sf nails-client-bot" in script
-    assert "CLIENT_RUNTIME_DEACTIVATED=true" in script
-
-
-def test_runtime_health_does_not_read_database_directly():
-    health = (OPS / "health.py").read_text(encoding="utf-8")
-    assert "/api/v1/client/notifications/internal/health" in health
-    assert "sqlalchemy" not in health
-    assert "DATABASE_URL" not in health
+def test_host_client_runtime_path_is_absent():
+    forbidden_paths = [
+        ROOT / "backend" / "app" / "client_bot_runtime.py",
+        ROOT / "ops" / "client_bot" / "activate.sh",
+        ROOT / "ops" / "client_bot" / "deactivate.sh",
+        ROOT / "ops" / "client_bot" / "deploy_runtime.sh",
+        ROOT / "ops" / "client_bot" / "health.py",
+        ROOT / "ops" / "client_bot" / "nails-client-bot.service",
+    ]
+    assert not [str(path.relative_to(ROOT)) for path in forbidden_paths if path.exists()]
 
 
 def test_repository_contains_no_real_client_bot_token():
