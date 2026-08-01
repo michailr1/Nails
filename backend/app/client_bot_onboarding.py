@@ -3,7 +3,11 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from app.client_bot import _parse_slot, format_catalog, master_picker_keyboard
+from app.client_bot import (
+    _parse_slot,
+    format_catalog,
+    master_picker_keyboard,
+)
 from app.client_bot_booking_flow import DraftPlatformBot
 from app.client_bot_runtime_api import RuntimeDraftNailsClientApi
 
