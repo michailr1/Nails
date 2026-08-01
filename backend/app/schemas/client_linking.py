@@ -35,6 +35,10 @@ class PersonalClientLinkResponse(BaseModel):
     client_id: uuid.UUID
 
 
+class GeneralClientInviteResponse(BaseModel):
+    invitation_url: str
+
+
 class PersonalClientInviteResponse(BaseModel):
     invitation_url: str
     expires_at: datetime
@@ -71,6 +75,7 @@ class ClientReachabilityListResponse(BaseModel):
     items: list[ClientReachabilityItem]
     invitation_text: str
     invitation_url: str | None = None
+    invitation_available: bool = False
 
 
 class ClientPhonePreselect(BaseModel):
