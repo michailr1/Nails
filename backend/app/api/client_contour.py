@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.auth import ClientTransportIdentity, require_client_transport_identity
+from app.client_models import ClientTelegramIdentity
 from app.db import get_db_session
 from app.schemas.client_contour import (
     ClientContextResponse,
@@ -65,6 +66,17 @@ def _ready_for_master(master) -> ClientContextResponse:
     )
 
 
+def _mark_contact_requirement(
+    session: Session,
+    response: ClientContextResponse,
+) -> ClientContextResponse:
+    if response.state != ClientEntryState.ready or response.master is None:
+        return response
+    binding = session.get(ClientTelegramIdentity, response.master.binding_id)
+    response.contact_required = binding is not None and not bool(binding.requested_phone)
+    return response
+
+
 @router.post("/start", response_model=ClientContextResponse)
 def client_start(
     body: ClientStartRequest,
@@ -79,7 +91,7 @@ def client_start(
                 identity,
                 binding_id=response.master.binding_id,
             )
-        return response
+        return _mark_contact_requirement(session, response)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
 

@@ -56,3 +56,29 @@ class RuntimeDraftNailsClientApi(DraftNailsClientApi):
                 f"client API {path} returned invalid JSON"
             )
         return payload
+
+    def masters(self, telegram_user_id: int) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/client/masters",
+            telegram_user_id=telegram_user_id,
+        )
+
+    def confirmed_contact(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+        *,
+        contact_user_id: int,
+        phone_number: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/client/linking/confirmed-contact",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+            json={
+                "contact_user_id": contact_user_id,
+                "phone_number": phone_number,
+            },
+        )
