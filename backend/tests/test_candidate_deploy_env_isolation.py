@@ -31,7 +31,10 @@ def test_candidate_adapter_guards_exact_normative_contract():
     assert '"$(grep -Fxc "$client_forward_invocation" "$DEPLOY_SCRIPT")" -eq 4' in source
     assert "deploy.sh client-forward invocation contract changed; adapter requires review" in source
     assert 'client_forward_disabled_assertion=' in source
-    assert "deploy.sh client-forward disabled assertion contract changed; adapter requires review" in source
+    assert (
+        "deploy.sh client-forward disabled assertion contract changed; "
+        "adapter requires review"
+    ) in source
 
 
 def test_candidate_adapter_delegates_snapshot_but_skips_mutations():
@@ -39,7 +42,11 @@ def test_candidate_adapter_delegates_snapshot_but_skips_mutations():
 
     assert "case \"$action\" in" in source
     assert "snapshot)" in source
-    assert 'exec bash "${NAILS_DEPLOY_WORKTREE}/ops/client_forward/deploy_runtime.sh" "$@"' in source
+    snapshot_exec = (
+        'exec bash "${NAILS_DEPLOY_WORKTREE}/ops/client_forward/'
+        'deploy_runtime.sh" "$@"'
+    )
+    assert snapshot_exec in source
     assert "stop|install|restore)" in source
     assert "candidate_client_forward_%s_skipped=true" in source
     assert 'bash "$NAILS_CANDIDATE_CLIENT_FORWARD_GUARD"' in source
