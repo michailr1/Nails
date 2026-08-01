@@ -4,7 +4,8 @@
 # - uses an isolated backend env for candidate API/WEB;
 # - delegates the read-only client-forward snapshot;
 # - suppresses client-forward stop/install/restore mutations;
-# - preserves the already-running production client-forward service.
+# - preserves the already-running production client-forward service;
+# - restores the pre-candidate legacy client-bot unit state after acceptance.
 
 set -Eeuo pipefail
 umask 077
@@ -57,8 +58,41 @@ fi
 install -d -m 700 "$tmp_root"
 runtime_script="$(mktemp "$tmp_root/candidate-deploy.XXXXXX.sh")"
 client_forward_guard="$(mktemp "$tmp_root/candidate-client-forward.XXXXXX.sh")"
+legacy_unit_backup="$(mktemp "$tmp_root/candidate-client-bot-unit.XXXXXX")"
+legacy_unit="/etc/systemd/system/nails-client-bot.service"
+legacy_unit_existed="false"
+legacy_enabled_before="$(systemctl is-enabled nails-client-bot.service 2>/dev/null || true)"
+legacy_active_before="$(systemctl is-active nails-client-bot.service 2>/dev/null || true)"
+legacy_restore_required="false"
+if [[ -f "$legacy_unit" ]]; then
+  cp -a "$legacy_unit" "$legacy_unit_backup"
+  legacy_unit_existed="true"
+fi
+
+restore_legacy_client_bot_unit() {
+  [[ "$legacy_restore_required" == "true" ]] || return 0
+  systemctl disable --now nails-client-bot.service >/dev/null 2>&1 || true
+  if [[ "$legacy_unit_existed" == "true" ]]; then
+    cp -a "$legacy_unit_backup" "$legacy_unit"
+  else
+    rm -f "$legacy_unit"
+  fi
+  systemctl daemon-reload
+  if [[ "$legacy_enabled_before" == "enabled" ]]; then
+    systemctl enable nails-client-bot.service >/dev/null 2>&1
+  fi
+  if [[ "$legacy_active_before" == "active" ]]; then
+    systemctl start nails-client-bot.service >/dev/null 2>&1
+  fi
+  printf 'production_legacy_client_bot_unit_restored=true\n'
+}
+
 cleanup() {
-  rm -f -- "$runtime_script" "$client_forward_guard"
+  local status=$?
+  set +e
+  restore_legacy_client_bot_unit
+  rm -f -- "$runtime_script" "$client_forward_guard" "$legacy_unit_backup"
+  return "$status"
 }
 trap cleanup EXIT
 
@@ -134,6 +168,8 @@ fi
 printf 'candidate_env_isolated=true\n'
 printf 'production_env_unchanged=true\n'
 printf 'production_client_forward_guarded=true\n'
+printf 'production_legacy_client_bot_unit_snapshotted=true\n'
+legacy_restore_required="true"
 
 set +e
 NAILS_CANDIDATE_ENV="$CANDIDATE_ENV" \
