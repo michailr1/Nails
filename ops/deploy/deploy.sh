@@ -132,10 +132,13 @@ remove_legacy_client_bot_runtime() {
   systemctl disable --now "$LEGACY_CLIENT_BOT_SERVICE" >/dev/null 2>&1 || true
   rm -f "$LEGACY_CLIENT_BOT_UNIT" "$LEGACY_CLIENT_BOT_STATUS"
   systemctl daemon-reload
-  systemctl is-active --quiet "$LEGACY_CLIENT_BOT_SERVICE" && \
+  if systemctl is-active --quiet "$LEGACY_CLIENT_BOT_SERVICE"; then
     die "legacy host client bot is still active"
-  systemctl is-enabled --quiet "$LEGACY_CLIENT_BOT_SERVICE" && \
+  fi
+  if systemctl is-enabled --quiet "$LEGACY_CLIENT_BOT_SERVICE"; then
     die "legacy host client bot is still enabled"
+  fi
+  return 0
 }
 
 verify_client_bot_singleton() {
