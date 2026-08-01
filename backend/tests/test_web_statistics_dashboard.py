@@ -46,10 +46,15 @@ def test_web_statistics_mobile_layout_prevents_overflow_and_bottom_nav_overlap(
 ):
     response = client.get("/web/web-statistics.css")
     base_css = (STATIC / "styles.css").read_text(encoding="utf-8")
+    mobile_layout = (STATIC / "web-mobile-acceptance.js").read_text(
+        encoding="utf-8"
+    )
 
     assert response.status_code == 200
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in response.text
-    assert ".main { padding: 24px 16px 96px; }" in base_css
+    assert "padding-bottom: calc(var(--mobile-nav-height, 72px) + 24px);" in base_css
+    assert "ResizeObserver" in mobile_layout
+    assert "--mobile-nav-height" in mobile_layout
     assert ".main" not in response.text
     assert "overflow-wrap: anywhere;" in response.text
     assert "overflow-x: auto;" in response.text
