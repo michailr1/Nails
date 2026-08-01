@@ -14,6 +14,8 @@ from app.schemas.client_linking import (
     ClientPhonePreselect,
     ClientReachabilityListResponse,
     GeneralClientInviteResponse,
+    MasterPublicProfileResponse,
+    MasterPublicProfileUpdate,
     PersonalClientInviteResponse,
     PersonalClientLinkRevokeResponse,
 )
@@ -29,7 +31,9 @@ from app.services.web_client_linking import (
     client_invitation_url,
     get_or_create_general_invitation,
     list_client_reachability,
+    public_profile_response,
     revoke_open_personal_links,
+    save_public_profile,
 )
 from app.services.web_portal_auth import require_effective_owner_identity
 
@@ -72,6 +76,17 @@ def _require_client_invitation_url(start_token: str) -> str:
     return invitation_url
 
 
+def _require_public_profile(
+    session: Session,
+    identity: RequestIdentity,
+) -> None:
+    if not public_profile_response(session, identity).ready:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "master_public_profile_required"},
+        )
+
+
 @router.get("/reachability", response_model=ClientReachabilityListResponse)
 def reachability(
     session: SessionDependency,
@@ -82,6 +97,22 @@ def reachability(
         session,
         identity,
         connected_only=connected_only,
+    )
+
+
+@router.put("/public-profile", response_model=MasterPublicProfileResponse)
+def public_profile_update(
+    body: MasterPublicProfileUpdate,
+    request: Request,
+    session: SessionDependency,
+    identity: WriteIdentityDependency,
+) -> MasterPublicProfileResponse:
+    validate_web_boundary(request)
+    return save_public_profile(
+        session,
+        identity,
+        display_name=body.display_name,
+        public_contact=body.public_contact,
     )
 
 
@@ -137,6 +168,7 @@ def personal_link_create(
     identity: WriteIdentityDependency,
 ) -> PersonalClientInviteResponse:
     validate_web_boundary(request)
+    _require_public_profile(session, identity)
     _require_client_invitation_url("config-check")
     try:
         created = create_personal_client_link(
