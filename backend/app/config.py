@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_CLIENT_BOT_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{5,32}$")
 
 
 class Settings(BaseSettings):
@@ -31,6 +34,10 @@ class Settings(BaseSettings):
     client_internal_api_key: SecretStr = Field(
         default=SecretStr(""),
         alias="CLIENT_INTERNAL_API_KEY",
+    )
+    client_telegram_bot_username: str = Field(
+        default="",
+        alias="CLIENT_TELEGRAM_BOT_USERNAME",
     )
 
     web_auth_enabled: bool = Field(default=False, alias="WEB_AUTH_ENABLED")
@@ -176,6 +183,19 @@ class Settings(BaseSettings):
         if len(value.get_secret_value().strip()) < 32:
             raise ValueError("INTERNAL_API_KEY must contain at least 32 characters")
         return value
+
+    @field_validator("client_telegram_bot_username")
+    @classmethod
+    def validate_client_bot_username(cls, value: str) -> str:
+        candidate = value.strip().removeprefix("@")
+        if not candidate:
+            return ""
+        valid_name = _CLIENT_BOT_USERNAME_RE.fullmatch(candidate)
+        if not valid_name or not candidate.lower().endswith("bot"):
+            raise ValueError(
+                "CLIENT_TELEGRAM_BOT_USERNAME must be a valid Telegram bot username"
+            )
+        return candidate
 
     @field_validator(
         "web_allowed_hosts",

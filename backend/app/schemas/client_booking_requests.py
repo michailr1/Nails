@@ -102,6 +102,7 @@ class MasterBookingRequestApprove(BaseModel):
 class BookingRequestPublic(BaseModel):
     id: uuid.UUID
     status: BookingRequestStatusValue
+    client_id: uuid.UUID | None = None
     requested_public_name: str | None = None
     service_name: str
     addon_names: list[str]

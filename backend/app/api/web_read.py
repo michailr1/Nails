@@ -134,8 +134,9 @@ def statistics(
 def clients(
     session: SessionDependency,
     identity: ReadIdentityDependency,
+    connected_only: Annotated[bool, Query()] = False,
 ) -> WebClientListResponse:
-    return list_clients(session, identity)
+    return list_clients(session, identity, connected_only=connected_only)
 
 
 @router.post("/clients", response_model=WebClientCreateResponse)

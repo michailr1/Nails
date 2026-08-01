@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,24 +15,33 @@ from app.client_models import (
     MasterLinkToken,
     MasterPublicProfile,
 )
-from app.client_notification_models import (
-    ClientNotificationOutbox,
-    ClientPersonalLinkToken,
-)
+from app.client_notification_models import ClientPersonalLinkToken
+from app.config import get_settings
 from app.models import Client, ClientProfileStatus
 from app.schemas.client_linking import (
     ClientPhonePreselect,
     ClientReachabilityItem,
     ClientReachabilityListResponse,
 )
-from app.schemas.client_notifications import ClientNotificationSentItem
 from app.services.client_linking import normalize_phone
 from app.services.scheduling_common import SchedulingDomainError
 
-_INVITATION_TEXT = (
-    "Запись ко мне теперь есть в Нэйли. Откройте мою ссылку для записи — "
-    "там можно посмотреть прайс и выбрать удобное время."
+_INVITATION_LEAD = (
+    "Записаться ко мне можно в Telegram — там есть прайс и свободное время."
 )
+
+
+def client_invitation_url(start_token: str | None) -> str | None:
+    username = get_settings().client_telegram_bot_username
+    if not username or not start_token:
+        return None
+    return f"https://t.me/{username}?start={quote(start_token, safe='')}"
+
+
+def invitation_copy(invitation_url: str | None) -> str:
+    if invitation_url is None:
+        return _INVITATION_LEAD
+    return f"{_INVITATION_LEAD}\n\n{invitation_url}"
 
 
 def booking_request_phone_preselect(
@@ -124,36 +134,12 @@ def list_client_reachability(
         .order_by(MasterLinkToken.created_at.desc())
         .limit(1)
     )
+    invitation_url = client_invitation_url(token)
     return ClientReachabilityListResponse(
         items=items,
-        invitation_text=_INVITATION_TEXT,
-        invitation_start_token=token,
+        invitation_text=invitation_copy(invitation_url),
+        invitation_url=invitation_url,
     )
-
-
-def list_sent_notifications(
-    session: Session,
-    identity: RequestIdentity,
-    *,
-    limit: int = 100,
-) -> list[ClientNotificationSentItem]:
-    rows = session.scalars(
-        select(ClientNotificationOutbox)
-        .where(ClientNotificationOutbox.owner_user_id == identity.user_id)
-        .order_by(ClientNotificationOutbox.created_at.desc())
-        .limit(limit)
-    ).all()
-    return [
-        ClientNotificationSentItem(
-            notification_id=row.id,
-            event_type=row.event_type,
-            status=row.status,
-            attempts=row.attempts,
-            created_at=row.created_at,
-            delivered_at=row.delivered_at,
-        )
-        for row in rows
-    ]
 
 
 def revoke_open_personal_links(
