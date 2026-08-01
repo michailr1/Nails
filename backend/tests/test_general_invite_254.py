@@ -8,6 +8,7 @@ from app.services import web_client_linking
 ROOT = Path(__file__).resolve().parents[2]
 WEB_JS = ROOT / "backend" / "app" / "web_static" / "web-client-reachability.js"
 API = ROOT / "backend" / "app" / "api" / "web_client_linking.py"
+SERVICE = ROOT / "backend" / "app" / "services" / "web_client_linking.py"
 
 
 class FakeSession:
@@ -15,6 +16,10 @@ class FakeSession:
         self.scalar_result = scalar_result
         self.added = []
         self.commits = 0
+        self.executions = 0
+
+    def execute(self, _statement):
+        self.executions += 1
 
     def scalar(self, _statement):
         return self.scalar_result
@@ -43,6 +48,7 @@ def test_first_general_invite_creates_token_and_returns_ready_url(monkeypatch):
     assert session.added[0].token == "new_token"
     assert session.added[0].owner_user_id == "owner-1"
     assert session.commits == 1
+    assert session.executions == 1
 
 
 def test_repeated_general_invite_reuses_active_token(monkeypatch):
@@ -56,6 +62,13 @@ def test_repeated_general_invite_reuses_active_token(monkeypatch):
     assert first == second == "https://t.me/configured_client_bot?start=existing_token"
     assert session.added == []
     assert session.commits == 0
+    assert session.executions == 2
+
+
+def test_general_invite_creation_is_serialized_per_owner():
+    source = SERVICE.read_text(encoding="utf-8")
+    assert "pg_advisory_xact_lock" in source
+    assert 'general-invite:{identity.user_id}' in source
 
 
 def test_general_invite_button_bootstraps_via_write_endpoint():
