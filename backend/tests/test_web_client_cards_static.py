@@ -1,12 +1,12 @@
 def test_web_client_card_editor_assets_are_served(client, clean_database):
     page = client.get("/web/")
     script = client.get("/web/web-client-cards.js")
-    stylesheet = client.get("/web/web-client-cards.css")
+    stylesheet = client.get("/web/web-clients.css")
 
     assert page.status_code == 200
     assert script.status_code == 200
     assert stylesheet.status_code == 200
-    assert "/web/web-client-cards.css" in page.text
+    assert "/web/web-clients.css" in page.text
     assert "/web/web-client-cards.js" in page.text
     assert page.text.index("/web/web-booking-client-create.js") < page.text.index(
         "/web/web-client-cards.js"

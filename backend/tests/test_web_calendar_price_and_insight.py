@@ -24,7 +24,7 @@ def test_long_absent_calendar_insight_has_human_copy(client, clean_database):
 
 
 def test_long_absent_calendar_insight_stacks_cleanly_on_mobile(client, clean_database):
-    response = client.get("/web/web-statistics-insight.css")
+    response = client.get("/web/web-statistics.css")
 
     assert response.status_code == 200
     assert "grid-template-columns: minmax(0, 1fr) auto" in response.text

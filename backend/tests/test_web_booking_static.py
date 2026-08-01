@@ -2,13 +2,13 @@ def test_web_booking_composer_assets_are_served(client, clean_database):
     page = client.get("/web/")
     script = client.get("/web/web-booking-create.js")
     overlap_script = client.get("/web/web-booking-overlap-details.js")
-    stylesheet = client.get("/web/web-booking-create.css")
+    stylesheet = client.get("/web/web-booking.css")
 
     assert page.status_code == 200
     assert script.status_code == 200
     assert overlap_script.status_code == 200
     assert stylesheet.status_code == 200
-    assert "/web/web-booking-create.css" in page.text
+    assert "/web/web-booking.css" in page.text
     assert "/web/web-booking-create.js" in page.text
     assert "/web/web-booking-overlap-details.js" in page.text
     assert page.text.index("/web/web-service-catalog.js") < page.text.index(
