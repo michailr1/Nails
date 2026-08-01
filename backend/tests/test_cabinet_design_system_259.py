@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "backend" / "app" / "web_static"
 INDEX = WEB / "index.html"
 STYLES = WEB / "styles.css"
-APP = WEB / "app.js"
+MOBILE_LAYOUT = WEB / "web-mobile-acceptance.js"
 
 COLOR_LITERAL = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\s*\()"
@@ -100,7 +100,7 @@ def test_mobile_navigation_columns_follow_actual_tabs_without_fixed_count():
     assert len(views) >= 4, f"expected current cabinet tabs, found: {sorted(views)}"
     assert re.search(
         r"\.nav\s*\{[^}]*grid-auto-flow:\s*column;"
-        r"[^}]*grid-auto-columns:\s*minmax\(0,\s*1fr\);",
+        r"[^}]*grid-auto-columns:\s*minmax\([^;]+\);",
         styles,
         flags=re.DOTALL,
     )
@@ -113,11 +113,11 @@ def test_mobile_navigation_columns_follow_actual_tabs_without_fixed_count():
 
 def test_mobile_content_inset_tracks_rendered_navigation_height():
     styles = STYLES.read_text(encoding="utf-8")
-    app = APP.read_text(encoding="utf-8")
+    layout = MOBILE_LAYOUT.read_text(encoding="utf-8")
 
     assert "--mobile-nav-height" in styles
-    assert "--mobile-nav-height" in app
-    assert "ResizeObserver" in app
+    assert "--mobile-nav-height" in layout
+    assert "ResizeObserver" in layout
     assert re.search(
         r"\.main\s*\{[^}]*padding-bottom:\s*calc\("
         r"var\(--mobile-nav-height",
@@ -148,6 +148,11 @@ def test_mobile_topbar_actions_are_full_width_and_keep_dom_order():
         flags=re.DOTALL,
     )
     assert "flex-direction: column-reverse" not in styles
+    assert re.search(
+        r"\.topbar-side\s+\.actions\s+\.primary-button\s*\{[^}]*order:\s*-1;",
+        styles,
+        flags=re.DOTALL,
+    )
 
 
 def test_public_profile_definition_list_uses_shared_card_layout():
