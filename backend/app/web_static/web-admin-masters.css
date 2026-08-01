@@ -1,9 +1,9 @@
 .admin-scope-banner {
   margin-bottom: 1rem;
-  padding: 0.8rem 1rem;
-  border: 1px solid var(--line, rgba(84, 57, 61, 0.2));
+  padding: .8rem 1rem;
+  border: 1px solid var(--border);
   border-radius: 14px;
-  background: var(--surface, rgba(255, 255, 255, 0.78));
+  background: var(--surface);
   font-weight: 700;
   text-align: center;
 }
@@ -17,24 +17,24 @@
 
 .admin-master-create form {
   display: grid;
-  gap: 0.9rem;
+  gap: .9rem;
   max-width: 34rem;
 }
 
 .admin-master-create label {
   display: grid;
-  gap: 0.45rem;
+  gap: .45rem;
   font-weight: 600;
 }
 
 .admin-master-create input {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--line, rgba(84, 57, 61, 0.2));
+  border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 0.85rem 1rem;
-  background: var(--surface, rgba(255, 255, 255, 0.74));
-  color: inherit;
+  padding: .85rem 1rem;
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
 }
 
@@ -50,19 +50,19 @@
   display: grid;
   gap: 1rem;
   padding: 1.1rem;
-  border: 1px solid var(--line, rgba(84, 57, 61, 0.16));
+  border: 1px solid var(--border);
   border-radius: 18px;
-  background: var(--surface, rgba(255, 255, 255, 0.72));
+  background: var(--surface);
 }
 
 .admin-master-card h2 {
-  margin: 0.2rem 0 0;
+  margin: .2rem 0 0;
   font-size: 1.1rem;
 }
 
 .admin-master-meta {
   display: grid;
-  gap: 0.65rem;
+  gap: .65rem;
   margin: 0;
 }
 
@@ -73,7 +73,7 @@
 }
 
 .admin-master-meta dt {
-  color: var(--muted, #76666a);
+  color: var(--muted);
 }
 
 .admin-master-meta dd {
@@ -83,7 +83,7 @@
 
 .admin-master-actions {
   display: grid;
-  gap: 0.65rem;
+  gap: .65rem;
 }
 
 .admin-master-actions button {
