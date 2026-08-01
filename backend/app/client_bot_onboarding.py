@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from app import client_bot
+import app.client_bot as client_bot
 from app.client_bot_booking_flow import DraftPlatformBot
 from app.client_bot_runtime_api import RuntimeDraftNailsClientApi
 
