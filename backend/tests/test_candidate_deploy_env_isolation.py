@@ -5,6 +5,10 @@ ADAPTER = ROOT / "ops" / "deploy" / "candidate_deploy.sh"
 DEPLOY = ROOT / "ops" / "deploy" / "deploy.sh"
 
 
+def test_candidate_adapter_is_executable():
+    assert ADAPTER.stat().st_mode & 0o111
+
+
 def test_candidate_adapter_preserves_production_default_and_requires_override():
     adapter = ADAPTER.read_text(encoding="utf-8")
     deploy = DEPLOY.read_text(encoding="utf-8")
