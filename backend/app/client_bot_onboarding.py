@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
-import app.client_bot as client_bot
+from app.client_bot import format_catalog, master_picker_keyboard
 from app.client_bot_booking_flow import DraftPlatformBot
 from app.client_bot_runtime_api import RuntimeDraftNailsClientApi
 
@@ -18,6 +19,10 @@ CONTACT_PROMPT = (
     "Чтобы мастер мог узнать вас и связаться по записи, поделитесь номером "
     "телефона кнопкой ниже. Номер увидит только ваш мастер."
 )
+
+
+def _parse_slot(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def contact_request_keyboard() -> dict[str, Any]:
@@ -97,7 +102,7 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             self._send(
                 chat_id,
                 "Выберите мастера, к которому хотите записаться.",
-                client_bot.master_picker_keyboard(payload.get("masters") or []),
+                master_picker_keyboard(payload.get("masters") or []),
             )
             return
         self._send(
@@ -195,7 +200,7 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             catalog = self._nails.catalog(telegram_user_id, binding_id)
             self._send(
                 chat_id,
-                client_bot.format_catalog(catalog),
+                format_catalog(catalog),
                 self._menu_keyboard(telegram_user_id, catalog["master"]),
             )
             return
@@ -206,7 +211,7 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
         result = api.submit_draft(telegram_user_id, draft_id)
         if result.get("status") != "pending":
             raise ValueError("unexpected booking request status")
-        parsed = client_bot._parse_slot(result["starts_at"])
+        parsed = _parse_slot(result["starts_at"])
         self._send(
             chat_id,
             "✅ Заявка отправлена\n"
