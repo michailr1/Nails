@@ -3,11 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from app.client_bot import (
-    _parse_slot,
-    format_catalog,
-    master_picker_keyboard,
-)
+from app import client_bot
 from app.client_bot_booking_flow import DraftPlatformBot
 from app.client_bot_runtime_api import RuntimeDraftNailsClientApi
 
@@ -101,7 +97,7 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             self._send(
                 chat_id,
                 "Выберите мастера, к которому хотите записаться.",
-                master_picker_keyboard(payload.get("masters") or []),
+                client_bot.master_picker_keyboard(payload.get("masters") or []),
             )
             return
         self._send(
@@ -199,7 +195,7 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             catalog = self._nails.catalog(telegram_user_id, binding_id)
             self._send(
                 chat_id,
-                format_catalog(catalog),
+                client_bot.format_catalog(catalog),
                 self._menu_keyboard(telegram_user_id, catalog["master"]),
             )
             return
@@ -210,7 +206,7 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
         result = api.submit_draft(telegram_user_id, draft_id)
         if result.get("status") != "pending":
             raise ValueError("unexpected booking request status")
-        parsed = _parse_slot(result["starts_at"])
+        parsed = client_bot._parse_slot(result["starts_at"])
         self._send(
             chat_id,
             "✅ Заявка отправлена\n"
