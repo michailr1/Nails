@@ -32,20 +32,23 @@ jobs:
       - name: Validate Bash syntax
         run: |
           bash -n ops/deploy/deploy.sh
+          bash -n ops/deploy/candidate_deploy.sh
           bash -n ops/client_forward/deploy_runtime.sh
 
       - name: ShellCheck
         run: |
           shellcheck --severity=warning ops/deploy/deploy.sh
+          shellcheck --severity=warning ops/deploy/candidate_deploy.sh
           shellcheck --severity=warning ops/client_forward/deploy_runtime.sh
 
-      - name: Enforce ADR-003 single permanent entrypoint
+      - name: Enforce ADR-003 permanent entrypoints
         run: |
           python - <<'PY'
           from pathlib import Path
 
           allowed = {
               "deploy.sh",
+              "candidate_deploy.sh",  # permanent candidate env-isolation adapter
               "nails-002e5-date-availability.sh",  # historical, not executable
               "nails-002e6-combined-operations.sh",  # historical, not executable
           }
@@ -125,6 +128,21 @@ jobs:
           assert deploy.index("docker run --rm -i --network none") < deploy.index(
               'compose up -d --no-deps --force-recreate --no-build nails-api nails-web'
           )
+
+          adapter = Path("ops/deploy/candidate_deploy.sh").read_text(encoding="utf-8")
+          for phrase in (
+              "NAILS_CANDIDATE_ENV is required",
+              "candidate env must not be the production env",
+              "candidate env must be a regular non-symlink file",
+              "candidate env must not be accessible by group or others",
+              'BACKEND_ENV="${NAILS_CANDIDATE_ENV:-/opt/nails/.env}"',
+              "deploy.sh BACKEND_ENV contract changed; adapter requires review",
+              "trap cleanup EXIT",
+          ):
+              assert phrase in adapter, f"candidate adapter lost safeguard: {phrase}"
+
+          assert adapter.count("bash \"$runtime_script\"") == 1
+          assert adapter.count("BACKEND_ENV=") == 3
 
           forward = Path("ops/client_forward/deploy_runtime.sh").read_text(encoding="utf-8")
           for phrase in (
