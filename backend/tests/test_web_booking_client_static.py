@@ -1,11 +1,12 @@
 def test_web_booking_inline_client_assets_are_served(client, clean_database):
     page = client.get("/web/")
     script = client.get("/web/web-booking-client-create.js")
-    stylesheet = client.get("/web/web-booking-create.css")
+    stylesheet = client.get("/web/web-booking.css")
 
     assert page.status_code == 200
     assert script.status_code == 200
     assert stylesheet.status_code == 200
+    assert "/web/web-booking.css" in page.text
     assert "/web/web-booking-client-create.js" in page.text
     assert page.text.index("/web/web001e-copy.js") < page.text.index(
         "/web/web-booking-client-create.js"
