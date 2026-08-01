@@ -2,7 +2,7 @@ def test_calendar_fix_assets_are_loaded(client, clean_database):
     response = client.get("/web/")
 
     assert response.status_code == 200
-    assert 'href="/web/web-calendar-fixes.css"' in response.text
+    assert 'href="/web/web-calendar.css"' in response.text
     assert 'src="/web/web-calendar-fixes.js"' in response.text
 
 
@@ -27,7 +27,7 @@ def test_calendar_hides_technical_statuses(client, clean_database):
 
 
 def test_calendar_period_switch_uses_mobile_grid(client, clean_database):
-    response = client.get("/web/web-calendar-fixes.css")
+    response = client.get("/web/web-calendar.css")
 
     assert response.status_code == 200
     assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in response.text
