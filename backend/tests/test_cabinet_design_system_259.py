@@ -142,11 +142,7 @@ def test_mobile_topbar_actions_are_full_width_and_keep_dom_order():
         styles,
         flags=re.DOTALL,
     )
-    assert re.search(
-        r"\.topbar-side\s+(?:\.actions\s+)?button\s*\{[^}]*width:\s*100%;",
-        styles,
-        flags=re.DOTALL,
-    )
+    assert ".topbar-side .actions button, .topbar-side > button { width: 100%; }" in styles
     assert "flex-direction: column-reverse" not in styles
     assert re.search(
         r"\.topbar-side\s+\.actions\s+\.primary-button\s*\{[^}]*order:\s*-1;",
@@ -160,12 +156,14 @@ def test_public_profile_definition_list_uses_shared_card_layout():
 
     assert ".client-public-profile-summary" in styles
     assert re.search(
-        r"\.client-public-profile-summary\s*\{[^}]*display:\s*grid;",
+        r"\.client-card\s+dl,\s*\.client-public-profile-summary\s*\{"
+        r"[^}]*display:\s*grid;",
         styles,
         flags=re.DOTALL,
     )
     assert re.search(
-        r"\.client-public-profile-summary\s+dd\s*\{[^}]*margin:\s*0;",
+        r"\.client-card\s+dd,\s*\.client-public-profile-summary\s+dd\s*\{"
+        r"[^}]*margin:\s*0;",
         styles,
         flags=re.DOTALL,
     )
