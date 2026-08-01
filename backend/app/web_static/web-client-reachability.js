@@ -34,6 +34,7 @@ function clientLinkErrorText(error) {
     client_not_found: "Карточка больше недоступна.",
     client_already_linked: "Эта карточка уже связана с другой клиенткой Telegram.",
     client_bot_username_not_configured: "Ссылка для записи пока не настроена.",
+    master_public_profile_required: "Сначала заполните, как вас увидят клиентки.",
   };
   return messages[error.message] || "Не удалось подготовить приглашение.";
 }
@@ -82,6 +83,47 @@ function renderInviteBlock(container, { url, personal = false }) {
   container.append(block);
 }
 
+function renderPublicProfileSetup(reachability) {
+  const page = document.querySelector("#page-content");
+  const profile = reachability.public_profile || {};
+  if (!page || profile.ready) return;
+  const panel = document.createElement("section");
+  panel.className = "panel client-public-profile-panel";
+  panel.innerHTML = `
+    <p class="eyebrow">Перед приглашением</p>
+    <h2>Как вас увидят клиентки</h2>
+    <p>Укажите имя мастера. Контакт необязателен — его клиентка увидит, если понадобится связаться напрямую.</p>
+    <form id="client-public-profile-form" class="client-public-profile-form">
+      <label><span>Имя мастера</span><input name="display_name" maxlength="160" required placeholder="Например, Настя"></label>
+      <label><span>Контакт <small>необязательно</small></span><input name="public_contact" maxlength="160" placeholder="Телефон или @username"></label>
+      <p class="booking-edit-error" role="alert"></p>
+      <button class="primary-button" type="submit">Сохранить и продолжить</button>
+    </form>`;
+  page.prepend(panel);
+  panel.querySelector("form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector("button");
+    const errorLine = form.querySelector(".booking-edit-error");
+    button.disabled = true;
+    errorLine.textContent = "";
+    try {
+      await api("/web/api/client-linking/public-profile", {
+        method: "PUT",
+        body: JSON.stringify({
+          display_name: form.elements.display_name.value,
+          public_contact: form.elements.public_contact.value || null,
+        }),
+      });
+      await renderClients();
+    } catch (error) {
+      if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
+      errorLine.textContent = "Не удалось сохранить. Проверьте имя и попробуйте ещё раз.";
+      button.disabled = false;
+    }
+  });
+}
+
 async function createPersonalInvite(clientId, button) {
   const card = button.closest(".client-card");
   const actions = button.closest(".client-reachability-actions");
@@ -125,11 +167,36 @@ function decorateClientCards(reachability) {
     const actions = document.createElement("div");
     actions.className = "client-reachability-actions";
     if (stateValue === "not_connected" || stateValue === "unreachable") {
-      actions.innerHTML = `<button class="secondary-button" type="button" data-personal-invite="${escapeHtml(clientId)}">Пригласить</button>`;
+      const disabled = reachability.public_profile?.ready ? "" : "disabled";
+      actions.innerHTML = `<button class="secondary-button" type="button" data-personal-invite="${escapeHtml(clientId)}" ${disabled}>Пригласить</button>`;
       card.append(actions);
     }
   });
   bindPersonalInviteButtons();
+}
+
+async function showGeneralInvitation(button) {
+  const page = document.querySelector("#page-content");
+  if (!page) return;
+  button.disabled = true;
+  try {
+    const payload = await api("/web/api/client-linking/general-link", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (payload.invitation_url) {
+      renderInviteBlock(page, { url: payload.invitation_url });
+      page.querySelector(".client-invite-block")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  } catch (error) {
+    if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
+    const line = document.createElement("div");
+    line.className = "panel error-state";
+    line.textContent = clientLinkErrorText(error);
+    page.prepend(line);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderReachabilityControls(reachability) {
@@ -142,19 +209,15 @@ function renderReachabilityControls(reachability) {
       <input id="connected-clients-only" type="checkbox" ${clientReachabilityState.connectedOnly ? "checked" : ""}>
       <span>Кому можно написать</span>
     </label>
-    <button id="show-client-invitation" class="secondary-button" type="button" ${reachability.invitation_url ? "" : "disabled"}>Пригласить клиенток</button>`;
+    <button id="show-client-invitation" class="secondary-button" type="button" ${reachability.invitation_available ? "" : "disabled"}>Пригласить клиенток</button>`;
   actions.prepend(wrapper);
 
   document.querySelector("#connected-clients-only")?.addEventListener("change", (event) => {
     clientReachabilityState.connectedOnly = event.target.checked;
     renderClients();
   });
-  document.querySelector("#show-client-invitation")?.addEventListener("click", () => {
-    const page = document.querySelector("#page-content");
-    if (page && reachability.invitation_url) {
-      renderInviteBlock(page, { url: reachability.invitation_url });
-      page.querySelector(".client-invite-block")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+  document.querySelector("#show-client-invitation")?.addEventListener("click", (event) => {
+    showGeneralInvitation(event.currentTarget);
   });
 }
 
@@ -181,6 +244,7 @@ renderClients = async function renderClientsWithReachability() {
     const reachability = await api(`/web/api/client-linking/reachability${query}`);
     decorateClientCards(reachability);
     renderReachabilityControls(reachability);
+    renderPublicProfileSetup(reachability);
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
     const page = document.querySelector("#page-content");

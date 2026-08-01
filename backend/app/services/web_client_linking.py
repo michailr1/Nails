@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import UTC, datetime
 from urllib.parse import quote
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
@@ -22,6 +23,7 @@ from app.schemas.client_linking import (
     ClientPhonePreselect,
     ClientReachabilityItem,
     ClientReachabilityListResponse,
+    MasterPublicProfileResponse,
 )
 from app.services.client_linking import normalize_phone
 from app.services.scheduling_common import SchedulingDomainError
@@ -42,6 +44,102 @@ def invitation_copy(invitation_url: str | None) -> str:
     if invitation_url is None:
         return _INVITATION_LEAD
     return f"{_INVITATION_LEAD}\n\n{invitation_url}"
+
+
+def public_profile_response(
+    session: Session,
+    identity: RequestIdentity,
+) -> MasterPublicProfileResponse:
+    profile = session.get(MasterPublicProfile, identity.user_id)
+    if profile is None or not profile.display_name.strip():
+        return MasterPublicProfileResponse(ready=False)
+    return MasterPublicProfileResponse(
+        ready=True,
+        display_name=profile.display_name.strip(),
+        public_contact=(
+            profile.public_contact.strip() if profile.public_contact else None
+        ),
+    )
+
+
+def save_public_profile(
+    session: Session,
+    identity: RequestIdentity,
+    *,
+    display_name: str,
+    public_contact: str | None,
+) -> MasterPublicProfileResponse:
+    profile = session.get(MasterPublicProfile, identity.user_id)
+    if profile is None:
+        profile = MasterPublicProfile(
+            owner_user_id=identity.user_id,
+            display_name=display_name,
+            public_contact=public_contact,
+        )
+        session.add(profile)
+    else:
+        profile.display_name = display_name
+        profile.public_contact = public_contact
+    session.commit()
+    return public_profile_response(session, identity)
+
+
+def _require_public_profile(
+    session: Session,
+    identity: RequestIdentity,
+) -> MasterPublicProfile:
+    profile = session.get(MasterPublicProfile, identity.user_id)
+    if profile is None or not profile.display_name.strip():
+        raise SchedulingDomainError(
+            "master_public_profile_required",
+            status_code=409,
+        )
+    return profile
+
+
+def get_or_create_general_invitation(
+    session: Session,
+    identity: RequestIdentity,
+) -> str:
+    if not get_settings().client_telegram_bot_username:
+        raise SchedulingDomainError(
+            "client_bot_username_not_configured",
+            status_code=503,
+        )
+    _require_public_profile(session, identity)
+    session.execute(
+        select(
+            func.pg_advisory_xact_lock(
+                func.hashtext(f"general-invite:{identity.user_id}")
+            )
+        )
+    )
+    token = session.scalar(
+        select(MasterLinkToken.token)
+        .where(
+            MasterLinkToken.owner_user_id == identity.user_id,
+            MasterLinkToken.revoked_at.is_(None),
+        )
+        .order_by(MasterLinkToken.created_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if token is None:
+        token = secrets.token_urlsafe(32)
+        session.add(
+            MasterLinkToken(
+                token=token,
+                owner_user_id=identity.user_id,
+            )
+        )
+        session.commit()
+    invitation_url = client_invitation_url(token)
+    if invitation_url is None:
+        raise SchedulingDomainError(
+            "client_bot_username_not_configured",
+            status_code=503,
+        )
+    return invitation_url
 
 
 def booking_request_phone_preselect(
@@ -125,6 +223,7 @@ def list_client_reachability(
             continue
         items.append(ClientReachabilityItem(client_id=client.id, state=state))
 
+    profile = public_profile_response(session, identity)
     token = session.scalar(
         select(MasterLinkToken.token)
         .where(
@@ -134,11 +233,15 @@ def list_client_reachability(
         .order_by(MasterLinkToken.created_at.desc())
         .limit(1)
     )
-    invitation_url = client_invitation_url(token)
+    invitation_url = client_invitation_url(token) if profile.ready else None
     return ClientReachabilityListResponse(
         items=items,
         invitation_text=invitation_copy(invitation_url),
         invitation_url=invitation_url,
+        invitation_available=(
+            profile.ready and bool(get_settings().client_telegram_bot_username)
+        ),
+        public_profile=profile,
     )
 
 

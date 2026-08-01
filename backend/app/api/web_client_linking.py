@@ -13,6 +13,9 @@ from app.schemas.client_linking import (
     ClientLinkUndoResponse,
     ClientPhonePreselect,
     ClientReachabilityListResponse,
+    GeneralClientInviteResponse,
+    MasterPublicProfileResponse,
+    MasterPublicProfileUpdate,
     PersonalClientInviteResponse,
     PersonalClientLinkRevokeResponse,
 )
@@ -26,8 +29,11 @@ from app.services.web_auth import require_web_session_identity, validate_web_bou
 from app.services.web_client_linking import (
     booking_request_phone_preselect,
     client_invitation_url,
+    get_or_create_general_invitation,
     list_client_reachability,
+    public_profile_response,
     revoke_open_personal_links,
+    save_public_profile,
 )
 from app.services.web_portal_auth import require_effective_owner_identity
 
@@ -70,6 +76,17 @@ def _require_client_invitation_url(start_token: str) -> str:
     return invitation_url
 
 
+def _require_public_profile(
+    session: Session,
+    identity: RequestIdentity,
+) -> None:
+    if not public_profile_response(session, identity).ready:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "master_public_profile_required"},
+        )
+
+
 @router.get("/reachability", response_model=ClientReachabilityListResponse)
 def reachability(
     session: SessionDependency,
@@ -81,6 +98,36 @@ def reachability(
         identity,
         connected_only=connected_only,
     )
+
+
+@router.put("/public-profile", response_model=MasterPublicProfileResponse)
+def public_profile_update(
+    body: MasterPublicProfileUpdate,
+    request: Request,
+    session: SessionDependency,
+    identity: WriteIdentityDependency,
+) -> MasterPublicProfileResponse:
+    validate_web_boundary(request)
+    return save_public_profile(
+        session,
+        identity,
+        display_name=body.display_name,
+        public_contact=body.public_contact,
+    )
+
+
+@router.post("/general-link", response_model=GeneralClientInviteResponse)
+def general_link_create(
+    request: Request,
+    session: SessionDependency,
+    identity: WriteIdentityDependency,
+) -> GeneralClientInviteResponse:
+    validate_web_boundary(request)
+    try:
+        invitation_url = get_or_create_general_invitation(session, identity)
+    except SchedulingDomainError as exc:
+        raise _translate(exc) from exc
+    return GeneralClientInviteResponse(invitation_url=invitation_url)
 
 
 @router.get("/notices", response_model=ClientLinkNoticeListResponse)
@@ -121,8 +168,7 @@ def personal_link_create(
     identity: WriteIdentityDependency,
 ) -> PersonalClientInviteResponse:
     validate_web_boundary(request)
-    # Check environment configuration before creating a one-time token. A UI
-    # configuration error must not leave an invisible invitation behind.
+    _require_public_profile(session, identity)
     _require_client_invitation_url("config-check")
     try:
         created = create_personal_client_link(
