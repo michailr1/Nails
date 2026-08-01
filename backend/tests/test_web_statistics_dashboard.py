@@ -1,3 +1,8 @@
+from pathlib import Path
+
+STATIC = Path(__file__).parents[1] / "app" / "web_static"
+
+
 def test_web_statistics_assets_are_loaded(client, clean_database):
     response = client.get("/web/")
 
@@ -40,10 +45,12 @@ def test_web_statistics_mobile_layout_prevents_overflow_and_bottom_nav_overlap(
     clean_database,
 ):
     response = client.get("/web/web-statistics.css")
+    base_css = (STATIC / "styles.css").read_text(encoding="utf-8")
 
     assert response.status_code == 200
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in response.text
-    assert "padding-bottom: calc(7rem + env(safe-area-inset-bottom));" in response.text
+    assert ".main { padding: 24px 16px 96px; }" in base_css
+    assert ".main" not in response.text
     assert "overflow-wrap: anywhere;" in response.text
     assert "overflow-x: auto;" in response.text
     assert "min-width: 36rem;" in response.text
