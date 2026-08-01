@@ -36,7 +36,7 @@ client_forward_disabled_assertion='  systemctl is-active --quiet nails-client-fo
 
 [[ "$(grep -Fxc "$assignment" "$DEPLOY_SCRIPT")" -eq 1 ]] || \
   die "deploy.sh BACKEND_ENV contract changed; adapter requires review"
-[[ "$(grep -Fxc "$client_forward_invocation" "$DEPLOY_SCRIPT")" -eq 4 ]] || \
+[[ "$(grep -Fc "$client_forward_invocation" "$DEPLOY_SCRIPT")" -eq 4 ]] || \
   die "deploy.sh client-forward invocation contract changed; adapter requires review"
 [[ "$(grep -Fxc "$client_forward_disabled_assertion" "$DEPLOY_SCRIPT")" -eq 1 ]] || \
   die "deploy.sh client-forward disabled assertion contract changed; adapter requires review"
@@ -86,21 +86,27 @@ awk \
   -v assertion_replacement='  printf '\''candidate_client_forward_preserved=true\\n'\''' \
   -v assertion_target="$client_forward_disabled_assertion" \
   '{
-    if ($0 == env_target) print env_replacement
-    else if ($0 == forward_target) print forward_replacement
-    else if ($0 == assertion_target) print assertion_replacement
-    else print
+    if ($0 == env_target) {
+      print env_replacement
+    } else if (index($0, forward_target) > 0) {
+      sub(forward_target, forward_replacement)
+      print
+    } else if ($0 == assertion_target) {
+      print assertion_replacement
+    } else {
+      print
+    }
   }' \
   "$DEPLOY_SCRIPT" >"$runtime_script"
 chmod 700 "$runtime_script"
 
 [[ "$(grep -Fxc 'BACKEND_ENV="${NAILS_CANDIDATE_ENV:-/opt/nails/.env}"' "$runtime_script")" -eq 1 ]] || \
   die "failed to construct isolated candidate deploy script"
-[[ "$(grep -Fxc 'bash "$NAILS_CANDIDATE_CLIENT_FORWARD_GUARD"' "$runtime_script")" -eq 4 ]] || \
+[[ "$(grep -Fc 'bash "$NAILS_CANDIDATE_CLIENT_FORWARD_GUARD"' "$runtime_script")" -eq 4 ]] || \
   die "failed to guard every client-forward invocation"
 [[ "$(grep -Fxc "  printf 'candidate_client_forward_preserved=true\\n'" "$runtime_script")" -eq 1 ]] || \
   die "failed to preserve active production client-forward assertion"
-[[ "$(grep -Fxc "$client_forward_invocation" "$runtime_script")" -eq 0 ]] || \
+[[ "$(grep -Fc "$client_forward_invocation" "$runtime_script")" -eq 0 ]] || \
   die "unguarded client-forward invocation remains"
 
 printf 'candidate_env_isolated=true\n'
