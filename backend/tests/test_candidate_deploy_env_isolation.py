@@ -28,8 +28,10 @@ def test_candidate_adapter_guards_exact_normative_contract():
     assert "deploy.sh BACKEND_ENV contract changed; adapter requires review" in source
 
     assert 'client_forward_invocation=' in source
-    assert '"$(grep -Fxc "$client_forward_invocation" "$DEPLOY_SCRIPT")" -eq 4' in source
+    assert '"$(grep -Fc "$client_forward_invocation" "$DEPLOY_SCRIPT")" -eq 4' in source
     assert "deploy.sh client-forward invocation contract changed; adapter requires review" in source
+    assert "index($0, forward_target) > 0" in source
+    assert "sub(forward_target, forward_replacement)" in source
     assert 'client_forward_disabled_assertion=' in source
     assert (
         "deploy.sh client-forward disabled assertion contract changed; "
