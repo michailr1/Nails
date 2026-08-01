@@ -39,6 +39,35 @@ class GeneralClientInviteResponse(BaseModel):
     invitation_url: str
 
 
+class MasterPublicProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=160)
+    public_contact: str | None = Field(default=None, max_length=160)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str) -> str:
+        candidate = " ".join(value.split())
+        if not candidate:
+            raise ValueError("display_name must not be empty")
+        return candidate
+
+    @field_validator("public_contact")
+    @classmethod
+    def normalize_public_contact(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = " ".join(value.split())
+        return candidate or None
+
+
+class MasterPublicProfileResponse(BaseModel):
+    ready: bool
+    display_name: str | None = None
+    public_contact: str | None = None
+
+
 class PersonalClientInviteResponse(BaseModel):
     invitation_url: str
     expires_at: datetime
@@ -76,6 +105,7 @@ class ClientReachabilityListResponse(BaseModel):
     invitation_text: str
     invitation_url: str | None = None
     invitation_available: bool = False
+    public_profile: MasterPublicProfileResponse
 
 
 class ClientPhonePreselect(BaseModel):
