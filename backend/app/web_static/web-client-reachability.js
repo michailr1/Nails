@@ -132,6 +132,30 @@ function decorateClientCards(reachability) {
   bindPersonalInviteButtons();
 }
 
+async function showGeneralInvitation(button) {
+  const page = document.querySelector("#page-content");
+  if (!page) return;
+  button.disabled = true;
+  try {
+    const payload = await api("/web/api/client-linking/general-link", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    if (payload.invitation_url) {
+      renderInviteBlock(page, { url: payload.invitation_url });
+      page.querySelector(".client-invite-block")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  } catch (error) {
+    if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
+    const line = document.createElement("div");
+    line.className = "panel error-state";
+    line.textContent = clientLinkErrorText(error);
+    page.prepend(line);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function renderReachabilityControls(reachability) {
   const actions = document.querySelector("#page-actions");
   if (!actions) return;
@@ -142,19 +166,15 @@ function renderReachabilityControls(reachability) {
       <input id="connected-clients-only" type="checkbox" ${clientReachabilityState.connectedOnly ? "checked" : ""}>
       <span>Кому можно написать</span>
     </label>
-    <button id="show-client-invitation" class="secondary-button" type="button" ${reachability.invitation_url ? "" : "disabled"}>Пригласить клиенток</button>`;
+    <button id="show-client-invitation" class="secondary-button" type="button" ${reachability.invitation_available ? "" : "disabled"}>Пригласить клиенток</button>`;
   actions.prepend(wrapper);
 
   document.querySelector("#connected-clients-only")?.addEventListener("change", (event) => {
     clientReachabilityState.connectedOnly = event.target.checked;
     renderClients();
   });
-  document.querySelector("#show-client-invitation")?.addEventListener("click", () => {
-    const page = document.querySelector("#page-content");
-    if (page && reachability.invitation_url) {
-      renderInviteBlock(page, { url: reachability.invitation_url });
-      page.querySelector(".client-invite-block")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+  document.querySelector("#show-client-invitation")?.addEventListener("click", (event) => {
+    showGeneralInvitation(event.currentTarget);
   });
 }
 
