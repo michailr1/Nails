@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import UTC, datetime
 from urllib.parse import quote
@@ -42,6 +43,43 @@ def invitation_copy(invitation_url: str | None) -> str:
     if invitation_url is None:
         return _INVITATION_LEAD
     return f"{_INVITATION_LEAD}\n\n{invitation_url}"
+
+
+def get_or_create_general_invitation(
+    session: Session,
+    identity: RequestIdentity,
+) -> str:
+    if not get_settings().client_telegram_bot_username:
+        raise SchedulingDomainError(
+            "client_bot_username_not_configured",
+            status_code=503,
+        )
+    token = session.scalar(
+        select(MasterLinkToken.token)
+        .where(
+            MasterLinkToken.owner_user_id == identity.user_id,
+            MasterLinkToken.revoked_at.is_(None),
+        )
+        .order_by(MasterLinkToken.created_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if token is None:
+        token = secrets.token_urlsafe(32)
+        session.add(
+            MasterLinkToken(
+                token=token,
+                owner_user_id=identity.user_id,
+            )
+        )
+        session.commit()
+    invitation_url = client_invitation_url(token)
+    if invitation_url is None:
+        raise SchedulingDomainError(
+            "client_bot_username_not_configured",
+            status_code=503,
+        )
+    return invitation_url
 
 
 def booking_request_phone_preselect(
@@ -139,6 +177,7 @@ def list_client_reachability(
         items=items,
         invitation_text=invitation_copy(invitation_url),
         invitation_url=invitation_url,
+        invitation_available=bool(get_settings().client_telegram_bot_username),
     )
 
 
