@@ -31,6 +31,7 @@ assignment='BACKEND_ENV="/opt/nails/.env"'
 [[ "$(grep -Fxc "$assignment" "$DEPLOY_SCRIPT")" -eq 1 ]] || \
   die "deploy.sh BACKEND_ENV contract changed; adapter requires review"
 
+install -d -m 700 /opt/nails/tmp
 runtime_script="$(mktemp /opt/nails/tmp/candidate-deploy.XXXXXX.sh)"
 cleanup() {
   rm -f -- "$runtime_script"
@@ -49,4 +50,8 @@ chmod 700 "$runtime_script"
 printf 'candidate_env_isolated=true\n'
 printf 'production_env_unchanged=true\n'
 
-NAILS_BACKEND_ENV="$CANDIDATE_ENV" exec bash "$runtime_script" "$1"
+set +e
+NAILS_CANDIDATE_ENV="$CANDIDATE_ENV" bash "$runtime_script" "$1"
+status=$?
+set -e
+exit "$status"
