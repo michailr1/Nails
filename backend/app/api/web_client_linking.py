@@ -13,6 +13,7 @@ from app.schemas.client_linking import (
     ClientLinkUndoResponse,
     ClientPhonePreselect,
     ClientReachabilityListResponse,
+    GeneralClientInviteResponse,
     PersonalClientInviteResponse,
     PersonalClientLinkRevokeResponse,
 )
@@ -26,6 +27,7 @@ from app.services.web_auth import require_web_session_identity, validate_web_bou
 from app.services.web_client_linking import (
     booking_request_phone_preselect,
     client_invitation_url,
+    get_or_create_general_invitation,
     list_client_reachability,
     revoke_open_personal_links,
 )
@@ -83,6 +85,20 @@ def reachability(
     )
 
 
+@router.post("/general-link", response_model=GeneralClientInviteResponse)
+def general_link_create(
+    request: Request,
+    session: SessionDependency,
+    identity: WriteIdentityDependency,
+) -> GeneralClientInviteResponse:
+    validate_web_boundary(request)
+    try:
+        invitation_url = get_or_create_general_invitation(session, identity)
+    except SchedulingDomainError as exc:
+        raise _translate(exc) from exc
+    return GeneralClientInviteResponse(invitation_url=invitation_url)
+
+
 @router.get("/notices", response_model=ClientLinkNoticeListResponse)
 def notices(
     session: SessionDependency,
@@ -121,8 +137,6 @@ def personal_link_create(
     identity: WriteIdentityDependency,
 ) -> PersonalClientInviteResponse:
     validate_web_boundary(request)
-    # Check environment configuration before creating a one-time token. A UI
-    # configuration error must not leave an invisible invitation behind.
     _require_client_invitation_url("config-check")
     try:
         created = create_personal_client_link(
