@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "backend" / "app" / "web_static"
 INDEX = WEB / "index.html"
 STYLES = WEB / "styles.css"
+CLIENTS = WEB / "web-clients.css"
 MOBILE_LAYOUT = WEB / "web-mobile-acceptance.js"
 
 COLOR_LITERAL = re.compile(
@@ -166,4 +167,33 @@ def test_public_profile_definition_list_uses_shared_card_layout():
         r"[^}]*margin:\s*0;",
         styles,
         flags=re.DOTALL,
+    )
+
+
+def test_public_profile_form_is_contained_on_mobile():
+    clients = CLIENTS.read_text(encoding="utf-8")
+
+    assert re.search(
+        r"\.client-public-profile-panel\s*\{[^}]*min-width:\s*0;"
+        r"[^}]*overflow:\s*hidden;",
+        clients,
+        flags=re.DOTALL,
+    )
+    assert re.search(
+        r"\.client-public-profile-form\s+label\s*\{[^}]*display:\s*grid;"
+        r"[^}]*min-width:\s*0;",
+        clients,
+        flags=re.DOTALL,
+    )
+    assert re.search(
+        r"\.client-public-profile-form\s+input\s*\{[^}]*width:\s*100%;"
+        r"[^}]*min-width:\s*0;",
+        clients,
+        flags=re.DOTALL,
+    )
+    assert re.search(
+        r"@media\s*\(max-width:\s*760px\)[\s\S]*"
+        r"\.client-public-profile-form\s+\.client-invite-actions\s*\{"
+        r"[^}]*grid-template-columns:\s*1fr;",
+        clients,
     )
