@@ -32,6 +32,9 @@ WEB_BASE="http://127.0.0.1:8220"
 API_IMAGE="nails-nails-api:latest"
 WEB_IMAGE="nails-nails-web:latest"
 CLIENT_BOT_IMAGE="nails-nails-client-bot:latest"
+LEGACY_CLIENT_BOT_SERVICE="nails-client-bot.service"
+LEGACY_CLIENT_BOT_UNIT="/etc/systemd/system/nails-client-bot.service"
+LEGACY_CLIENT_BOT_STATUS="/run/nails/client-bot-status.json"
 PROFILE="/root/.hermes/profiles/nails"
 HERMES_ENV="${PROFILE}/.env"
 HERMES_BIN="/usr/local/lib/hermes-agent/venv/bin/hermes"
@@ -72,6 +75,7 @@ WEB_CONTAINER_EXISTED="false"
 CLIENT_BOT_CONTAINER_EXISTED="false"
 CLIENT_BOT_CONTAINER_WAS_RUNNING="false"
 CLIENT_RUNTIME_ENABLED="false"
+CLIENT_BOT_SINGLETON="false"
 RUNTIME_MUTATED="false"
 RUNNING_CLIENT_BOT_SHA="disabled"
 
@@ -122,6 +126,48 @@ validate_client_runtime_config() {
     }
     printf 'true\n'
   )
+}
+
+remove_legacy_client_bot_runtime() {
+  systemctl disable --now "$LEGACY_CLIENT_BOT_SERVICE" >/dev/null 2>&1 || true
+  rm -f "$LEGACY_CLIENT_BOT_UNIT" "$LEGACY_CLIENT_BOT_STATUS"
+  systemctl daemon-reload
+  systemctl is-active --quiet "$LEGACY_CLIENT_BOT_SERVICE" && \
+    die "legacy host client bot is still active"
+  systemctl is-enabled --quiet "$LEGACY_CLIENT_BOT_SERVICE" && \
+    die "legacy host client bot is still enabled"
+}
+
+verify_client_bot_singleton() {
+  systemctl is-active --quiet "$LEGACY_CLIENT_BOT_SERVICE" && \
+    die "legacy host client bot is active"
+  systemctl is-enabled --quiet "$LEGACY_CLIENT_BOT_SERVICE" && \
+    die "legacy host client bot is enabled"
+  [[ ! -e "$LEGACY_CLIENT_BOT_UNIT" ]] || die "legacy host client bot unit still exists"
+
+  local container_count
+  container_count="$(docker ps -q --filter 'name=^/nails-nails-client-bot-1$' | wc -l)"
+  [[ "$container_count" -eq 1 ]] || die "expected exactly one client bot container"
+
+  compose exec -T nails-client-bot python - <<'PY'
+from pathlib import Path
+
+commands = []
+for entry in Path('/proc').iterdir():
+    if not entry.name.isdigit():
+        continue
+    try:
+        commands.append((entry / 'cmdline').read_bytes().replace(b'\0', b' ').decode())
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
+        pass
+
+current = [command for command in commands if 'app.client_bot_v1' in command]
+legacy = [command for command in commands if 'app.client_bot_runtime' in command]
+assert len(current) == 1, current
+assert not legacy, legacy
+print('CLIENT_BOT_PROCESS_SINGLETON_OK=true')
+PY
+  CLIENT_BOT_SINGLETON="true"
 }
 
 restore_backup_runtime() {
@@ -213,6 +259,7 @@ on_error() {
       bash "$WORKTREE/ops/digest/deploy_runtime.sh" restore "$RUNTIME_BACKUP" "$SOURCE_REF"
     NAILS_DEPLOY_WORKTREE="$WORKTREE" \
       bash "$WORKTREE/ops/client_forward/deploy_runtime.sh" restore "$RUNTIME_BACKUP" "$SOURCE_REF"
+    remove_legacy_client_bot_runtime
     user_systemctl start "$GATEWAY" >/dev/null 2>&1
     printf 'DEPLOY_ROLLED_BACK=true prev_sha=%s\n' "$PREV_SHA"
   else
@@ -394,7 +441,7 @@ systemd-analyze verify "$WORKTREE/ops/client_forward/nails-client-forward.servic
 
 CLIENT_BOT_BUILT_SHA="$(
   docker run --rm --network none "$CLIENT_BOT_IMAGE" \
-    python -c 'import os; print(os.environ.get("NAILS_GIT_SHA", "unknown"))'
+    python -c 'import os; from app.client_bot_v1 import run; print(os.environ.get("NAILS_GIT_SHA", "unknown"))'
 )"
 [[ "$CLIENT_BOT_BUILT_SHA" == "$RELEASE_SHA" ]] || die "client bot image built from wrong tree"
 printf 'BUILT_CLIENT_BOT_IMAGE_OK=true sha=%s\n' "$CLIENT_BOT_BUILT_SHA"
@@ -408,6 +455,7 @@ printf 'BUILT_WEB_IMAGE_OK=true sha=%s\n' "$WEB_BUILT_SHA"
 
 log "5. Остановка digest, client runtime, gateway и перезапуск nails-api + nails-web"
 RUNTIME_MUTATED="true"
+remove_legacy_client_bot_runtime
 NAILS_DEPLOY_WORKTREE="$WORKTREE" \
   bash "$WORKTREE/ops/digest/deploy_runtime.sh" stop "$RUNTIME_BACKUP" "$SOURCE_REF"
 NAILS_DEPLOY_WORKTREE="$WORKTREE" \
@@ -477,10 +525,13 @@ if [[ "$CLIENT_RUNTIME_ENABLED" == "true" ]]; then
       < /dev/null
   )"
   [[ "$RUNNING_CLIENT_BOT_SHA" == "$RELEASE_SHA" ]] || die "running client bot SHA mismatch"
+  verify_client_bot_singleton
 else
   compose rm -sf nails-client-bot >/dev/null 2>&1 || true
   systemctl is-active --quiet nails-client-forward.service && die "client forward is active while client runtime is disabled"
+  systemctl is-active --quiet "$LEGACY_CLIENT_BOT_SERVICE" && die "legacy client bot active while disabled"
   RUNNING_CLIENT_BOT_SHA="disabled"
+  CLIENT_BOT_SINGLETON="true"
 fi
 
 log "7. Старт gateway"
@@ -517,11 +568,11 @@ docker image rm "$ROLLBACK_CLIENT_BOT_IMAGE" >/dev/null 2>&1 || true
 trap - ERR
 
 if [[ "$SOURCE_REF" =~ ^origin/pr/[0-9]+$ ]]; then
-  printf 'CANDIDATE_DEPLOY_OK=true candidate_sha=%s baseline_sha=%s running_sha=%s running_web_sha=%s client_runtime_enabled=%s running_client_bot_sha=%s db_backup=%s\n' \
+  printf 'CANDIDATE_DEPLOY_OK=true candidate_sha=%s baseline_sha=%s running_sha=%s running_web_sha=%s client_runtime_enabled=%s running_client_bot_sha=%s client_bot_singleton=%s db_backup=%s\n' \
     "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_SHA" "$RUNNING_WEB_SHA" "$CLIENT_RUNTIME_ENABLED" \
-    "$RUNNING_CLIENT_BOT_SHA" "$DB_BACKUP"
+    "$RUNNING_CLIENT_BOT_SHA" "$CLIENT_BOT_SINGLETON" "$DB_BACKUP"
 else
-  printf 'DEPLOY_OK=true sha=%s prev_sha=%s running_web_sha=%s client_runtime_enabled=%s running_client_bot_sha=%s db_backup=%s\n' \
+  printf 'DEPLOY_OK=true sha=%s prev_sha=%s running_web_sha=%s client_runtime_enabled=%s running_client_bot_sha=%s client_bot_singleton=%s db_backup=%s\n' \
     "$RELEASE_SHA" "$PREV_SHA" "$RUNNING_WEB_SHA" "$CLIENT_RUNTIME_ENABLED" \
-    "$RUNNING_CLIENT_BOT_SHA" "$DB_BACKUP"
+    "$RUNNING_CLIENT_BOT_SHA" "$CLIENT_BOT_SINGLETON" "$DB_BACKUP"
 fi
