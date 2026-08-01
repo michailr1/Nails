@@ -29,6 +29,7 @@ class ClientContextResponse(BaseModel):
     message: str
     master: ClientMasterProjection | None = None
     masters: list[ClientMasterProjection] = Field(default_factory=list)
+    contact_required: bool = False
 
 
 class ClientStartRequest(BaseModel):
