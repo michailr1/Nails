@@ -54,14 +54,14 @@ fi
 install -d -m 700 "$tmp_root"
 runtime_script="$(mktemp "$tmp_root/candidate-deploy.XXXXXX.sh")"
 forward_guard="$(mktemp "$tmp_root/candidate-client-forward.XXXXXX.sh")"
-legacy_backup="$(mktemp "$tmp_root/candidate-client-bot-unit.XXXXXX")"
+legacy_unit_backup="$(mktemp "$tmp_root/candidate-client-bot-unit.XXXXXX")"
 legacy_unit=/etc/systemd/system/nails-client-bot.service
 legacy_existed=false
 legacy_enabled="$(systemctl is-enabled nails-client-bot.service 2>/dev/null || true)"
 legacy_active="$(systemctl is-active nails-client-bot.service 2>/dev/null || true)"
 legacy_restore=false
 if [[ -f "$legacy_unit" ]]; then
-  cp -a "$legacy_unit" "$legacy_backup"
+  cp -a "$legacy_unit" "$legacy_unit_backup"
   legacy_existed=true
 fi
 
@@ -69,7 +69,7 @@ restore_legacy_client_bot_unit() {
   [[ "$legacy_restore" == true ]] || return 0
   systemctl disable --now nails-client-bot.service >/dev/null 2>&1 || true
   if [[ "$legacy_existed" == true ]]; then
-    cp -a "$legacy_backup" "$legacy_unit"
+    cp -a "$legacy_unit_backup" "$legacy_unit"
   else
     rm -f "$legacy_unit"
   fi
@@ -83,7 +83,7 @@ cleanup() {
   local status=$?
   set +e
   restore_legacy_client_bot_unit
-  rm -f -- "$runtime_script" "$forward_guard" "$legacy_backup"
+  rm -f -- "$runtime_script" "$forward_guard" "$legacy_unit_backup"
   return "$status"
 }
 trap cleanup EXIT
