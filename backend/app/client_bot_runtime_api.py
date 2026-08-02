@@ -125,3 +125,28 @@ class RuntimeDraftNailsClientApi(DraftNailsClientApi):
             telegram_user_id=telegram_user_id,
             binding_id=binding_id,
         )
+
+    def booking_requests(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/client/requests",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+        )
+
+    def cancel_booking_request(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+        request_id: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/client/requests/{request_id}/cancel",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+        )
