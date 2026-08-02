@@ -233,6 +233,11 @@ async function showGeneralInvitation(button) {
 function renderReachabilityControls(reachability) {
   const actions = document.querySelector("#page-actions");
   if (!actions) return;
+
+  actions.querySelectorAll(".client-reachability-controls").forEach((control) => {
+    control.remove();
+  });
+
   const wrapper = document.createElement("div");
   wrapper.className = "client-reachability-controls";
   wrapper.innerHTML = `
@@ -243,11 +248,11 @@ function renderReachabilityControls(reachability) {
     <button id="show-client-invitation" class="secondary-button" type="button" ${reachability.invitation_available ? "" : "disabled"}>Общая ссылка для записи</button>`;
   actions.prepend(wrapper);
 
-  document.querySelector("#connected-clients-only")?.addEventListener("change", (event) => {
+  wrapper.querySelector("#connected-clients-only")?.addEventListener("change", (event) => {
     clientReachabilityState.connectedOnly = event.target.checked;
     renderClients();
   });
-  document.querySelector("#show-client-invitation")?.addEventListener("click", (event) => {
+  wrapper.querySelector("#show-client-invitation")?.addEventListener("click", (event) => {
     showGeneralInvitation(event.currentTarget);
   });
 }
