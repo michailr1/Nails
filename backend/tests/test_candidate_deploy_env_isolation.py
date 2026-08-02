@@ -19,10 +19,10 @@ def test_candidate_adapter_preserves_production_default_and_requires_override():
     deploy = DEPLOY.read_text(encoding="utf-8")
 
     assert 'BACKEND_ENV="/opt/nails/.env"' in deploy
-    assert 'NAILS_CANDIDATE_ENV is required' in adapter
-    assert 'candidate env must not be the production env' in adapter
-    assert 'candidate env must be a regular non-symlink file' in adapter
-    assert 'candidate env must not be accessible by group or others' in adapter
+    assert "NAILS_CANDIDATE_ENV is required" in adapter
+    assert "candidate env must not be the production env" in adapter
+    assert "candidate env must be a regular non-symlink file" in adapter
+    assert "candidate env must not be accessible by group or others" in adapter
 
 
 def _source_forward_lines() -> list[str]:
@@ -151,16 +151,21 @@ def test_candidate_adapter_keeps_fail_closed_contract_checks():
     assert "failed to guard every client-forward invocation" in source
     assert "unguarded client-forward invocation remains" in source
     assert "production Compose client-bot container ID changed" in source
-    assert "failed to guard every client-bot runtime mutation" in source
+    assert "failed to guard every client-bot stop" in source
+    assert "failed to guard every client-bot recreate" in source
+    assert "failed to guard every client-bot removal" in source
+    assert "unguarded client-bot stop remains" in source
+    assert "unguarded client-bot recreate remains" in source
+    assert "unguarded client-bot removal remains" in source
 
 
 def test_candidate_adapter_cleans_temporary_files_and_propagates_status():
     source = ADAPTER.read_text(encoding="utf-8")
 
     assert "trap cleanup EXIT" in source
-    assert 'rm -f -- "$runtime_script" "$client_forward_guard"' in source
+    assert 'rm -f -- "$runtime_script" "$forward_guard"' in source
     assert 'NAILS_CANDIDATE_ENV="$CANDIDATE_ENV"' in source
-    assert 'NAILS_CANDIDATE_CLIENT_FORWARD_GUARD="$client_forward_guard"' in source
+    assert 'NAILS_CANDIDATE_CLIENT_FORWARD_GUARD="$forward_guard"' in source
     assert 'bash "$runtime_script" "$1"' in source
     assert "status=$?" in source
     assert 'exit "$status"' in source
