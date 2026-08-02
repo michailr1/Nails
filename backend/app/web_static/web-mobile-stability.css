@@ -1,0 +1,63 @@
+html,
+body,
+#app {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+#app > .app-shell,
+.app-shell > .main,
+.main > #page-content,
+.main > .topbar,
+.topbar > .topbar-side,
+.topbar-side > .actions {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+img,
+svg,
+canvas,
+video,
+iframe {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  .app-shell > .sidebar {
+    left: 12px;
+    right: 12px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    width: auto;
+    max-width: calc(100% - 24px);
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .app-shell > .main {
+    width: 100%;
+    max-width: 100%;
+    padding-bottom: calc(var(--mobile-nav-height, 72px) + 64px + env(safe-area-inset-bottom));
+    overflow-x: clip;
+  }
+
+  .sidebar > .nav {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  #page-content > *,
+  .panel,
+  .client-card,
+  .statistics-panel,
+  .statistics-cards,
+  .statistics-grid,
+  .calendar-toolbar {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
