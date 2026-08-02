@@ -5,6 +5,7 @@
 # - delegates the read-only client-forward snapshot;
 # - suppresses client-forward stop/install/restore mutations;
 # - preserves the already-running production client-forward service;
+# - preserves the already-running production Compose client-bot container;
 # - restores the pre-candidate legacy client-bot unit state after acceptance.
 
 set -Eeuo pipefail
@@ -34,6 +35,9 @@ DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy.sh"
 assignment='BACKEND_ENV="/opt/nails/.env"'
 client_forward_invocation='bash "$WORKTREE/ops/client_forward/deploy_runtime.sh"'
 client_forward_disabled_assertion='  systemctl is-active --quiet nails-client-forward.service && die "client forward is active while client runtime is disabled"'
+client_bot_stop='compose stop nails-client-bot >/dev/null 2>&1 || true'
+client_bot_up='compose up -d --no-deps --force-recreate --no-build nails-client-bot >/dev/null'
+client_bot_remove='compose rm -sf nails-client-bot >/dev/null 2>&1 || true'
 
 [[ "$(grep -Fxc "$assignment" "$DEPLOY_SCRIPT")" -eq 1 ]] || \
   die "deploy.sh BACKEND_ENV contract changed; adapter requires review"
@@ -42,6 +46,19 @@ client_forward_count="$(grep -Fc "$client_forward_invocation" "$DEPLOY_SCRIPT")"
   die "deploy.sh client-forward invocation contract changed; adapter requires review"
 [[ "$(grep -Fxc "$client_forward_disabled_assertion" "$DEPLOY_SCRIPT")" -eq 1 ]] || \
   die "deploy.sh client-forward disabled assertion contract changed; adapter requires review"
+client_bot_stop_count="$(grep -Fc "$client_bot_stop" "$DEPLOY_SCRIPT")"
+client_bot_up_count="$(grep -Fc "$client_bot_up" "$DEPLOY_SCRIPT")"
+client_bot_remove_count="$(grep -Fc "$client_bot_remove" "$DEPLOY_SCRIPT")"
+client_bot_guard_count="$((client_bot_stop_count + client_bot_up_count + client_bot_remove_count))"
+[[ "$client_bot_stop_count" -gt 0 && "$client_bot_up_count" -gt 0 && "$client_bot_remove_count" -gt 0 ]] || \
+  die "deploy.sh client-bot runtime contract changed; adapter requires review"
+
+production_client_bot_id_before="$(
+  docker inspect -f '{{.Id}}' nails-nails-client-bot-1 2>/dev/null
+)" || die "production Compose client-bot container is required"
+[[ -n "$production_client_bot_id_before" ]] || die "production Compose client-bot container ID is empty"
+[[ "$(docker inspect -f '{{.State.Running}}' nails-nails-client-bot-1)" == true ]] || \
+  die "production Compose client-bot container must be running"
 
 render_dir="${NAILS_CANDIDATE_RENDER_DIR:-}"
 tmp_root="/opt/nails/tmp"
@@ -132,8 +149,14 @@ awk \
   -v forward_target="$client_forward_invocation" \
   -v assertion_replacement='  printf '\''candidate_client_forward_preserved=true\\n'\''' \
   -v assertion_target="$client_forward_disabled_assertion" \
+  -v bot_stop="$client_bot_stop" \
+  -v bot_up="$client_bot_up" \
+  -v bot_remove="$client_bot_remove" \
   '{
     p = index($0, forward_target)
+    trimmed = $0
+    sub(/^[[:space:]]+/, "", trimmed)
+    indent = substr($0, 1, length($0) - length(trimmed))
     if ($0 == env_target) {
       print env_replacement
     } else if (p > 0) {
@@ -141,6 +164,8 @@ awk \
         substr($0, p + length(forward_target))
     } else if ($0 == assertion_target) {
       print assertion_replacement
+    } else if (trimmed == bot_stop || trimmed == bot_up || trimmed == bot_remove) {
+      print indent "printf '\''candidate_client_bot_runtime_preserved=true\\n'\''"
     } else {
       print
     }
@@ -156,18 +181,25 @@ chmod 700 "$runtime_script"
   die "failed to preserve active production client-forward assertion"
 [[ "$(grep -Fc "$client_forward_invocation" "$runtime_script")" -eq 0 ]] || \
   die "unguarded client-forward invocation remains"
+[[ "$(grep -Fc "candidate_client_bot_runtime_preserved=true" "$runtime_script")" -eq "$client_bot_guard_count" ]] || \
+  die "failed to guard every client-bot runtime mutation"
+[[ "$(grep -Fc "$client_bot_stop" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot stop remains"
+[[ "$(grep -Fc "$client_bot_up" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot recreate remains"
+[[ "$(grep -Fc "$client_bot_remove" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot removal remains"
 
 if [[ -n "$render_dir" ]]; then
   install -m 700 "$runtime_script" "$render_dir/runtime.sh"
   install -m 700 "$client_forward_guard" "$render_dir/client-forward-guard.sh"
   printf 'candidate_render_only=true\n'
   printf 'candidate_render_forward_count=%s\n' "$client_forward_count"
+  printf 'candidate_render_client_bot_guard_count=%s\n' "$client_bot_guard_count"
   exit 0
 fi
 
 printf 'candidate_env_isolated=true\n'
 printf 'production_env_unchanged=true\n'
 printf 'production_client_forward_guarded=true\n'
+printf 'production_client_bot_guarded=true\n'
 printf 'production_legacy_client_bot_unit_snapshotted=true\n'
 legacy_restore_required="true"
 
@@ -177,4 +209,15 @@ NAILS_CANDIDATE_CLIENT_FORWARD_GUARD="$client_forward_guard" \
   bash "$runtime_script" "$1"
 status=$?
 set -e
+
+production_client_bot_id_after="$(
+  docker inspect -f '{{.Id}}' nails-nails-client-bot-1 2>/dev/null
+)" || die "production Compose client-bot container disappeared during candidate deploy"
+[[ "$production_client_bot_id_after" == "$production_client_bot_id_before" ]] || \
+  die "production Compose client-bot container ID changed during candidate deploy"
+[[ "$(docker inspect -f '{{.State.Running}}' nails-nails-client-bot-1)" == true ]] || \
+  die "production Compose client-bot container stopped during candidate deploy"
+printf 'production_client_bot_preserved=true\n'
+printf 'production_client_bot_container_id_unchanged=true\n'
+
 exit "$status"
