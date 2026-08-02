@@ -16,7 +16,7 @@ function reachabilityLabel(stateValue) {
   const labels = {
     reachable: "На связи в Telegram",
     unknown: "На связи в Telegram",
-    unreachable: "Не доставляется",
+    unreachable: "Сообщения не доходят",
     not_connected: "Не подключена",
   };
   return labels[stateValue] || labels.not_connected;
