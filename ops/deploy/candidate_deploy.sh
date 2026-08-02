@@ -25,17 +25,15 @@ DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy.sh"
 assignment='BACKEND_ENV="/opt/nails/.env"'
 forward_call='bash "$WORKTREE/ops/client_forward/deploy_runtime.sh"'
 forward_assert='  systemctl is-active --quiet nails-client-forward.service && die "client forward is active while client runtime is disabled"'
-bot_stop='compose stop nails-client-bot >/dev/null 2>&1 || true'
-bot_up='compose up -d --no-deps --force-recreate --no-build nails-client-bot >/dev/null'
-bot_remove='compose rm -sf nails-client-bot >/dev/null 2>&1 || true'
 
 [[ "$(grep -Fxc "$assignment" "$DEPLOY_SCRIPT")" -eq 1 ]] || die "deploy.sh BACKEND_ENV contract changed; adapter requires review"
 forward_count="$(grep -Fc "$forward_call" "$DEPLOY_SCRIPT")"
 [[ "$forward_count" -gt 0 ]] || die "deploy.sh client-forward invocation contract changed; adapter requires review"
 [[ "$(grep -Fxc "$forward_assert" "$DEPLOY_SCRIPT")" -eq 1 ]] || die "deploy.sh client-forward disabled assertion contract changed; adapter requires review"
-bot_stop_count="$(grep -Fc "$bot_stop" "$DEPLOY_SCRIPT")"
-bot_up_count="$(grep -Fc "$bot_up" "$DEPLOY_SCRIPT")"
-bot_remove_count="$(grep -Fc "$bot_remove" "$DEPLOY_SCRIPT")"
+
+bot_stop_count="$(awk 'index($0, "compose stop ") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$DEPLOY_SCRIPT")"
+bot_up_count="$(awk 'index($0, "compose up ") && index($0, "--force-recreate") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$DEPLOY_SCRIPT")"
+bot_remove_count="$(awk 'index($0, "compose rm ") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$DEPLOY_SCRIPT")"
 [[ "$bot_stop_count" -gt 0 && "$bot_up_count" -gt 0 && "$bot_remove_count" -gt 0 ]] || die "deploy.sh client-bot runtime contract changed; adapter requires review"
 bot_guard_count="$((bot_stop_count + bot_up_count + bot_remove_count))"
 
@@ -67,10 +65,14 @@ if [[ -f "$legacy_unit" ]]; then
   legacy_existed=true
 fi
 
-restore_legacy() {
+restore_legacy_client_bot_unit() {
   [[ "$legacy_restore" == true ]] || return 0
   systemctl disable --now nails-client-bot.service >/dev/null 2>&1 || true
-  if [[ "$legacy_existed" == true ]]; then cp -a "$legacy_backup" "$legacy_unit"; else rm -f "$legacy_unit"; fi
+  if [[ "$legacy_existed" == true ]]; then
+    cp -a "$legacy_backup" "$legacy_unit"
+  else
+    rm -f "$legacy_unit"
+  fi
   systemctl daemon-reload
   [[ "$legacy_enabled" == enabled ]] && systemctl enable nails-client-bot.service >/dev/null 2>&1 || true
   [[ "$legacy_active" == active ]] && systemctl start nails-client-bot.service >/dev/null 2>&1 || true
@@ -80,7 +82,7 @@ restore_legacy() {
 cleanup() {
   local status=$?
   set +e
-  restore_legacy
+  restore_legacy_client_bot_unit
   rm -f -- "$runtime_script" "$forward_guard" "$legacy_backup"
   return "$status"
 }
@@ -104,10 +106,7 @@ chmod 700 "$forward_guard"
 awk \
   -v env_target="$assignment" \
   -v forward_target="$forward_call" \
-  -v assertion_target="$forward_assert" \
-  -v bot_stop="$bot_stop" \
-  -v bot_up="$bot_up" \
-  -v bot_remove="$bot_remove" '
+  -v assertion_target="$forward_assert" '
   {
     p = index($0, forward_target)
     trimmed = $0
@@ -119,11 +118,11 @@ awk \
       print substr($0, 1, p - 1) "bash \"$NAILS_CANDIDATE_CLIENT_FORWARD_GUARD\"" substr($0, p + length(forward_target))
     } else if ($0 == assertion_target) {
       print "  printf '\''candidate_client_forward_preserved=true\\n'\''"
-    } else if (trimmed == bot_stop) {
+    } else if (index(trimmed, "compose stop ") && index(trimmed, "nails-client-bot")) {
       print indent ": # candidate preserves production client-bot stop"
-    } else if (trimmed == bot_up) {
+    } else if (index(trimmed, "compose up ") && index(trimmed, "--force-recreate") && index(trimmed, "nails-client-bot")) {
       print indent ": # candidate preserves production client-bot recreate"
-    } else if (trimmed == bot_remove) {
+    } else if (index(trimmed, "compose rm ") && index(trimmed, "nails-client-bot")) {
       print indent ": # candidate preserves production client-bot removal"
     } else {
       print
@@ -134,9 +133,12 @@ chmod 700 "$runtime_script"
 [[ "$(grep -Fxc 'BACKEND_ENV="${NAILS_CANDIDATE_ENV:-/opt/nails/.env}"' "$runtime_script")" -eq 1 ]] || die "failed to construct isolated candidate deploy script"
 [[ "$(grep -Fc 'bash "$NAILS_CANDIDATE_CLIENT_FORWARD_GUARD"' "$runtime_script")" -eq "$forward_count" ]] || die "failed to guard every client-forward invocation"
 [[ "$(grep -Fc "$forward_call" "$runtime_script")" -eq 0 ]] || die "unguarded client-forward invocation remains"
-[[ "$(grep -Fc "$bot_stop" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot stop remains"
-[[ "$(grep -Fc "$bot_up" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot recreate remains"
-[[ "$(grep -Fc "$bot_remove" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot removal remains"
+remaining_stop="$(awk 'index($0, "compose stop ") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$runtime_script")"
+remaining_up="$(awk 'index($0, "compose up ") && index($0, "--force-recreate") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$runtime_script")"
+remaining_remove="$(awk 'index($0, "compose rm ") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$runtime_script")"
+[[ "$remaining_stop" -eq 0 ]] || die "unguarded client-bot stop remains"
+[[ "$remaining_up" -eq 0 ]] || die "unguarded client-bot recreate remains"
+[[ "$remaining_remove" -eq 0 ]] || die "unguarded client-bot removal remains"
 [[ "$(grep -Fc 'candidate preserves production client-bot stop' "$runtime_script")" -eq "$bot_stop_count" ]] || die "failed to guard every client-bot stop"
 [[ "$(grep -Fc 'candidate preserves production client-bot recreate' "$runtime_script")" -eq "$bot_up_count" ]] || die "failed to guard every client-bot recreate"
 [[ "$(grep -Fc 'candidate preserves production client-bot removal' "$runtime_script")" -eq "$bot_remove_count" ]] || die "failed to guard every client-bot removal"
