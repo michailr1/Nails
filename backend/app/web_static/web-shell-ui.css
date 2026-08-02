@@ -58,29 +58,31 @@
 
 .client-reachability-actions {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   margin-top: 14px;
-  padding-top: 14px;
+  padding: 18px 20px 20px;
   border-top: 1px solid var(--border);
 }
 
 .client-personal-link-title {
   color: var(--text);
-  font-size: .84rem;
-  font-weight: 680;
+  font-size: .96rem;
+  font-weight: 720;
+  line-height: 1.3;
 }
 
 .client-personal-link-help {
+  max-width: 38rem;
   color: var(--muted);
-  font-size: .76rem;
-  line-height: 1.4;
+  font-size: .84rem;
+  line-height: 1.55;
 }
 
 .client-invite-block {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin-top: 14px;
-  padding: 14px;
+  padding: 18px;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--surface-muted);
@@ -95,6 +97,7 @@
 .client-invite-block a {
   min-width: 0;
   color: var(--primary-dark);
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
@@ -105,11 +108,82 @@
   gap: 8px;
 }
 
+.client-personal-invite-block {
+  margin-top: 2px;
+}
+
+.client-personal-invite-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.client-personal-invite-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.client-personal-invite-heading small {
+  max-width: 34rem;
+  line-height: 1.45;
+}
+
+.client-personal-close {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 650;
+}
+
+.client-personal-close:hover {
+  color: var(--text);
+  border-color: var(--primary);
+}
+
 .client-reachability-controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.long-absent-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(100%, 34rem);
+  gap: 8px;
+}
+
+.long-absent-actions > *,
+.long-absent-actions > [data-client-remind] {
+  min-width: 0;
+}
+
+.long-absent-actions > .secondary-button,
+.long-absent-actions > [data-client-remind] > .secondary-button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  box-sizing: border-box;
+  line-height: 1.15;
+  text-align: center;
+  text-decoration: none;
+  font: inherit;
+  font-weight: 680;
+}
+
+.long-absent-actions > [data-open-long-absent-client] {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 760px) {
@@ -178,5 +252,32 @@
   .client-invite-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .client-reachability-actions {
+    padding-inline: 18px;
+  }
+
+  .client-personal-invite-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .client-personal-close {
+    width: 100%;
+  }
+
+  .long-absent-actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 390px) {
+  .long-absent-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .long-absent-actions > [data-open-long-absent-client] {
+    grid-column: auto;
   }
 }
