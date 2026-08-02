@@ -4,8 +4,12 @@ let gatedSessionRequest = null;
 let challengeGateActive = Boolean(localStorage.getItem(LOGIN_CHALLENGE_BOOTSTRAP_KEY));
 let routeGateActive = true;
 
+function gateSessionBootstrap() {
+  return challengeGateActive || routeGateActive;
+}
+
 function releaseInitialSessionCheck() {
-  if (challengeGateActive || routeGateActive || !gatedSessionRequest) return false;
+  if (gateSessionBootstrap() || !gatedSessionRequest) return false;
   const { input, options, resolve, reject } = gatedSessionRequest;
   gatedSessionRequest = null;
   nativeFetch(input, options).then(resolve, reject);
@@ -29,7 +33,7 @@ window.fetch = (input, options = {}) => {
   const isInitialSessionCheck = requestMethod === "GET"
     && new URL(requestUrl, window.location.origin).pathname === "/web/api/auth/session";
 
-  if ((challengeGateActive || routeGateActive) && isInitialSessionCheck && !gatedSessionRequest) {
+  if (gateSessionBootstrap() && isInitialSessionCheck && !gatedSessionRequest) {
     return new Promise((resolve, reject) => {
       gatedSessionRequest = { input, options, resolve, reject };
     });
