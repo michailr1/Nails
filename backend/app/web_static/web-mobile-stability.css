@@ -5,12 +5,12 @@ body,
   overflow-x: clip;
 }
 
-.app-shell,
-.main,
-#page-content,
-.topbar,
-.topbar-side,
-.actions {
+#app > .app-shell,
+.app-shell > .main,
+.main > #page-content,
+.main > .topbar,
+.topbar > .topbar-side,
+.topbar-side > .actions {
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
