@@ -14,8 +14,8 @@ clientCard = function clientCardWithReachability(client) {
 
 function reachabilityLabel(stateValue) {
   const labels = {
-    reachable: "На связи",
-    unknown: "На связи",
+    reachable: "На связи в Telegram",
+    unknown: "На связи в Telegram",
     unreachable: "Не доставляется",
     not_connected: "Не подключена",
   };
