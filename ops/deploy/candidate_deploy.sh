@@ -164,8 +164,12 @@ awk \
         substr($0, p + length(forward_target))
     } else if ($0 == assertion_target) {
       print assertion_replacement
-    } else if (trimmed == bot_stop || trimmed == bot_up || trimmed == bot_remove) {
-      print indent "printf '\''candidate_client_bot_runtime_preserved=true\\n'\''"
+    } else if (trimmed == bot_stop) {
+      print indent "printf '\''candidate_client_bot_stop_preserved=true\\n'\''"
+    } else if (trimmed == bot_up) {
+      print indent "printf '\''candidate_client_bot_recreate_preserved=true\\n'\''"
+    } else if (trimmed == bot_remove) {
+      print indent "printf '\''candidate_client_bot_remove_preserved=true\\n'\''"
     } else {
       print
     }
@@ -181,8 +185,12 @@ chmod 700 "$runtime_script"
   die "failed to preserve active production client-forward assertion"
 [[ "$(grep -Fc "$client_forward_invocation" "$runtime_script")" -eq 0 ]] || \
   die "unguarded client-forward invocation remains"
-[[ "$(grep -Fc "candidate_client_bot_runtime_preserved=true" "$runtime_script")" -eq "$client_bot_guard_count" ]] || \
-  die "failed to guard every client-bot runtime mutation"
+[[ "$(grep -Fc "candidate_client_bot_stop_preserved=true" "$runtime_script")" -eq "$client_bot_stop_count" ]] || \
+  die "failed to guard every client-bot stop"
+[[ "$(grep -Fc "candidate_client_bot_recreate_preserved=true" "$runtime_script")" -eq "$client_bot_up_count" ]] || \
+  die "failed to guard every client-bot recreate"
+[[ "$(grep -Fc "candidate_client_bot_remove_preserved=true" "$runtime_script")" -eq "$client_bot_remove_count" ]] || \
+  die "failed to guard every client-bot removal"
 [[ "$(grep -Fc "$client_bot_stop" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot stop remains"
 [[ "$(grep -Fc "$client_bot_up" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot recreate remains"
 [[ "$(grep -Fc "$client_bot_remove" "$runtime_script")" -eq 0 ]] || die "unguarded client-bot removal remains"
