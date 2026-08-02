@@ -33,6 +33,29 @@ def _source_forward_lines() -> list[str]:
     ]
 
 
+def _install_fake_docker(tmp_path: Path) -> Path:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(mode=0o700)
+    docker = fake_bin / "docker"
+    docker.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -Eeuo pipefail\n"
+        "if [[ $1 == inspect && $2 == -f ]]; then\n"
+        "  case $3 in\n"
+        "    '{{.Id}}') printf 'candidate-test-client-bot-id\\n' ;;\n"
+        "    '{{.State.Running}}') printf 'true\\n' ;;\n"
+        "    *) exit 2 ;;\n"
+        "  esac\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf 'unexpected fake docker invocation: %s\\n' \"$*\" >&2\n"
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    docker.chmod(0o700)
+    return fake_bin
+
+
 def _render_adapter(tmp_path: Path) -> tuple[str, Path]:
     candidate_env = tmp_path / "candidate.env"
     candidate_env.write_text(
@@ -43,6 +66,7 @@ def _render_adapter(tmp_path: Path) -> tuple[str, Path]:
 
     render_dir = tmp_path / "render"
     render_dir.mkdir(mode=0o700)
+    fake_bin = _install_fake_docker(tmp_path)
 
     env = os.environ.copy()
     env.update(
@@ -50,6 +74,7 @@ def _render_adapter(tmp_path: Path) -> tuple[str, Path]:
             "NAILS_CANDIDATE_ENV": str(candidate_env),
             "NAILS_CANDIDATE_RENDER_DIR": str(render_dir),
             "NAILS_CANDIDATE_TMP_ROOT": str(tmp_path),
+            "PATH": f"{fake_bin}:{env['PATH']}",
         }
     )
     result = subprocess.run(
@@ -125,6 +150,8 @@ def test_candidate_adapter_keeps_fail_closed_contract_checks():
     ) in source
     assert "failed to guard every client-forward invocation" in source
     assert "unguarded client-forward invocation remains" in source
+    assert "production Compose client-bot container ID changed" in source
+    assert "failed to guard every client-bot runtime mutation" in source
 
 
 def test_candidate_adapter_cleans_temporary_files_and_propagates_status():
