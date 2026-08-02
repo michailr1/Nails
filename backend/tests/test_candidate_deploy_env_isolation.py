@@ -19,10 +19,10 @@ def test_candidate_adapter_preserves_production_default_and_requires_override():
     deploy = DEPLOY.read_text(encoding="utf-8")
 
     assert 'BACKEND_ENV="/opt/nails/.env"' in deploy
-    assert 'NAILS_CANDIDATE_ENV is required' in adapter
-    assert 'candidate env must not be the production env' in adapter
-    assert 'candidate env must be a regular non-symlink file' in adapter
-    assert 'candidate env must not be accessible by group or others' in adapter
+    assert "NAILS_CANDIDATE_ENV is required" in adapter
+    assert "candidate env must not be the production env" in adapter
+    assert "candidate env must be a regular non-symlink file" in adapter
+    assert "candidate env must not be accessible by group or others" in adapter
 
 
 def _source_forward_lines() -> list[str]:
@@ -31,6 +31,29 @@ def _source_forward_lines() -> list[str]:
         for line in DEPLOY.read_text(encoding="utf-8").splitlines()
         if FORWARD_TARGET in line
     ]
+
+
+def _install_fake_docker(tmp_path: Path) -> Path:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(mode=0o700)
+    docker = fake_bin / "docker"
+    docker.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -Eeuo pipefail\n"
+        "if [[ $1 == inspect && $2 == -f ]]; then\n"
+        "  case $3 in\n"
+        "    '{{.Id}}') printf 'candidate-test-client-bot-id\\n' ;;\n"
+        "    '{{.State.Running}}') printf 'true\\n' ;;\n"
+        "    *) exit 2 ;;\n"
+        "  esac\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf 'unexpected fake docker invocation: %s\\n' \"$*\" >&2\n"
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    docker.chmod(0o700)
+    return fake_bin
 
 
 def _render_adapter(tmp_path: Path) -> tuple[str, Path]:
@@ -43,6 +66,7 @@ def _render_adapter(tmp_path: Path) -> tuple[str, Path]:
 
     render_dir = tmp_path / "render"
     render_dir.mkdir(mode=0o700)
+    fake_bin = _install_fake_docker(tmp_path)
 
     env = os.environ.copy()
     env.update(
@@ -50,6 +74,7 @@ def _render_adapter(tmp_path: Path) -> tuple[str, Path]:
             "NAILS_CANDIDATE_ENV": str(candidate_env),
             "NAILS_CANDIDATE_RENDER_DIR": str(render_dir),
             "NAILS_CANDIDATE_TMP_ROOT": str(tmp_path),
+            "PATH": f"{fake_bin}:{env['PATH']}",
         }
     )
     result = subprocess.run(
@@ -125,15 +150,22 @@ def test_candidate_adapter_keeps_fail_closed_contract_checks():
     ) in source
     assert "failed to guard every client-forward invocation" in source
     assert "unguarded client-forward invocation remains" in source
+    assert "production Compose client-bot container ID changed" in source
+    assert "failed to guard every client-bot stop" in source
+    assert "failed to guard every client-bot recreate" in source
+    assert "failed to guard every client-bot removal" in source
+    assert "unguarded client-bot stop remains" in source
+    assert "unguarded client-bot recreate remains" in source
+    assert "unguarded client-bot removal remains" in source
 
 
 def test_candidate_adapter_cleans_temporary_files_and_propagates_status():
     source = ADAPTER.read_text(encoding="utf-8")
 
     assert "trap cleanup EXIT" in source
-    assert 'rm -f -- "$runtime_script" "$client_forward_guard"' in source
+    assert 'rm -f -- "$runtime_script" "$forward_guard"' in source
     assert 'NAILS_CANDIDATE_ENV="$CANDIDATE_ENV"' in source
-    assert 'NAILS_CANDIDATE_CLIENT_FORWARD_GUARD="$client_forward_guard"' in source
+    assert 'NAILS_CANDIDATE_CLIENT_FORWARD_GUARD="$forward_guard"' in source
     assert 'bash "$runtime_script" "$1"' in source
     assert "status=$?" in source
     assert 'exit "$status"' in source
