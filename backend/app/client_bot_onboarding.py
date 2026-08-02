@@ -5,8 +5,14 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from app.client_bot import format_catalog, master_picker_keyboard
+from app.client_bot import master_picker_keyboard
 from app.client_bot_booking_flow import DraftPlatformBot
+from app.client_bot_catalog_sections import (
+    catalog_categories,
+    category_page,
+    category_picker_keyboard,
+    parse_category_callback,
+)
 from app.client_bot_runtime_api import RuntimeDraftNailsClientApi
 
 
@@ -126,6 +132,30 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             self._menu_keyboard(telegram_user_id, master),
         )
 
+    def _show_catalog_sections(
+        self,
+        chat_id: int,
+        telegram_user_id: int,
+        binding_id: str,
+        *,
+        mode: str,
+    ) -> None:
+        catalog = self._nails.catalog(telegram_user_id, binding_id)
+        categories = catalog_categories(catalog, mode=mode)  # type: ignore[arg-type]
+        if not categories:
+            self._send(
+                chat_id,
+                "Прайс пока пуст." if mode == "price" else "Запись пока недоступна.",
+                self._menu_keyboard(telegram_user_id, catalog["master"]),
+            )
+            return
+        prompt = "Выберите раздел прайса:" if mode == "price" else "Что хотите сделать?"
+        self._send(
+            chat_id,
+            prompt,
+            category_picker_keyboard(catalog, mode=mode),  # type: ignore[arg-type]
+        )
+
     def _handle_contact(
         self,
         message: dict[str, Any],
@@ -174,7 +204,9 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
 
     def handle_callback(self, callback: dict[str, Any]) -> None:
         data = str(callback.get("data") or "")
-        if data != "masters" and not data.startswith(("price:", "send:")):
+        action, _, rest = data.partition(":")
+        handled = {"masters", "price", "book", "cat", "pcat", "help", "send"}
+        if data != "masters" and action not in handled:
             return super().handle_callback(callback)
 
         callback_id = str(callback.get("id") or "")
@@ -195,13 +227,39 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             )
             return
 
-        action, _, rest = data.partition(":")
-        if action == "price":
+        if action in {"price", "book"}:
+            binding_id = str(uuid.UUID(rest))
+            self._show_catalog_sections(
+                chat_id,
+                telegram_user_id,
+                binding_id,
+                mode="price" if action == "price" else "book",
+            )
+            return
+
+        if action in {"cat", "pcat"}:
+            binding_id, category_index, page = parse_category_callback(rest)
+            catalog = self._nails.catalog(telegram_user_id, binding_id)
+            text, keyboard = category_page(
+                catalog,
+                category_index=category_index,
+                page=page,
+                mode="price" if action == "pcat" else "book",
+            )
+            self._send(chat_id, text, keyboard)
+            return
+
+        if action == "help":
             binding_id = str(uuid.UUID(rest))
             catalog = self._nails.catalog(telegram_user_id, binding_id)
+            self._runtime_api().contact_forward(
+                telegram_user_id,
+                binding_id,
+                "Клиентка не уверена, какую процедуру выбрать, и просит подсказать.",
+            )
             self._send(
                 chat_id,
-                format_catalog(catalog),
+                "Передала мастеру, что вам нужна помощь с выбором. Она ответит в Telegram.",
                 self._menu_keyboard(telegram_user_id, catalog["master"]),
             )
             return

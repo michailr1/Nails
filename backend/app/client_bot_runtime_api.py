@@ -82,3 +82,17 @@ class RuntimeDraftNailsClientApi(DraftNailsClientApi):
                 "phone_number": phone_number,
             },
         )
+
+    def contact_forward(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+        message_text: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/client/contact-forward",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+            json={"message_text": message_text},
+        )
