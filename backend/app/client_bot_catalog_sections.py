@@ -60,10 +60,6 @@ def short_service_name(service: dict[str, Any], category: str) -> str:
     folded_category = category.casefold()
     if folded_name.startswith(folded_category):
         shortened = name[len(category) :].lstrip(" —–-:,.·")
-        for prefix in ("с ", "без ", "и "):
-            if shortened.casefold().startswith(prefix):
-                shortened = shortened[len(prefix) :]
-                break
         if shortened:
             name = shortened
     return name[:48]
