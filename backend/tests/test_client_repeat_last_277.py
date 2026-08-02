@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from pathlib import Path
-
-import pytest
+from types import SimpleNamespace
 
 from app.client_bot_onboarding import client_menu_keyboard, repeat_draft_text
 from app.services import client_repeat_last
