@@ -113,29 +113,29 @@
 }
 
 @media (max-width: 760px) {
-  .sidebar .brand,
-  .sidebar-bottom {
+  .app-shell .sidebar .brand,
+  .app-shell .sidebar-bottom {
     display: none;
   }
 
-  .sidebar {
+  .app-shell > .sidebar {
     padding-block: 8px calc(8px + env(safe-area-inset-bottom));
   }
 
-  .nav {
+  .sidebar > .nav {
     min-height: 48px;
   }
 
-  .topbar {
+  .main > .topbar {
     position: relative;
     padding-top: 4px;
   }
 
-  .topbar > div:first-child {
+  .main > .topbar > div:first-child {
     padding-right: 78px;
   }
 
-  .topbar-side {
+  .main > .topbar .topbar-side {
     position: static;
   }
 
