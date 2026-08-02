@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from app.client_bot import BotConfig, TelegramApi
-from app.client_bot_onboarding import OnboardingDraftPlatformBot
+from app.client_bot_contact_actions import ContactAwareOnboardingBot
 from app.client_bot_outbox import (
     ClientBotRuntimeState,
     ClientNotificationApi,
@@ -80,7 +80,7 @@ def run() -> None:
             base_url=config.client_api_url,
             api_key=config.client_api_key,
         )
-        bot = OnboardingDraftPlatformBot(telegram, nails)
+        bot = ContactAwareOnboardingBot(telegram, nails)
         notifications = ClientNotificationApi(client, outbox_config)
         drainer = NotificationDrainer(telegram, notifications, outbox_config, state)
         drain_thread = threading.Thread(
