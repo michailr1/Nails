@@ -75,27 +75,38 @@ def test_category_page_has_at_most_six_readable_buttons():
 
     assert len(service_buttons) == PAGE_SIZE
     assert all(len(button["text"]) <= 48 for button in service_buttons)
-    assert any(button["text"].endswith("гель-лаком") for button in service_buttons)
+    assert any(button["text"].endswith("С гель-лаком") for button in service_buttons)
     assert "2 100 ₽" in text
     assert "~2 ч 10 мин" in text
     assert "Маникюр с гель-лаком" not in text
+    assert "С гель-лаком" in text
 
 
 def test_category_page_paginates_instead_of_flattening_catalog():
     _, first = category_page(_catalog(), category_index=0, page=0, mode="book")
-    second_callback = next(value for value in callbacks(first) if value.startswith("cat:") and value.endswith(":1"))
+    second_callback = next(
+        value
+        for value in callbacks(first)
+        if value.startswith("cat:") and value.endswith(":1")
+    )
     assert len(second_callback.encode()) <= 64
 
-    text, second = category_page(_catalog(), category_index=0, page=1, mode="book")
+    text, second = category_page(
+        _catalog(), category_index=0, page=1, mode="book"
+    )
     assert "1. комбинированный" in text
-    service_callbacks = [value for value in callbacks(second) if value.startswith("svc:")]
+    service_callbacks = [
+        value for value in callbacks(second) if value.startswith("svc:")
+    ]
     assert len(service_callbacks) == 1
 
 
 def test_price_is_also_opened_by_sections_and_lists_addons():
     catalog = _catalog()
     assert catalog_categories(catalog, mode="price") == ["Маникюр", "Педикюр"]
-    text, keyboard = category_page(catalog, category_index=0, page=1, mode="price")
+    text, keyboard = category_page(
+        catalog, category_index=0, page=1, mode="price"
+    )
 
     assert "Снятие" in text
     assert not any(value.startswith("svc:") for value in callbacks(keyboard))
@@ -103,8 +114,18 @@ def test_price_is_also_opened_by_sections_and_lists_addons():
 
 
 def test_short_name_removes_only_repeated_category_prefix():
-    assert short_service_name(_service("Маникюр с гель-лаком", "Маникюр"), "Маникюр") == "гель-лаком"
-    assert short_service_name(_service("Покрытие гель-лаком", "Маникюр"), "Маникюр") == "Покрытие гель-лаком"
+    assert (
+        short_service_name(
+            _service("Маникюр с гель-лаком", "Маникюр"), "Маникюр"
+        )
+        == "с гель-лаком"
+    )
+    assert (
+        short_service_name(
+            _service("Покрытие гель-лаком", "Маникюр"), "Маникюр"
+        )
+        == "Покрытие гель-лаком"
+    )
     assert format_duration({"duration_minutes": 60}) == "~1 ч"
     assert format_duration({"duration_minutes": 45}) == "~45 мин"
 
@@ -129,7 +150,9 @@ def test_help_uses_existing_contact_forward_and_not_a_new_domain_model():
     onboarding = (APP / "client_bot_onboarding.py").read_text(encoding="utf-8")
     runtime_api = (APP / "client_bot_runtime_api.py").read_text(encoding="utf-8")
 
-    assert '"Не знаю, подскажите"' in (APP / "client_bot_catalog_sections.py").read_text(encoding="utf-8")
+    assert '"Не знаю, подскажите"' in (
+        APP / "client_bot_catalog_sections.py"
+    ).read_text(encoding="utf-8")
     assert ".contact_forward(" in onboarding
     assert '"/api/v1/client/contact-forward"' in runtime_api
     assert "Клиентка не уверена, какую процедуру выбрать" in onboarding
