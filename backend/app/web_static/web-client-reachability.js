@@ -23,10 +23,20 @@ function reachabilityLabel(stateValue) {
 }
 
 function renderReachabilityBadge(card, stateValue) {
+  card.querySelector(".client-reachability-badge")?.remove();
+  const name = card.querySelector(".client-card-summary-main strong, h3");
+  if (!name) return;
+  let row = name.closest(".client-name-status");
+  if (!row) {
+    row = document.createElement("span");
+    row.className = "client-name-status";
+    name.replaceWith(row);
+    row.append(name);
+  }
   const badge = document.createElement("span");
   badge.className = `client-reachability-badge reachability-${stateValue}`;
   badge.textContent = reachabilityLabel(stateValue);
-  card.querySelector("h3")?.insertAdjacentElement("afterend", badge);
+  row.append(badge);
 }
 
 function clientLinkErrorText(error) {
@@ -36,7 +46,7 @@ function clientLinkErrorText(error) {
     client_bot_username_not_configured: "Ссылка для записи пока не настроена.",
     master_public_profile_required: "Сначала заполните, как вас увидят клиентки.",
   };
-  return messages[error.message] || "Не удалось подготовить приглашение.";
+  return messages[error.message] || "Не удалось подготовить ссылку.";
 }
 
 async function copyText(value, statusNode) {
@@ -69,9 +79,10 @@ function renderInviteBlock(container, { url, personal = false }) {
   container.querySelector(".client-invite-block")?.remove();
   const block = document.createElement("div");
   block.className = "client-invite-block";
-  const copy = inviteCopy(url);
+  const copy = personal ? url : inviteCopy(url);
   block.innerHTML = `
-    <p>${personal ? "Персональная ссылка для этой клиентки" : "Приглашение для записи в Telegram"}</p>
+    <p>${personal ? "Ссылка для этой клиентки" : "Общая ссылка для записи"}</p>
+    ${personal ? "" : '<small class="muted">Подходит для любой новой клиентки. Персональная ссылка находится в карточке конкретной клиентки.</small>'}
     <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>
     <div class="client-invite-actions">
       <button class="secondary-button" type="button" data-copy-invite>Скопировать</button>
@@ -127,6 +138,7 @@ function renderPublicProfileSetup(reachability) {
 async function createPersonalInvite(clientId, button) {
   const card = button.closest(".client-card");
   const actions = button.closest(".client-reachability-actions");
+  const status = actions?.querySelector("[data-personal-copy-status]");
   button.disabled = true;
   actions?.querySelector(".client-invite-error")?.remove();
   try {
@@ -136,6 +148,7 @@ async function createPersonalInvite(clientId, button) {
     });
     if (card && payload.invitation_url) {
       renderInviteBlock(card, { url: payload.invitation_url, personal: true });
+      await copyText(payload.invitation_url, status);
     }
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
@@ -160,19 +173,37 @@ function decorateClientCards(reachability) {
   clientReachabilityState.byClient = new Map(
     (reachability.items || []).map((item) => [item.client_id, item.state]),
   );
-  document.querySelectorAll(".client-card[data-client-id]").forEach((card) => {
-    const clientId = card.dataset.clientId;
+  document.querySelectorAll(".client-card").forEach((card) => {
+    const opener = card.querySelector("[data-client-open]");
+    const clientId = card.dataset.clientId || opener?.dataset.clientOpen;
+    if (!clientId) return;
+    card.dataset.clientId = clientId;
     const stateValue = clientReachabilityState.byClient.get(clientId) || "not_connected";
     renderReachabilityBadge(card, stateValue);
+    card.querySelector(".client-reachability-actions")?.remove();
     const actions = document.createElement("div");
     actions.className = "client-reachability-actions";
-    if (stateValue === "not_connected" || stateValue === "unreachable") {
-      const disabled = reachability.public_profile?.ready ? "" : "disabled";
-      actions.innerHTML = `<button class="secondary-button" type="button" data-personal-invite="${escapeHtml(clientId)}" ${disabled}>Пригласить</button>`;
-      card.append(actions);
-    }
+    const disabled = reachability.public_profile?.ready ? "" : "disabled";
+    actions.innerHTML = `
+      <span class="client-personal-link-title">Ссылка для этой клиентки</span>
+      <span class="client-personal-link-help">Откроется только для этой карточки. Кнопка сразу скопирует готовую ссылку.</span>
+      <button class="secondary-button" type="button" data-personal-invite="${escapeHtml(clientId)}" ${disabled}>Скопировать ссылку</button>
+      <span class="muted small" data-personal-copy-status aria-live="polite"></span>`;
+    card.append(actions);
   });
   bindPersonalInviteButtons();
+}
+
+function renderReachabilitySummary(reachability) {
+  const page = document.querySelector("#page-content");
+  if (!page) return;
+  page.querySelector(".client-reachability-summary")?.remove();
+  const items = reachability.items || [];
+  const connected = items.filter((item) => ["reachable", "unknown"].includes(item.state)).length;
+  const summary = document.createElement("div");
+  summary.className = "info-note client-reachability-summary";
+  summary.innerHTML = `<strong>${connected} из ${items.length} на связи</strong><span>Статус каждой клиентки показан рядом с именем.</span>`;
+  page.prepend(summary);
 }
 
 async function showGeneralInvitation(button) {
@@ -209,7 +240,7 @@ function renderReachabilityControls(reachability) {
       <input id="connected-clients-only" type="checkbox" ${clientReachabilityState.connectedOnly ? "checked" : ""}>
       <span>Кому можно написать</span>
     </label>
-    <button id="show-client-invitation" class="secondary-button" type="button" ${reachability.invitation_available ? "" : "disabled"}>Пригласить клиенток</button>`;
+    <button id="show-client-invitation" class="secondary-button" type="button" ${reachability.invitation_available ? "" : "disabled"}>Общая ссылка для записи</button>`;
   actions.prepend(wrapper);
 
   document.querySelector("#connected-clients-only")?.addEventListener("change", (event) => {
@@ -244,6 +275,7 @@ renderClients = async function renderClientsWithReachability() {
     const reachability = await api(`/web/api/client-linking/reachability${query}`);
     decorateClientCards(reachability);
     renderReachabilityControls(reachability);
+    renderReachabilitySummary(reachability);
     renderPublicProfileSetup(reachability);
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
