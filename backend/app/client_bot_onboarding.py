@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from app.client_bot import master_picker_keyboard
-from app.client_bot_booking_flow import DraftPlatformBot
+from app.client_bot_booking_flow import DraftPlatformBot, draft_date_picker_keyboard
 from app.client_bot_catalog_sections import (
     catalog_categories,
     category_page,
@@ -52,17 +52,39 @@ def client_menu_keyboard(
     master: dict[str, Any],
     *,
     show_masters: bool,
+    repeat_available: bool = False,
 ) -> dict[str, Any]:
     binding_id = str(uuid.UUID(str(master.get("binding_id") or "")))
-    rows: list[list[dict[str, str]]] = [
+    rows: list[list[dict[str, str]]] = []
+    if repeat_available:
+        rows.append(
+            [
+                {
+                    "text": "🔁 Как в прошлый раз",
+                    "callback_data": f"repeat:{binding_id}",
+                }
+            ]
+        )
+    rows.append(
         [
             {"text": "💅 Прайс", "callback_data": f"price:{binding_id}"},
             {"text": "📅 Записаться", "callback_data": f"book:{binding_id}"},
         ]
-    ]
+    )
     if show_masters:
         rows.append([{"text": "👩 Ваши мастера", "callback_data": "masters"}])
     return {"inline_keyboard": rows}
+
+
+def repeat_draft_text(draft: dict[str, Any]) -> str:
+    lines = ["Как в прошлый раз", "", str(draft.get("service_name") or "Процедура")]
+    quantities = draft.get("addon_quantities") or {}
+    for name in draft.get("addon_names") or []:
+        quantity = int(quantities.get(str(name).casefold(), 1))
+        suffix = f" ×{quantity}" if quantity > 1 else ""
+        lines.append(f"+ {name}{suffix}")
+    lines.extend(["", "Выберите новую дату:"])
+    return "\n".join(lines)
 
 
 class OnboardingDraftPlatformBot(DraftPlatformBot):
@@ -82,9 +104,15 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
         telegram_user_id: int,
         master: dict[str, Any],
     ) -> dict[str, Any]:
+        binding_id = str(uuid.UUID(str(master.get("binding_id") or "")))
+        repeat = self._runtime_api().repeat_last_preview(
+            telegram_user_id,
+            binding_id,
+        )
         return client_menu_keyboard(
             master,
             show_masters=self._has_multiple_masters(telegram_user_id),
+            repeat_available=repeat.get("available") is True,
         )
 
     def _show_context(
@@ -205,7 +233,16 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
     def handle_callback(self, callback: dict[str, Any]) -> None:
         data = str(callback.get("data") or "")
         action, _, rest = data.partition(":")
-        handled = {"masters", "price", "book", "cat", "pcat", "help", "send"}
+        handled = {
+            "masters",
+            "price",
+            "book",
+            "cat",
+            "pcat",
+            "help",
+            "repeat",
+            "send",
+        }
         if data != "masters" and action not in handled:
             return super().handle_callback(callback)
 
@@ -234,6 +271,19 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
                 telegram_user_id,
                 binding_id,
                 mode="price" if action == "price" else "book",
+            )
+            return
+
+        if action == "repeat":
+            binding_id = str(uuid.UUID(rest))
+            draft = self._runtime_api().create_repeat_last_draft(
+                telegram_user_id,
+                binding_id,
+            )
+            self._send(
+                chat_id,
+                repeat_draft_text(draft),
+                draft_date_picker_keyboard(str(draft["draft_id"])),
             )
             return
 
