@@ -61,7 +61,7 @@ def short_service_name(service: dict[str, Any], category: str) -> str:
     if folded_name.startswith(folded_category):
         shortened = name[len(category) :].lstrip(" —–-:,.·")
         if shortened:
-            name = shortened
+            name = shortened[:1].upper() + shortened[1:]
     return name[:48]
 
 
