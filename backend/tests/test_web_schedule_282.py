@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 from types import SimpleNamespace
 
+from app.schemas.scheduling import AvailabilitySummary
 from app.schemas.web_schedule import WebScheduleRangeQuery
 from app.services.web_schedule import get_web_schedule
 
@@ -31,9 +32,9 @@ def test_web_schedule_reads_existing_day_view(monkeypatch):
             weekday_iso=day.isoweekday(),
             availability_known=True,
             availability=[
-                SimpleNamespace(
-                    start_time="10:00:00",
-                    end_time="20:00:00",
+                AvailabilitySummary(
+                    start_time=time(10, 0),
+                    end_time=time(20, 0),
                     is_available=True,
                     note=None,
                 )
