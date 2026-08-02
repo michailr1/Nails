@@ -96,3 +96,27 @@ class RuntimeDraftNailsClientApi(DraftNailsClientApi):
             binding_id=binding_id,
             json={"message_text": message_text},
         )
+
+    def repeat_last_preview(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/client/booking-drafts/repeat-last",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+        )
+
+    def create_repeat_last_draft(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/client/booking-drafts/repeat-last",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+        )
