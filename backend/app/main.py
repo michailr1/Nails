@@ -25,6 +25,7 @@ from app.api.web_booking_mutations import router as web_booking_mutations_router
 from app.api.web_client_linking import router as web_client_linking_router
 from app.api.web_client_requests import router as web_client_requests_router
 from app.api.web_read import router as web_read_router
+from app.api.web_schedule import router as web_schedule_router
 from app.config import get_settings
 from app.db import get_engine
 from app.web_proxy import resolve_client_ip
@@ -46,7 +47,6 @@ _WEB_CONTENT_SECURITY_POLICY = "; ".join(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Fail fast on missing/invalid APP_TIMEZONE, DATABASE_URL, or INTERNAL_API_KEY.
     get_settings()
     get_engine()
     yield
@@ -109,6 +109,7 @@ app.include_router(web_read_router)
 app.include_router(web_booking_mutations_router)
 app.include_router(web_client_requests_router)
 app.include_router(web_client_linking_router)
+app.include_router(web_schedule_router)
 app.mount(
     "/web",
     StaticFiles(directory=_WEB_STATIC_DIR, html=True),
