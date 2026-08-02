@@ -32,18 +32,20 @@ def _request_status(value: str) -> str:
 
 def _request_text(item: dict[str, Any]) -> str:
     starts_at = datetime.fromisoformat(str(item["starts_at"]).replace("Z", "+00:00"))
-    lines = [
-        str(item.get("service_name") or "Процедура"),
-        f"{starts_at:%d.%m} в {starts_at:%H:%M}",
-        _request_status(str(item.get("status") or "")),
-    ]
-    return "\n".join(lines)
+    return "\n".join(
+        (
+            str(item.get("service_name") or "Процедура"),
+            f"{starts_at:%d.%m} в {starts_at:%H:%M}",
+            _request_status(str(item.get("status") or "")),
+        )
+    )
 
 
 class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
     def __init__(self, telegram, nails) -> None:
         super().__init__(telegram, nails)
         self._pending_messages: dict[int, str] = {}
+        self._request_bindings: dict[tuple[int, str], str] = {}
 
     def _menu_keyboard(
         self,
@@ -80,14 +82,14 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
             return
         for item in requests[:10]:
             rows: list[list[dict[str, str]]] = []
+            request_id = str(uuid.UUID(str(item.get("id") or "")))
+            self._request_bindings[(telegram_user_id, request_id)] = binding_id
             if item.get("status") == "pending":
                 rows.append(
                     [
                         {
                             "text": "Отменить заявку",
-                            "callback_data": (
-                                f"cancelreq:{binding_id}:{item.get('id')}"
-                            ),
+                            "callback_data": f"cancelreq:{request_id}",
                         }
                     ]
                 )
@@ -126,11 +128,15 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
             self._show_requests(chat_id, telegram_user_id, _binding_id(rest))
             return
         if action == "cancelreq":
-            binding_id, request_id = rest.split(":", 1)
+            request_id = str(uuid.UUID(rest))
+            binding_id = self._request_bindings.get((telegram_user_id, request_id))
+            if binding_id is None:
+                self._send(chat_id, "Откройте «Мои записи» и попробуйте ещё раз.")
+                return
             self._runtime_api().cancel_booking_request(
                 telegram_user_id,
-                _binding_id(binding_id),
-                str(uuid.UUID(request_id)),
+                binding_id,
+                request_id,
             )
             self._send(chat_id, "Заявка отменена.")
             return
