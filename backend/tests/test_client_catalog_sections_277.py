@@ -94,7 +94,7 @@ def test_category_page_paginates_instead_of_flattening_catalog():
     text, second = category_page(
         _catalog(), category_index=0, page=1, mode="book"
     )
-    assert "1. комбинированный" in text
+    assert "1. Комбинированный" in text
     service_callbacks = [
         value for value in callbacks(second) if value.startswith("svc:")
     ]
@@ -118,7 +118,7 @@ def test_short_name_removes_only_repeated_category_prefix():
         short_service_name(
             _service("Маникюр с гель-лаком", "Маникюр"), "Маникюр"
         )
-        == "с гель-лаком"
+        == "С гель-лаком"
     )
     assert (
         short_service_name(
