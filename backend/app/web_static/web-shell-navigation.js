@@ -49,7 +49,6 @@ document.addEventListener("click", (event) => {
 window.addEventListener("popstate", cabinetRestoreView);
 
 const initialCabinetView = cabinetViewFromLocation();
-const initialCabinetViewChanged = state.view !== initialCabinetView;
 state.view = initialCabinetView;
 cabinetWriteRoute(initialCabinetView, { replace: true });
-if (initialCabinetViewChanged) renderApp();
+window.__nailsWebAuthBootstrap?.releaseRouteCheck();
