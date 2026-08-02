@@ -96,3 +96,32 @@ class RuntimeDraftNailsClientApi(DraftNailsClientApi):
             binding_id=binding_id,
             json={"message_text": message_text},
         )
+
+    def repeat_last_preview(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+    ) -> dict[str, Any]:
+        if getattr(self, "_client", None) is None:
+            return {"available": False}
+        try:
+            return self._request(
+                "GET",
+                "/api/v1/client/booking-drafts/repeat-last",
+                telegram_user_id=telegram_user_id,
+                binding_id=binding_id,
+            )
+        except ClientDomainRemoteCallError:
+            return {"available": False}
+
+    def create_repeat_last_draft(
+        self,
+        telegram_user_id: int,
+        binding_id: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/client/booking-drafts/repeat-last",
+            telegram_user_id=telegram_user_id,
+            binding_id=binding_id,
+        )

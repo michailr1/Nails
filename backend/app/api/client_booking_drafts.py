@@ -18,6 +18,7 @@ from app.schemas.client_booking_drafts import (
     ClientBookingDraftSubmitResponse,
     ClientBookingDraftSummary,
 )
+from app.schemas.client_repeat_last import ClientRepeatLastPreview
 from app.services.client_booking_draft_submit import submit_booking_draft_idempotent
 from app.services.client_booking_drafts import (
     create_booking_draft,
@@ -27,6 +28,10 @@ from app.services.client_booking_drafts import (
     update_booking_draft_composition,
 )
 from app.services.client_contour import require_client_binding
+from app.services.client_repeat_last import (
+    create_repeat_last_draft,
+    repeat_last_preview,
+)
 from app.services.scheduling_common import SchedulingDomainError
 
 router = APIRouter(
@@ -88,6 +93,32 @@ def create_draft(
     try:
         context = _binding_context(session, identity, binding_header)
         return create_booking_draft(session, context, body.service_name)
+    except SchedulingDomainError as exc:
+        raise _translate(exc) from exc
+
+
+@router.get("/repeat-last", response_model=ClientRepeatLastPreview)
+def get_repeat_last(
+    session: SessionDependency,
+    identity: ClientIdentityDependency,
+    binding_header: BindingHeader,
+) -> ClientRepeatLastPreview:
+    try:
+        context = _binding_context(session, identity, binding_header)
+        return repeat_last_preview(session, context)
+    except SchedulingDomainError as exc:
+        raise _translate(exc) from exc
+
+
+@router.post("/repeat-last", response_model=ClientBookingDraftSummary)
+def create_repeat_last(
+    session: SessionDependency,
+    identity: ClientIdentityDependency,
+    binding_header: BindingHeader,
+) -> ClientBookingDraftSummary:
+    try:
+        context = _binding_context(session, identity, binding_header)
+        return create_repeat_last_draft(session, context)
     except SchedulingDomainError as exc:
         raise _translate(exc) from exc
 
