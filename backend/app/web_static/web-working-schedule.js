@@ -2,6 +2,7 @@ const WORKING_SCHEDULE_DAYS = 14;
 const WORKING_SCHEDULE_WEEKDAYS = [
   "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье",
 ];
+const WORKING_SCHEDULE_HELP = "Именно в эти часы клиентки видят свободное время для записи. Конкретные слоты также зависят от длительности процедуры, времени на подготовку и уборку и уже созданных записей.";
 
 function scheduleIsoDate(day) {
   const year = day.getFullYear();
@@ -123,14 +124,14 @@ async function renderWorkingSchedule(panel) {
   panel.innerHTML = `
     <p class="eyebrow">Доступное время</p>
     <h2>Рабочий график</h2>
-    <p class="working-schedule-help">Именно в эти часы клиентки видят свободное время для записи.</p>
+    <p class="working-schedule-help">${escapeHtml(WORKING_SCHEDULE_HELP)}</p>
     <p class="muted">Загружаем график…</p>`;
   try {
     const result = await api(`/web/api/schedule?date_from=${scheduleIsoDate(today)}&date_to=${scheduleIsoDate(until)}`);
     panel.innerHTML = `
       <p class="eyebrow">Доступное время</p>
       <h2>Рабочий график</h2>
-      <p class="working-schedule-help">Именно в эти часы клиентки видят свободное время для записи.</p>
+      <p class="working-schedule-help">${escapeHtml(WORKING_SCHEDULE_HELP)}</p>
       <p class="working-schedule-timezone">Часовой пояс: ${escapeHtml(result.timezone)}</p>
       <div class="working-schedule-days"></div>`;
     const list = panel.querySelector(".working-schedule-days");
