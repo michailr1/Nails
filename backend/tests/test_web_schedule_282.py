@@ -70,6 +70,9 @@ def test_profile_ui_explains_client_visible_hours_and_day_states():
     source = (WEB / "web-working-schedule.js").read_text(encoding="utf-8")
 
     assert "Именно в эти часы клиентки видят свободное время для записи" in source
+    assert "длительности процедуры" in source
+    assert "времени на подготовку и уборку" in source
+    assert "уже созданных записей" in source
     assert "Рабочий день" in source
     assert "Выходной" in source
     assert "Не задано" in source
