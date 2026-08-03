@@ -9,6 +9,23 @@ from .web_login_tool import web_login
 
 PORTAL_URL = "https://de.funti.cc:8446/web/"
 
+_EFFECTIVE_SCHEDULE_CONTRACT = (
+    "When the master asks about working hours, why client slots stop early, whether a "
+    "date is a day off, or what clients can currently book, never answer from reusable "
+    "default_work_intervals alone. Resolve the concrete date when needed and call "
+    "action=day_view. Treat dated availability from that result as the effective "
+    "client-visible work window. Explain that concrete free slots are further reduced "
+    "by service duration, preparation and cleanup buffers, and existing bookings. "
+    "Default work intervals are only a reusable template and must never be described "
+    "as the current factual schedule. If no concrete date was provided, ask for the "
+    "date instead of claiming that working hours are not saved."
+)
+
+if _EFFECTIVE_SCHEDULE_CONTRACT not in NAILS_SCHEDULING["description"]:
+    NAILS_SCHEDULING["description"] = (
+        f"{NAILS_SCHEDULING['description']} {_EFFECTIVE_SCHEDULE_CONTRACT}"
+    )
+
 
 def open_master_portal(raw_args: str) -> str:
     del raw_args
