@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -63,23 +62,11 @@ def _scheduled_bookings_for_day(
 
 
 def _booking_fits_update(booking: Booking, update: AvailabilityDayReplace) -> bool:
-    if update.state == "unavailable":
-        return False
-    if update.state == "unknown":
-        # Unknown removes the dated suggestion window without declaring the day
-        # unavailable. Existing explicit bookings remain valid by ADR-006.
-        return True
-
-    timezone = app_timezone()
-    reserved_start = booking.reserved_starts_at.astimezone(timezone)
-    reserved_end = booking.reserved_ends_at.astimezone(timezone)
-    return any(
-        datetime.combine(update.day, interval.start_time, tzinfo=timezone)
-        <= reserved_start
-        and reserved_end
-        <= datetime.combine(update.day, interval.end_time, tzinfo=timezone)
-        for interval in update.intervals
-    )
+    del booking
+    # ADR-006: positive intervals only define suggestion windows. Removing them
+    # or changing their boundaries cannot invalidate an explicit booking.
+    # Only marking the whole day unavailable conflicts with existing bookings.
+    return update.state != "unavailable"
 
 
 def _validate_booking_safety(
