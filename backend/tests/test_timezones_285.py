@@ -170,3 +170,29 @@ def test_web_booking_update_resolves_identity_owner_timezone():
 
     assert "owner_timezone(session, identity.user_id)" in source
     assert "app_timezone" not in source
+
+
+def test_date_resolution_uses_request_owner_timezone():
+    source = (SERVICES / "scheduling_dates.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "datetime.now(timezone).date()" in source
+    assert "app_timezone" not in source
+
+
+def test_scheduling_queries_use_owner_timezone_for_day_bounds_and_slots():
+    source = (SERVICES / "scheduling_queries.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "owner_timezone(session, owner_user_id)" in source
+    assert "app_timezone" not in source
+
+
+def test_digest_uses_one_owner_timezone_for_boundaries_and_presenters():
+    source = (SERVICES / "scheduling_digest.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "datetime.combine(body.local_day, time.min, tzinfo=timezone)" in source
+    assert "_digest_booking(booking, client, service, timezone)" in source
+    assert "timezone=timezone" in source
+    assert "app_timezone" not in source
