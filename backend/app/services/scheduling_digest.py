@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta, tzinfo
 from decimal import Decimal
 from typing import Any
 
@@ -27,8 +27,9 @@ from app.schemas.scheduling_digest import (
     FinalizationDigestLongAbsentClient,
     FinalizationDigestOwnersResponse,
 )
-from app.services.scheduling_common import app_timezone, lock_owner_schedule
+from app.services.scheduling_common import lock_owner_schedule
 from app.services.web_statistics import _long_absent_clients, _visit_history_rows
+from app.timezones import owner_timezone
 
 
 def list_digest_owners(session: Session) -> FinalizationDigestOwnersResponse:
@@ -68,8 +69,8 @@ def _digest_booking(
     booking: Booking,
     client: Client,
     service: Service,
+    timezone: tzinfo,
 ) -> FinalizationDigestBooking:
-    timezone = app_timezone()
     return FinalizationDigestBooking(
         client_public_name=client.public_name,
         service_name=service.public_name,
@@ -91,10 +92,11 @@ def _digest_long_absent_clients(
     *,
     current: datetime,
     generated_day,
+    timezone: tzinfo,
 ) -> list[FinalizationDigestLongAbsentClient]:
     _, clients = _long_absent_clients(
         _visit_history_rows(session, identity, current=current),
-        timezone=app_timezone(),
+        timezone=timezone,
         generated_day=generated_day,
     )
     return [
@@ -131,7 +133,7 @@ def claim_finalization_digest(
             bookings=[],
         )
 
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     local_midnight = datetime.combine(body.local_day, time.min, tzinfo=timezone)
     day_start = local_midnight.astimezone(UTC)
     next_day_start = (local_midnight + timedelta(days=1)).astimezone(UTC)
@@ -204,7 +206,7 @@ def claim_finalization_digest(
         claim_id=claim_id,
         local_day=body.local_day,
         bookings=[
-            _digest_booking(booking, client, service)
+            _digest_booking(booking, client, service, timezone)
             for booking, client, service in rows
         ],
         long_absent_clients=_digest_long_absent_clients(
@@ -212,6 +214,7 @@ def claim_finalization_digest(
             identity,
             current=cutoff,
             generated_day=body.local_day,
+            timezone=timezone,
         ),
     )
 
