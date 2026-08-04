@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -8,6 +9,7 @@ from app.client_bot_outbox import (
     ClientBotRuntimeState,
     NotificationDrainer,
     OutboxRuntimeConfig,
+    format_client_appointment_time,
     notification_text,
     telegram_failure,
 )
@@ -103,6 +105,33 @@ def test_rate_limit_is_retry_not_unreachable():
     assert code == "telegram_rate_limited"
 
 
+def test_utc_time_is_formatted_in_master_timezone():
+    timezone = ZoneInfo("Europe/Moscow")
+
+    assert (
+        format_client_appointment_time(
+            "2026-08-11T10:45:00+00:00",
+            timezone=timezone,
+        )
+        == "11.08 в 13:45"
+    )
+
+
+def test_approval_notification_never_contains_raw_iso():
+    approved = notification_text(
+        "approved",
+        {
+            "service_name": "Маникюр",
+            "starts_at": "2026-08-11T10:45:00+00:00",
+        },
+        timezone=ZoneInfo("Europe/Moscow"),
+    )
+
+    assert "Запись подтверждена" in approved
+    assert "11.08 в 13:45" in approved
+    assert "2026-08-11T10:45:00+00:00" not in approved
+
+
 def test_notification_copy_is_transactional_and_bounded():
     approved = notification_text(
         "approved",
@@ -113,4 +142,5 @@ def test_notification_copy_is_transactional_and_bounded():
     assert "подтверждена" in approved
     assert "не смог" in rejected
     assert "отменена" in cancelled
+    assert "T12:00:00" not in approved
     assert len(approved) < 512
