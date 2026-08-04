@@ -138,3 +138,17 @@ def test_booking_presenter_resolves_identity_owner_timezone():
 
     assert "owner_timezone(session, identity.user_id)" in source
     assert "app_timezone" not in source
+
+
+def test_booking_management_resolves_identity_owner_timezone():
+    source = (SERVICES / "scheduling_management.py").read_text(encoding="utf-8")
+
+    assert source.count("owner_timezone(session, identity.user_id)") == 3
+    assert "app_timezone" not in source
+
+
+def test_web_booking_update_resolves_identity_owner_timezone():
+    source = (SERVICES / "web_booking_update.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "app_timezone" not in source
