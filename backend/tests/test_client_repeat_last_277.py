@@ -131,16 +131,18 @@ def test_repeat_routes_precede_dynamic_draft_route():
     assert "response_model=ClientRepeatLastPreview" in source
 
 
-def test_repeat_uses_history_without_new_domain_entity_or_migration():
+def test_repeat_uses_history_without_new_domain_entity_or_repeat_migration():
     source = (APP / "services" / "client_repeat_last.py").read_text(encoding="utf-8")
     models = (APP / "client_models.py").read_text(encoding="utf-8")
+    migrations = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "backend" / "alembic" / "versions").glob("*.py")
+    )
 
     assert "select(Booking)" in source
     assert "catalog_items_snapshot" in source
     assert "BookingStatus.scheduled" in source
     assert "BookingStatus.completed" in source
     assert "class Repeat" not in models
-    assert not any(
-        path.name.startswith("0023")
-        for path in (ROOT / "backend" / "alembic" / "versions").glob("*.py")
-    )
+    assert "repeat_last" not in migrations
+    assert "repeat_booking" not in migrations
