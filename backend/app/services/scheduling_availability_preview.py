@@ -20,7 +20,8 @@ from app.services.scheduling_availability import (
     _current_signature,
     _desired_signature,
 )
-from app.services.scheduling_common import app_timezone, day_bounds
+from app.services.scheduling_common import day_bounds
+from app.timezones import owner_timezone
 
 
 def _proposed_availability(update: AvailabilityDayReplace) -> list[AvailabilitySummary]:
@@ -62,7 +63,7 @@ def _preview_day(
     desired = _desired_signature(update)
     changed = _current_signature(existing) != sorted(desired)
 
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     starts_at, ends_at = day_bounds(update.day, timezone)
     booking_rows = session.execute(
         select(Booking, Client.public_name, Service.public_name)
