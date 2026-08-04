@@ -16,11 +16,11 @@ from app.schemas.scheduling import (
 )
 from app.services.scheduling_common import (
     SchedulingDomainError,
-    app_timezone,
     availability_for_day,
     day_bounds,
     lock_owner_schedule,
 )
+from app.timezones import owner_timezone
 
 
 def _desired_signature(update: AvailabilityDayReplace) -> list[tuple[Any, ...]]:
@@ -46,7 +46,7 @@ def _scheduled_bookings_for_day(
     identity: RequestIdentity,
     update: AvailabilityDayReplace,
 ) -> list[Booking]:
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     starts_at, ends_at = day_bounds(update.day, timezone)
     return session.scalars(
         select(Booking)
