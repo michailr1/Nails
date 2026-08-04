@@ -13,7 +13,6 @@ from app.services.scheduling_common import (
     DEFAULT_SUGGESTION_END,
     DEFAULT_SUGGESTION_START,
     SLOT_STEP_MINUTES,
-    app_timezone,
     availability_for_day,
     calculate_reservation,
     ceil_to_step,
@@ -22,6 +21,7 @@ from app.services.scheduling_common import (
 )
 from app.services.scheduling_lookup import get_active_service
 from app.services.scheduling_presenters import booking_summary, service_summary
+from app.timezones import owner_timezone
 
 
 def _bookings_for_range(
@@ -51,7 +51,7 @@ def get_day_view(
     identity: RequestIdentity,
     day: date,
 ) -> CatalogDayViewResponse:
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     start_at, end_at = day_bounds(day, timezone)
     availability = availability_for_day(session, identity.user_id, day)
     bookings = _bookings_for_range(
@@ -87,7 +87,7 @@ def find_free_slots_for_owner(
     day: date,
     service_name: str,
 ) -> FreeSlotsResponse:
-    timezone = app_timezone()
+    timezone = owner_timezone(session, owner_user_id)
     service = get_active_service(session, owner_user_id, service_name)
     availability = availability_for_day(session, owner_user_id, day)
     is_day_off = any(not item.is_available for item in availability)
