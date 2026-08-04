@@ -78,11 +78,11 @@ def _translate_domain_error(exc: SchedulingDomainError) -> HTTPException:
 @router.post("/date/resolve", response_model=DateResolveResponse)
 def date_resolve(
     body: DateResolveRequest,
+    session: SessionDependency,
     identity: IdentityDependency,
 ) -> DateResolveResponse:
-    del identity
     try:
-        return resolve_date(body)
+        return resolve_date(session, identity, body)
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
 
