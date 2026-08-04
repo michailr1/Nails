@@ -15,6 +15,7 @@ from app.timezones import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+SERVICES = ROOT / "backend" / "app" / "services"
 
 
 class FakeResult:
@@ -118,10 +119,22 @@ def test_fallback_and_explicit_previous_timezone_are_identical(monkeypatch):
 
 
 def test_draft_submit_resolves_day_from_context_owner_timezone():
-    source = (
-        ROOT / "backend" / "app" / "services" / "client_booking_draft_submit.py"
-    ).read_text(encoding="utf-8")
+    source = (SERVICES / "client_booking_draft_submit.py").read_text(encoding="utf-8")
 
     assert "owner_timezone(session, context.owner_user_id)" in source
     assert "draft.starts_at.astimezone(timezone).date()" in source
+    assert "app_timezone" not in source
+
+
+def test_availability_paths_resolve_identity_owner_timezone():
+    for filename in ("scheduling_availability.py", "scheduling_availability_preview.py"):
+        source = (SERVICES / filename).read_text(encoding="utf-8")
+        assert "owner_timezone(session, identity.user_id)" in source
+        assert "app_timezone" not in source
+
+
+def test_booking_presenter_resolves_identity_owner_timezone():
+    source = (SERVICES / "scheduling_bookings.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
     assert "app_timezone" not in source
