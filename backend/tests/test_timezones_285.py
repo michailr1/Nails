@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -118,10 +119,27 @@ def test_fallback_and_explicit_previous_timezone_are_identical(monkeypatch):
     assert fallback.key == explicit.key == "Europe/Moscow"
 
 
+def test_same_utc_instant_can_belong_to_different_owner_local_days():
+    instant = datetime(2026, 8, 4, 21, 30, tzinfo=UTC)
+
+    assert instant.astimezone(ZoneInfo("Europe/Berlin")).date().isoformat() == "2026-08-04"
+    assert instant.astimezone(ZoneInfo("Europe/Moscow")).date().isoformat() == "2026-08-05"
+
+
 def test_draft_submit_resolves_day_from_context_owner_timezone():
     source = (SERVICES / "client_booking_draft_submit.py").read_text(encoding="utf-8")
 
     assert "owner_timezone(session, context.owner_user_id)" in source
+    assert "draft.starts_at.astimezone(timezone).date()" in source
+    assert "app_timezone" not in source
+
+
+def test_client_booking_drafts_resolve_all_local_days_from_owner_timezone():
+    source = (SERVICES / "client_booking_drafts.py").read_text(encoding="utf-8")
+
+    assert source.count("owner_timezone(session, context.owner_user_id)") == 3
+    assert "owner_timezone(session, owner_user_id)" in source
+    assert "starts_at.astimezone(timezone).date()" in source
     assert "draft.starts_at.astimezone(timezone).date()" in source
     assert "app_timezone" not in source
 
