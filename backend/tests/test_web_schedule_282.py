@@ -91,12 +91,14 @@ def test_schedule_is_loaded_after_public_profile_and_is_mobile_contained():
     assert "width: 100%" in css
 
 
-def test_no_parallel_schedule_model_or_migration_is_added():
+def test_no_parallel_schedule_model_or_schedule_migration_is_added():
     models = (APP / "models.py").read_text(encoding="utf-8")
+    migrations = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "backend" / "alembic" / "versions").glob("*.py")
+    )
 
     assert models.count('class AvailabilityInterval(') == 1
     assert "WeeklySchedule" not in models
-    assert not any(
-        path.name.startswith("0023")
-        for path in (ROOT / "backend" / "alembic" / "versions").glob("*.py")
-    )
+    assert "weekly_schedule" not in migrations
+    assert "default_week_schedule" not in migrations
