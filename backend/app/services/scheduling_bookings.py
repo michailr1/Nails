@@ -22,7 +22,6 @@ from app.services.catalog_inclusions import (
 from app.services.normalization import normalize_public_name
 from app.services.scheduling_common import (
     SchedulingDomainError,
-    app_timezone,
     calculate_reservation,
     ensure_reservation_available,
     lock_owner_schedule,
@@ -33,6 +32,7 @@ from app.services.scheduling_lookup import (
     get_active_service,
 )
 from app.services.scheduling_presenters import booking_summary
+from app.timezones import owner_timezone
 
 _MAX_MONEY = Decimal("9999999999.99")
 
@@ -240,7 +240,7 @@ def create_booking(
 ) -> CatalogBookingCreateResponse:
     lock_owner_schedule(session, identity.user_id)
     existing = _find_idempotent_booking(session, identity, body)
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     if existing is not None:
         booking, client, service = existing
         return CatalogBookingCreateResponse(
