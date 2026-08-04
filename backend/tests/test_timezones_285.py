@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -12,6 +13,8 @@ from app.timezones import (
     timezone_from_name,
     validate_timezone_name,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class FakeResult:
@@ -112,3 +115,13 @@ def test_fallback_and_explicit_previous_timezone_are_identical(monkeypatch):
 
     assert fallback == explicit
     assert fallback.key == explicit.key == "Europe/Moscow"
+
+
+def test_draft_submit_resolves_day_from_context_owner_timezone():
+    source = (
+        ROOT / "backend" / "app" / "services" / "client_booking_draft_submit.py"
+    ).read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, context.owner_user_id)" in source
+    assert "draft.starts_at.astimezone(timezone).date()" in source
+    assert "app_timezone" not in source
