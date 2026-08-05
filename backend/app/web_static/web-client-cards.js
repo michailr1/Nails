@@ -245,7 +245,7 @@ renderClients = async function editableRenderClients() {
   });
   document.querySelector("#export-clients").addEventListener("click", () => {
     if (!window.confirm("В файл попадут все карточки клиенток со всеми заполненными полями. Выгрузить клиенток?")) return;
-    downloadExport("/web/api/exports/clients?format=xlsx", `clients-all-${todayInTimezone(APP_TIMEZONE)}.xlsx`);
+    downloadExport("/web/api/exports/clients?format=xlsx", `clients-all-${todayInTimezone(state.timezone)}.xlsx`);
   });
   try {
     const data = await api("/web/api/clients");
