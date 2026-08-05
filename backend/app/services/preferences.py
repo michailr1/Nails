@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.models import AuditEvent
+from app.models import AuditEvent, User
 from app.models_preferences import MasterPreferences
 from app.schemas.preferences import (
     AssistantStyleUpdateRequest,
     DefaultWorkHoursUpdateRequest,
     MasterPreferencesResponse,
     PreferredNameUpdateRequest,
+    TimezonePreferenceResponse,
     TimezoneUpdateRequest,
 )
 from app.timezones import owner_timezone_name
@@ -30,19 +31,13 @@ def _load_preferences(
     return session.scalar(statement)
 
 
-def _serialize(
-    session: Session,
-    user_id: uuid.UUID,
-    preferences: MasterPreferences | None,
-) -> MasterPreferencesResponse:
-    timezone = owner_timezone_name(session, user_id)
+def _serialize(preferences: MasterPreferences | None) -> MasterPreferencesResponse:
     if preferences is None:
         return MasterPreferencesResponse(
             preferred_name=None,
             assistant_style=None,
             assistant_style_details=None,
             default_work_intervals=None,
-            timezone=timezone,
             is_complete=False,
         )
 
@@ -51,7 +46,6 @@ def _serialize(
         assistant_style=preferences.assistant_style,
         assistant_style_details=preferences.assistant_style_details,
         default_work_intervals=preferences.default_work_intervals,
-        timezone=timezone,
         is_complete=bool(
             preferences.preferred_name
             and preferences.assistant_style
@@ -83,10 +77,15 @@ def get_master_preferences(
     session: Session,
     identity: RequestIdentity,
 ) -> MasterPreferencesResponse:
-    return _serialize(
-        session,
-        identity.user_id,
-        _load_preferences(session, identity.user_id, lock=False),
+    return _serialize(_load_preferences(session, identity.user_id, lock=False))
+
+
+def get_timezone_preference(
+    session: Session,
+    identity: RequestIdentity,
+) -> TimezonePreferenceResponse:
+    return TimezonePreferenceResponse(
+        timezone=owner_timezone_name(session, identity.user_id)
     )
 
 
@@ -110,11 +109,7 @@ def save_preferred_name(
         )
         session.commit()
 
-    return _serialize(
-        session,
-        identity.user_id,
-        _load_preferences(session, identity.user_id, lock=False),
-    )
+    return _serialize(_load_preferences(session, identity.user_id, lock=False))
 
 
 def save_assistant_style(
@@ -145,11 +140,7 @@ def save_assistant_style(
         )
         session.commit()
 
-    return _serialize(
-        session,
-        identity.user_id,
-        _load_preferences(session, identity.user_id, lock=False),
-    )
+    return _serialize(_load_preferences(session, identity.user_id, lock=False))
 
 
 def save_default_work_hours(
@@ -176,33 +167,20 @@ def save_default_work_hours(
         )
         session.commit()
 
-    return _serialize(
-        session,
-        identity.user_id,
-        _load_preferences(session, identity.user_id, lock=False),
-    )
+    return _serialize(_load_preferences(session, identity.user_id, lock=False))
 
 
 def save_timezone(
     session: Session,
     identity: RequestIdentity,
     body: TimezoneUpdateRequest,
-) -> MasterPreferencesResponse:
+) -> TimezonePreferenceResponse:
+    user = session.get(User, identity.user_id)
+    if user is None:
+        raise RuntimeError("master user not found")
     current = owner_timezone_name(session, identity.user_id)
-    if current != body.timezone:
-        result = session.execute(
-            text(
-                """
-                UPDATE users
-                SET timezone = :timezone,
-                    updated_at = now()
-                WHERE id = :user_id
-                """
-            ),
-            {"timezone": body.timezone, "user_id": identity.user_id},
-        )
-        if result.rowcount != 1:
-            raise RuntimeError("master user not found")
+    if current != body.timezone or user.timezone is None:
+        user.timezone = body.timezone
         _add_audit(
             session,
             identity,
@@ -211,8 +189,4 @@ def save_timezone(
         )
         session.commit()
 
-    return _serialize(
-        session,
-        identity.user_id,
-        _load_preferences(session, identity.user_id, lock=False),
-    )
+    return TimezonePreferenceResponse(timezone=body.timezone)
