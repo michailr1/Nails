@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from app.services.scheduling_common import (
     calculate_reservation,
     ceil_to_step,
     day_bounds,
+    is_representable_local_datetime,
     overlaps,
 )
 from app.services.scheduling_lookup import get_active_service
@@ -116,7 +117,7 @@ def find_free_slots_for_owner(
         if booking.status == BookingStatus.scheduled
     ]
 
-    starts: set[datetime] = set()
+    starts_by_utc: dict[datetime, datetime] = {}
     for start_time, end_time in suggestion_windows:
         interval_start = datetime.combine(day, start_time, tzinfo=timezone)
         interval_end = datetime.combine(day, end_time, tzinfo=timezone)
@@ -128,17 +129,18 @@ def find_free_slots_for_owner(
             minutes=service.duration_minutes + service.buffer_after_minutes
         )
         while candidate <= last_start:
-            reservation = calculate_reservation(service, candidate)
-            if not any(
-                overlaps(
-                    reservation.reserved_starts_at,
-                    reservation.reserved_ends_at,
-                    busy_start,
-                    busy_end,
-                )
-                for busy_start, busy_end in busy
-            ):
-                starts.add(candidate)
+            if is_representable_local_datetime(candidate):
+                reservation = calculate_reservation(service, candidate)
+                if not any(
+                    overlaps(
+                        reservation.reserved_starts_at,
+                        reservation.reserved_ends_at,
+                        busy_start,
+                        busy_end,
+                    )
+                    for busy_start, busy_end in busy
+                ):
+                    starts_by_utc.setdefault(candidate.astimezone(UTC), candidate)
             candidate += timedelta(minutes=SLOT_STEP_MINUTES)
 
     return FreeSlotsResponse(
@@ -149,7 +151,7 @@ def find_free_slots_for_owner(
         is_working=not is_day_off,
         step_minutes=SLOT_STEP_MINUTES,
         service=service_summary(service),
-        starts_at=sorted(starts),
+        starts_at=sorted(starts_by_utc.values(), key=lambda value: value.astimezone(UTC)),
     )
 
 
