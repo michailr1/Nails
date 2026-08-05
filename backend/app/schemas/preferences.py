@@ -87,10 +87,13 @@ class TimezoneUpdateRequest(BaseModel):
         return validate_timezone_name(value)
 
 
+class TimezonePreferenceResponse(BaseModel):
+    timezone: str
+
+
 class MasterPreferencesResponse(BaseModel):
     preferred_name: str | None
     assistant_style: AssistantStyle | None
     assistant_style_details: str | None
     default_work_intervals: list[DefaultWorkInterval] | None
-    timezone: str
     is_complete: bool
