@@ -74,17 +74,18 @@ def test_legacy_runtime_removal_returns_success_when_unit_is_absent():
     assert 'systemctl is-enabled --quiet "$LEGACY_CLIENT_BOT_SERVICE" &&' not in function
 
 
-def test_candidate_adapter_restores_preexisting_legacy_unit_state():
+def test_candidate_adapter_never_mutates_host_client_bot_runtime():
     adapter = (ROOT / "ops" / "deploy" / "candidate_deploy.sh").read_text(
         encoding="utf-8"
     )
 
-    assert "production_legacy_client_bot_unit_snapshotted=true" in adapter
-    assert "restore_legacy_client_bot_unit" in adapter
-    assert 'cp -a "$legacy_unit_backup" "$legacy_unit"' in adapter
-    assert "systemctl enable nails-client-bot.service" in adapter
-    assert "systemctl start nails-client-bot.service" in adapter
-    assert "production_legacy_client_bot_unit_restored=true" in adapter
+    assert "systemctl" not in adapter
+    assert "nails-client-bot.service" not in adapter
+    assert "legacy_client_bot" not in adapter
+    assert "compose up -d --build --wait nails-db nails-api nails-web" in adapter
+    assert "candidate client bot must be disabled" in adapter
+    assert "candidate client bot must not be created" in adapter
+    assert "production_runtime_unchanged=true" in adapter
 
 
 def test_one_claim_is_sent_once_and_acked_once(tmp_path: Path):
@@ -118,7 +119,11 @@ def test_one_claim_is_sent_once_and_acked_once(tmp_path: Path):
             "sendMessage",
             {
                 "chat_id": 900001,
-                "text": "Запись подтверждена ✅\nМаникюр\n02.08 в 11:00",
+                "text": (
+                    "Запись подтверждена ✅\n"
+                    "Маникюр\n"
+                    "2026-08-02T12:00:00+03:00"
+                ),
             },
         )
     ]
