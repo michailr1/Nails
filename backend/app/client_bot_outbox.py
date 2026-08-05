@@ -206,12 +206,16 @@ class NotificationDrainer:
         if self._stop.is_set():
             self._api.ack(claim_id, "retry", "runtime_stopping")
             return
+        timezone_name = str(claim.get("timezone") or "").strip()
+        timezone = ZoneInfo(timezone_name) if timezone_name else None
         try:
             self._telegram.call(
                 "sendMessage",
                 chat_id=chat_id,
                 text=notification_text(
-                    str(claim["event_type"]), dict(claim.get("payload") or {})
+                    str(claim["event_type"]),
+                    dict(claim.get("payload") or {}),
+                    timezone=timezone,
                 ),
             )
         except Exception as exc:
