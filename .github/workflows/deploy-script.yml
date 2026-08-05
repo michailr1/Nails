@@ -48,7 +48,7 @@ jobs:
 
           allowed = {
               "deploy.sh",
-              "candidate_deploy.sh",  # permanent candidate env-isolation adapter
+              "candidate_deploy.sh",  # permanent isolated candidate adapter
               "nails-002e5-date-availability.sh",  # historical, not executable
               "nails-002e6-combined-operations.sh",  # historical, not executable
           }
@@ -135,14 +135,47 @@ jobs:
               "candidate env must not be the production env",
               "candidate env must be a regular non-symlink file",
               "candidate env must not be accessible by group or others",
-              'BACKEND_ENV="${NAILS_CANDIDATE_ENV:-/opt/nails/.env}"',
-              "deploy.sh BACKEND_ENV contract changed; adapter requires review",
-              "trap cleanup EXIT",
+              "candidate API port must not be the production port",
+              "candidate web port must not be the production port",
+              "candidate DATABASE_URL must target the isolated nails-db service",
+              "candidate DATABASE_URL must not target a host database",
+              "candidate client bot must be disabled",
+              "candidate Hermes access sync must be disabled",
+              'project="nails-candidate-${suffix}"',
+              'volume="${project}-postgres"',
+              'edge_network="${project}-edge"',
+              'internal_network="${project}-internal"',
+              "compose up -d --build --wait nails-db nails-api nails-web",
+              "compose down --volumes --remove-orphans",
+              "trap cleanup_failed_up EXIT",
+              "production container set changed during candidate action",
+              "production database volume changed during candidate action",
+              "candidate client bot must not be created",
+              "CANDIDATE_RUNTIME_OK=true",
           ):
               assert phrase in adapter, f"candidate adapter lost safeguard: {phrase}"
 
-          assert adapter.count("bash \"$runtime_script\"") == 1
-          assert adapter.count("BACKEND_ENV=") == 3
+          for forbidden in (
+              "deploy.sh",
+              "systemctl",
+              "client_forward",
+              "gateway",
+              "nails-client-bot.service",
+          ):
+              assert forbidden not in adapter, (
+                  f"candidate adapter must not delegate to production path: {forbidden}"
+              )
+
+          compose = Path("compose.yaml").read_text(encoding="utf-8")
+          for phrase in (
+              "name: ${NAILS_COMPOSE_PROJECT_NAME:-nails}",
+              "name: ${NAILS_POSTGRES_VOLUME_NAME:-nails-postgres-data}",
+              "name: ${NAILS_EDGE_NETWORK_NAME:-nails-edge}",
+              "name: ${NAILS_INTERNAL_NETWORK_NAME:-nails-internal}",
+              "${NAILS_API_PORT:-8210}:8000",
+              "${NAILS_WEB_PORT:-8220}:8080",
+          ):
+              assert phrase in compose, f"compose lost production-default parameter: {phrase}"
 
           forward = Path("ops/client_forward/deploy_runtime.sh").read_text(encoding="utf-8")
           for phrase in (
