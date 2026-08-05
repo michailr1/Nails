@@ -3,7 +3,7 @@ const clientRequestsState = { requests: [] };
 function requestDateTime(value) {
   const date = new Date(value);
   return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: APP_TIMEZONE,
+    timeZone: state.timezone,
     day: "numeric",
     month: "long",
     hour: "2-digit",
@@ -13,7 +13,7 @@ function requestDateTime(value) {
 
 function requestIsoDate(value) {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIMEZONE,
+    timeZone: state.timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
