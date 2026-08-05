@@ -1,9 +1,9 @@
 const app = document.querySelector("#app");
-const APP_TIMEZONE = "Europe/Moscow";
 const state = {
   view: "calendar",
   calendarMode: "day",
-  selectedDate: todayInTimezone(APP_TIMEZONE),
+  timezone: "UTC",
+  selectedDate: todayInTimezone("UTC"),
   challenge: null,
   pollTimer: null,
   offline: !navigator.onLine,
@@ -202,7 +202,11 @@ function appShell(title, body) {
 async function renderApp() {
   clearPoll();
   try {
-    await api("/web/api/auth/session");
+    const session = await api("/web/api/auth/session?include_timezone=true");
+    if (session.timezone && session.timezone !== state.timezone) {
+      state.timezone = session.timezone;
+      state.selectedDate = todayInTimezone(state.timezone);
+    }
   } catch (error) {
     if (error.status === 401) return renderLogin();
     return renderLogin("Не удалось проверить сессию.");
@@ -295,7 +299,7 @@ function bindCalendarControls() {
   document.querySelector("#period-prev")?.addEventListener("click", () => shiftPeriod(-1));
   document.querySelector("#period-next")?.addEventListener("click", () => shiftPeriod(1));
   document.querySelector("#today")?.addEventListener("click", () => {
-    state.selectedDate = todayInTimezone(APP_TIMEZONE);
+    state.selectedDate = todayInTimezone(state.timezone);
     renderCalendar();
   });
 }
@@ -313,7 +317,7 @@ async function renderCalendar() {
   ));
   document.querySelector("#export-all-calendar").addEventListener("click", () => {
     if (!window.confirm("В файл попадут все прошедшие и будущие записи календаря, включая отменённые и завершённые. Выгрузить весь календарь?")) return;
-    downloadExport("/web/api/exports/calendar/all?format=xlsx", `calendar-all-${todayInTimezone(APP_TIMEZONE)}.xlsx`);
+    downloadExport("/web/api/exports/calendar/all?format=xlsx", `calendar-all-${todayInTimezone(state.timezone)}.xlsx`);
   });
   try {
     const data = await api(`/web/api/calendar?date_from=${range.dateFrom}&date_to=${range.dateTo}`);
@@ -397,7 +401,7 @@ function monthPanel(data, range) {
     <div class="month-grid">${cells.map((iso) => {
       if (!iso) return `<span class="month-cell empty-cell"></span>`;
       const bookings = bookingsForDate(data, iso);
-      return `<button class="month-cell ${iso === todayInTimezone(APP_TIMEZONE) ? "today-cell" : ""}" data-open-date="${iso}" type="button">
+      return `<button class="month-cell ${iso === todayInTimezone(state.timezone) ? "today-cell" : ""}" data-open-date="${iso}" type="button">
         <strong>${escapeHtml(dateLabel(iso, { day: "numeric" }))}</strong>
         <span>${bookings.length ? `${bookings.length} запис.` : "—"}</span>
         ${bookings.slice(0, 2).map((booking) => `<small>${escapeHtml(booking.client_name)}</small>`).join("")}
@@ -417,7 +421,7 @@ async function renderClients() {
   actions.innerHTML = `<button id="export-clients" class="secondary-button" type="button">Выгрузить всех клиенток</button>`;
   document.querySelector("#export-clients").addEventListener("click", () => {
     if (!window.confirm("В файл попадут все карточки клиенток со всеми заполненными полями. Выгрузить всех клиенток?")) return;
-    downloadExport("/web/api/exports/clients?format=xlsx", `clients-all-${todayInTimezone(APP_TIMEZONE)}.xlsx`);
+    downloadExport("/web/api/exports/clients?format=xlsx", `clients-all-${todayInTimezone(state.timezone)}.xlsx`);
   });
   try {
     const data = await api("/web/api/clients");
