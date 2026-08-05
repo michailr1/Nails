@@ -90,6 +90,14 @@ def calculate_reservation(
     )
 
 
+def is_representable_local_datetime(value: datetime) -> bool:
+    """Return false for local wall times skipped by a timezone transition."""
+    if value.tzinfo is None:
+        return False
+    round_trip = value.astimezone(UTC).astimezone(value.tzinfo)
+    return round_trip.replace(fold=value.fold) == value
+
+
 def day_bounds(day: date, timezone: ZoneInfo) -> tuple[datetime, datetime]:
     start_local = datetime.combine(day, time.min, tzinfo=timezone)
     end_local = datetime.combine(day + timedelta(days=1), time.min, tzinfo=timezone)
