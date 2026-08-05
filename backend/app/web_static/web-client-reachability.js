@@ -262,7 +262,7 @@ async function renderFilteredClientsFromBackend() {
   const actions = document.querySelector("#page-actions");
   actions.innerHTML = '<button id="export-clients" class="secondary-button" type="button">Выгрузить всех клиенток</button>';
   document.querySelector("#export-clients")?.addEventListener("click", () => {
-    downloadExport("/web/api/exports/clients?format=xlsx", `clients-all-${todayInTimezone(APP_TIMEZONE)}.xlsx`);
+    downloadExport("/web/api/exports/clients?format=xlsx", `clients-all-${todayInTimezone(state.timezone)}.xlsx`);
   });
   const data = await api("/web/api/clients?connected_only=true");
   document.querySelector("#page-content").innerHTML = data.clients.length
