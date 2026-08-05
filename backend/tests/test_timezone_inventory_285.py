@@ -68,11 +68,11 @@ def test_direct_clocks_are_utc_or_explicit_owner_local():
             and "datetime.now(timezone)" in finding
         )
         and not (
-            finding.startswith("backend/app/client_bot.py:")
-            and "start = today or date.today()" in finding
+            finding.startswith("backend/app/client_bot_booking_flow.py:")
+            and "datetime.now(ZoneInfo(timezone_name)).date()" in finding
         )
         and not (
-            finding.startswith("backend/app/client_bot_booking_flow.py:")
+            finding.startswith("backend/app/client_bot.py:")
             and "start = today or date.today()" in finding
         )
     ]
