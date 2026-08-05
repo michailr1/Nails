@@ -39,7 +39,7 @@ renderApp = async function renderAppWithStatistics() {
 };
 
 function statisticsRange(mode = statisticsState.mode) {
-  const today = todayInTimezone(APP_TIMEZONE);
+  const today = todayInTimezone(state.timezone);
   if (mode === "day") return { dateFrom: today, dateTo: today };
   if (mode === "week") {
     const dateFrom = startOfWeek(today);
@@ -161,7 +161,7 @@ function longAbsentInsightText(clients) {
 async function addLongAbsentCalendarInsight() {
   const page = document.querySelector("#page-content");
   if (!page || state.view !== "calendar") return;
-  const today = todayInTimezone(APP_TIMEZONE);
+  const today = todayInTimezone(state.timezone);
   try {
     const payload = await api(`/web/api/statistics?date_from=${today}&date_to=${today}`);
     const clients = payload.long_absent_clients || [];
@@ -197,8 +197,8 @@ async function renderStatistics() {
       statisticsState.focusLongAbsent = false;
       statisticsState.mode = button.dataset.statisticsMode;
       if (statisticsState.mode === "custom" && !statisticsState.dateFrom) {
-        statisticsState.dateFrom = addDays(todayInTimezone(APP_TIMEZONE), -30);
-        statisticsState.dateTo = todayInTimezone(APP_TIMEZONE);
+        statisticsState.dateFrom = addDays(todayInTimezone(state.timezone), -30);
+        statisticsState.dateTo = todayInTimezone(state.timezone);
       }
       renderStatistics();
     });
