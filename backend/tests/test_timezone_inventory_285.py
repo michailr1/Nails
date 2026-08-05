@@ -28,11 +28,15 @@ def _matches(roots: tuple[Path, ...], suffix: str, pattern: re.Pattern[str]) -> 
 
 
 def test_global_timezone_helper_is_only_legacy_outbox_fallback():
-    calls = _matches(
-        (BACKEND_APP,),
-        ".py",
-        re.compile(r"\bapp_timezone\s*\("),
-    )
+    calls = [
+        finding
+        for finding in _matches(
+            (BACKEND_APP,),
+            ".py",
+            re.compile(r"\bapp_timezone\s*\("),
+        )
+        if "def app_timezone()" not in finding
+    ]
     imports = _matches(
         (BACKEND_APP,),
         ".py",
