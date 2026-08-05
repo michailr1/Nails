@@ -73,6 +73,14 @@ def test_candidate_lifecycle_is_explicit_and_failure_cleans_only_candidate():
     assert "candidate_cleanup_ok=true" in source
 
 
+def test_candidate_probes_real_health_and_readiness_routes():
+    source = ADAPTER.read_text(encoding="utf-8")
+
+    assert '"http://127.0.0.1:${api_port}/health"' in source
+    assert '"http://127.0.0.1:${api_port}/ready"' in source
+    assert '/readiness"' not in source
+
+
 def test_candidate_guards_production_container_set_and_volume():
     source = ADAPTER.read_text(encoding="utf-8")
 
