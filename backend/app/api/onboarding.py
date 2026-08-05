@@ -12,6 +12,7 @@ from app.schemas.preferences import (
     DefaultWorkHoursUpdateRequest,
     MasterPreferencesResponse,
     PreferredNameUpdateRequest,
+    TimezonePreferenceResponse,
     TimezoneUpdateRequest,
 )
 from app.services.onboarding import (
@@ -26,6 +27,7 @@ from app.services.onboarding import (
 )
 from app.services.preferences import (
     get_master_preferences,
+    get_timezone_preference,
     save_assistant_style,
     save_default_work_hours,
     save_preferred_name,
@@ -75,6 +77,14 @@ def get_preferences(
     return get_master_preferences(session, identity)
 
 
+@router.get("/preferences/timezone", response_model=TimezonePreferenceResponse)
+def get_timezone(
+    session: SessionDependency,
+    identity: IdentityDependency,
+) -> TimezonePreferenceResponse:
+    return get_timezone_preference(session, identity)
+
+
 @router.put("/preferences/name", response_model=MasterPreferencesResponse)
 def update_preferred_name(
     body: PreferredNameUpdateRequest,
@@ -102,12 +112,12 @@ def update_default_work_hours(
     return save_default_work_hours(session, identity, body)
 
 
-@router.put("/preferences/timezone", response_model=MasterPreferencesResponse)
+@router.put("/preferences/timezone", response_model=TimezonePreferenceResponse)
 def update_timezone(
     body: TimezoneUpdateRequest,
     session: SessionDependency,
     identity: IdentityDependency,
-) -> MasterPreferencesResponse:
+) -> TimezonePreferenceResponse:
     return save_timezone(session, identity, body)
 
 
