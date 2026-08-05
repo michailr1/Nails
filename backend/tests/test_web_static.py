@@ -130,11 +130,11 @@ def test_web_assets_are_served(client, clean_database):
         login_enhancements.text
     )
     assert 'renderConfirmation("Проверяем подтверждение' in login_enhancements.text
-    assert "releaseInitialSessionCheck()" in login_enhancements.text
+    assert "releaseLoginSessionCheck()" in login_enhancements.text
     assert "wrapAuthenticatedRender()" in login_enhancements.text
     assert "challengePollInFlight" in login_enhancements.text
     assert "pollChallenge = pollPersistedChallenge" in login_enhancements.text
-    assert "const resumedInitialRender = releaseInitialSessionCheck();" in (
+    assert "const resumedInitialRender = releaseLoginSessionCheck();" in (
         login_enhancements.text
     )
     assert "if (!resumedInitialRender) renderApp();" in login_enhancements.text

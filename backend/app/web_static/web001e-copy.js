@@ -29,7 +29,7 @@ function applyWeb001eCopy(root = document) {
   }
 }
 
-function releaseInitialSessionCheck() {
+function releaseLoginSessionCheck() {
   return window.__nailsWebAuthBootstrap?.releaseSessionCheck() === true;
 }
 
@@ -85,7 +85,7 @@ function bindChallengeReset(root = document) {
   button.addEventListener("click", () => {
     consumeRateLimitRetries = 0;
     forgetStoredChallenge();
-    releaseInitialSessionCheck();
+    releaseLoginSessionCheck();
   }, { once: true });
 }
 
@@ -93,7 +93,7 @@ function wrapAuthenticatedRender() {
   if (appRenderWrapped || typeof renderApp !== "function") return;
   const originalRenderApp = renderApp;
   renderApp = (...args) => {
-    releaseInitialSessionCheck();
+    releaseLoginSessionCheck();
     return originalRenderApp(...args);
   };
   appRenderWrapped = true;
@@ -104,7 +104,7 @@ function finishAuthenticatedLogin() {
   forgetStoredChallenge();
   state.challenge = null;
   clearPoll();
-  const resumedInitialRender = releaseInitialSessionCheck();
+  const resumedInitialRender = releaseLoginSessionCheck();
   if (!resumedInitialRender) renderApp();
 }
 
@@ -113,7 +113,7 @@ function failConsumeLogin() {
   forgetStoredChallenge();
   state.challenge = null;
   clearPoll();
-  releaseInitialSessionCheck();
+  releaseLoginSessionCheck();
   renderLogin("Не удалось открыть кабинет. Получите новое число и войдите заново.");
 }
 
@@ -166,7 +166,7 @@ async function restoreStoredChallenge() {
   if (typeof state === "undefined" || typeof api !== "function") return;
   const stored = readStoredChallenge();
   if (!stored) {
-    releaseInitialSessionCheck();
+    releaseLoginSessionCheck();
     if (state.challenge) {
       clearPoll();
       pollChallenge();
