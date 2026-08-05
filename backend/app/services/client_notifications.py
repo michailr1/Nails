@@ -12,6 +12,7 @@ from app.schemas.client_notifications import (
     ClientNotificationAckResponse,
     ClientNotificationClaim,
 )
+from app.timezones import owner_timezone_name
 
 CLAIM_TTL = timedelta(minutes=5)
 MAX_ATTEMPTS = 5
@@ -100,6 +101,7 @@ def claim_client_notification(session: Session) -> ClientNotificationClaim:
     row.claim_id = claim_id
     row.claimed_at = now
     row.attempts += 1
+    timezone = owner_timezone_name(session, row.owner_user_id)
     session.commit()
     return ClientNotificationClaim(
         claimed=True,
@@ -107,6 +109,7 @@ def claim_client_notification(session: Session) -> ClientNotificationClaim:
         notification_id=row.id,
         telegram_user_id=binding.telegram_user_id,
         event_type=row.event_type,
+        timezone=timezone,
         payload=dict(row.payload),
         attempts=row.attempts,
     )
