@@ -6,16 +6,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.config import get_settings
 from app.models import AuditEvent, Booking, Client, Service
 from app.services.web_read import list_calendar, list_clients
+from app.timezones import owner_timezone
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
 
@@ -162,7 +161,7 @@ def export_all_calendar(
     *,
     format_name: str,
 ) -> ExportedFile:
-    timezone = ZoneInfo(get_settings().app_timezone)
+    timezone = owner_timezone(session, identity.user_id)
     records = session.execute(
         select(Booking, Client.public_name, Service.public_name)
         .join(Client, Client.id == Booking.client_id)
@@ -213,6 +212,7 @@ def export_clients(
     *,
     format_name: str,
 ) -> ExportedFile:
+    timezone = owner_timezone(session, identity.user_id)
     data = list_clients(session, identity)
     headers = [
         "Имя",
@@ -254,7 +254,7 @@ def export_clients(
         format_name=format_name,
         row_count=len(rows),
     )
-    generated_on = datetime.now(UTC).date()
+    generated_on = datetime.now(UTC).astimezone(timezone).date()
     return ExportedFile(
         content=content,
         media_type=media_type,
