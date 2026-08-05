@@ -7,8 +7,8 @@ die() {
   exit 1
 }
 
-[[ -f "${BASH_SOURCE[0]}" ]] || die "candidate_deploy.sh must be executed from a regular file"
-[[ $# -eq 1 ]] || die "usage: NAILS_CANDIDATE_ENV=/absolute/path candidate_deploy.sh <exact-sha>"
+[[ -f "${BASH_SOURCE[0]}" ]] || die "candidate adapter must be executed from a regular file"
+[[ $# -eq 1 ]] || die "usage: NAILS_CANDIDATE_ENV=/absolute/path <candidate-adapter> <exact-sha>"
 
 SHA="$1"
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "exact SHA must contain 40 lowercase hexadecimal characters"
