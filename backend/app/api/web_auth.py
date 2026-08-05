@@ -33,6 +33,7 @@ from app.services.web_portal_auth import (
     consume_portal_challenge,
     require_portal_session_context,
 )
+from app.timezones import owner_timezone_name
 from app.web_auth_identity import require_web_approval_identity
 
 router = APIRouter(tags=["web-auth"])
@@ -140,13 +141,18 @@ def session_state(
         )
         clear_auth_cookies(response)
         return response
+    owner_user_id = (
+        context.web_session.target_owner_user_id or context.identity.user_id
+    )
+    timezone = owner_timezone_name(session, owner_user_id)
     if context.identity.role == UserRole.admin:
         return WebSessionStateResponse(
             authenticated=True,
             role=UserRole.admin.value,
             target_owner_user_id=context.web_session.target_owner_user_id,
+            timezone=timezone,
         )
-    return WebSessionStateResponse(authenticated=True)
+    return WebSessionStateResponse(authenticated=True, timezone=timezone)
 
 
 @router.post("/web/api/auth/logout", response_model=LogoutResponse)
