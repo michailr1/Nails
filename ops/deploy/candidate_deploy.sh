@@ -120,7 +120,7 @@ trap cleanup_failed_up EXIT
 compose up -d --build --wait nails-db nails-api nails-web
 
 api_health="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${api_port}/health")"
-api_readiness="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${api_port}/readiness")"
+api_readiness="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${api_port}/ready")"
 web_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "http://127.0.0.1:${web_port}/")"
 [[ -n "$api_health" ]] || die "candidate API health response is empty"
 [[ -n "$api_readiness" ]] || die "candidate API readiness response is empty"
