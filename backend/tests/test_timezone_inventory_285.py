@@ -5,47 +5,87 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_APP = REPO_ROOT / "backend" / "app"
+OPS_ROOT = REPO_ROOT / "ops"
 WEB_ROOTS = (
     REPO_ROOT / "backend" / "app" / "web_static",
     REPO_ROOT / "backend" / "app" / "landing_static",
 )
 
 
-def _matches(root: Path, suffix: str, pattern: re.Pattern[str]) -> list[str]:
+def _matches(roots: tuple[Path, ...], suffix: str, pattern: re.Pattern[str]) -> list[str]:
     findings: list[str] = []
-    if not root.exists():
-        return findings
-    for path in sorted(root.rglob(f"*{suffix}")):
-        text = path.read_text(encoding="utf-8")
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            if pattern.search(line):
-                findings.append(
-                    f"{path.relative_to(REPO_ROOT)}:{line_number}: {line.strip()}"
-                )
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob(f"*{suffix}")):
+            text = path.read_text(encoding="utf-8")
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                if pattern.search(line):
+                    findings.append(
+                        f"{path.relative_to(REPO_ROOT)}:{line_number}: {line.strip()}"
+                    )
     return findings
 
 
-def test_inventory_global_timezone_dependencies():
-    app_timezone_calls = _matches(
-        BACKEND_APP,
+def test_global_timezone_helper_is_only_legacy_outbox_fallback():
+    findings = _matches(
+        (BACKEND_APP,),
         ".py",
-        re.compile(r"\bapp_timezone\s*\("),
+        re.compile(r"\bapp_timezone\b"),
     )
-    app_timezone_imports = _matches(
-        BACKEND_APP,
-        ".py",
-        re.compile(r"\bimport\s+app_timezone\b|\bapp_timezone\s*,|,\s*app_timezone\b"),
-    )
-    direct_clock_calls = _matches(
-        BACKEND_APP,
+    unexpected = [
+        finding
+        for finding in findings
+        if not (
+            finding.startswith("backend/app/services/scheduling_common.py:")
+            and "def app_timezone() -> ZoneInfo:" in finding
+        )
+        and not (
+            finding.startswith("backend/app/client_bot_outbox.py:")
+            and (
+                "app_timezone," in finding
+                or "timezone or app_timezone()" in finding
+            )
+        )
+    ]
+
+    assert unexpected == []
+    assert any("timezone or app_timezone()" in finding for finding in findings)
+
+
+def test_direct_clocks_are_utc_or_explicit_owner_local():
+    findings = _matches(
+        (BACKEND_APP, OPS_ROOT),
         ".py",
         re.compile(r"\bdatetime\.now\s*\(|\bdate\.today\s*\("),
     )
-    javascript_timezone_literals: list[str] = []
+    unexpected = [
+        finding
+        for finding in findings
+        if "datetime.now(UTC)" not in finding
+        and not (
+            finding.startswith("backend/app/services/scheduling_dates.py:")
+            and "datetime.now(timezone)" in finding
+        )
+        and not (
+            finding.startswith("backend/app/client_bot.py:")
+            and "start = today or date.today()" in finding
+        )
+        and not (
+            finding.startswith("backend/app/client_bot_booking_flow.py:")
+            and "start = today or date.today()" in finding
+        )
+    ]
+
+    assert unexpected == []
+
+
+def test_browser_has_no_hardcoded_owner_timezone():
+    findings: list[str] = []
     for root in WEB_ROOTS:
-        javascript_timezone_literals.extend(
+        findings.extend(
             _matches(
-                root,
+                (root,),
                 ".js",
                 re.compile(
                     r"Europe/Moscow|Asia/Yekaterinburg|timeZone\s*:\s*['\"]"
@@ -53,15 +93,12 @@ def test_inventory_global_timezone_dependencies():
             )
         )
 
-    report = [
-        "app_timezone calls:",
-        *app_timezone_calls,
-        "app_timezone imports:",
-        *app_timezone_imports,
-        "datetime.now/date.today calls requiring review:",
-        *direct_clock_calls,
-        "JavaScript timezone literals/options:",
-        *javascript_timezone_literals,
-    ]
+    assert len(findings) == 1
+    assert findings[0].startswith("backend/app/web_static/app.js:")
+    assert 'timeZone: "UTC"' in findings[0]
 
-    raise AssertionError("\n".join(report))
+    app_source = (BACKEND_APP / "web_static" / "app.js").read_text(encoding="utf-8")
+    assert "Europe/Moscow" not in app_source
+    assert "APP_TIMEZONE" not in app_source
+    assert "/web/api/auth/session?include_timezone=true" in app_source
+    assert "state.timezone = session.timezone" in app_source
