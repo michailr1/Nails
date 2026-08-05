@@ -28,29 +28,41 @@ def _matches(roots: tuple[Path, ...], suffix: str, pattern: re.Pattern[str]) -> 
 
 
 def test_global_timezone_helper_is_only_legacy_outbox_fallback():
-    findings = _matches(
+    calls = _matches(
         (BACKEND_APP,),
         ".py",
-        re.compile(r"\bapp_timezone\b"),
+        re.compile(r"\bapp_timezone\s*\("),
     )
-    unexpected = [
-        finding
-        for finding in findings
-        if not (
-            finding.startswith("backend/app/services/scheduling_common.py:")
-            and "def app_timezone() -> ZoneInfo:" in finding
+    imports = _matches(
+        (BACKEND_APP,),
+        ".py",
+        re.compile(
+            r"\bfrom\s+app\.services\.scheduling_common\s+import\s+app_timezone\b"
+            r"|\bapp_timezone\s*,|,\s*app_timezone\b"
+        ),
+    )
+
+    assert calls == [
+        next(
+            finding
+            for finding in calls
+            if finding.startswith("backend/app/client_bot_outbox.py:")
+            and "timezone or app_timezone()" in finding
         )
-        and not (
-            finding.startswith("backend/app/client_bot_outbox.py:")
-            and (
-                "app_timezone," in finding
-                or "timezone or app_timezone()" in finding
-            )
+    ]
+    assert imports == [
+        next(
+            finding
+            for finding in imports
+            if finding.startswith("backend/app/client_bot_outbox.py:")
+            and "import app_timezone" in finding
         )
     ]
 
-    assert unexpected == []
-    assert any("timezone or app_timezone()" in finding for finding in findings)
+    common_source = (
+        BACKEND_APP / "services" / "scheduling_common.py"
+    ).read_text(encoding="utf-8")
+    assert "def app_timezone() -> ZoneInfo:" in common_source
 
 
 def test_direct_clocks_are_utc_or_explicit_owner_local():
@@ -63,6 +75,7 @@ def test_direct_clocks_are_utc_or_explicit_owner_local():
         finding
         for finding in findings
         if "datetime.now(UTC)" not in finding
+        and "datetime.now(timezone.utc)" not in finding
         and not (
             finding.startswith("backend/app/services/scheduling_dates.py:")
             and "datetime.now(timezone)" in finding
