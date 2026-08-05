@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.client_bot import (
     NailsClientApi,
@@ -97,16 +98,22 @@ class DraftNailsClientApi(NailsClientApi):
         )
 
 
+def _draft_today(draft: dict[str, Any]) -> date:
+    timezone_name = str((draft.get("master") or {}).get("timezone") or "")
+    if not timezone_name:
+        raise ValueError("draft master timezone is missing")
+    return datetime.now(ZoneInfo(timezone_name)).date()
+
+
 def draft_date_picker_keyboard(
     draft_id: str,
     *,
-    today: date | None = None,
+    today: date,
 ) -> dict[str, Any]:
     uuid.UUID(draft_id)
-    start = today or date.today()
     rows: list[list[dict[str, str]]] = []
     for offset in range(14):
-        day = start + timedelta(days=offset)
+        day = today + timedelta(days=offset)
         if offset % 4 == 0:
             rows.append([])
         rows[-1].append(
@@ -256,7 +263,10 @@ class DraftPlatformBot(PlatformBot):
             self._send(
                 chat_id,
                 "Выберите дату:",
-                draft_date_picker_keyboard(str(draft["draft_id"])),
+                draft_date_picker_keyboard(
+                    str(draft["draft_id"]),
+                    today=_draft_today(draft),
+                ),
             )
             return
         self._send(
@@ -333,7 +343,12 @@ class DraftPlatformBot(PlatformBot):
             self._show_addons(chat_id, api.draft(telegram_user_id, draft_id))
             return
         if action == "dates":
-            self._send(chat_id, "Выберите дату:", draft_date_picker_keyboard(draft_id))
+            draft = api.draft(telegram_user_id, draft_id)
+            self._send(
+                chat_id,
+                "Выберите дату:",
+                draft_date_picker_keyboard(draft_id, today=_draft_today(draft)),
+            )
             return
         if action == "d":
             _, compact_day = rest.split(":", 1)
@@ -353,10 +368,14 @@ class DraftPlatformBot(PlatformBot):
                     ),
                 )
             else:
+                draft = slots.get("draft") or api.draft(telegram_user_id, draft_id)
                 self._send(
                     chat_id,
                     f"На {selected_day:%d.%m} свободного времени нет.",
-                    draft_date_picker_keyboard(draft_id),
+                    draft_date_picker_keyboard(
+                        draft_id,
+                        today=_draft_today(draft),
+                    ),
                 )
             return
         if action == "t":
