@@ -9,7 +9,6 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.config import get_settings
 from app.models import Booking, BookingStatus, Client, ClientProfileStatus, Service
 from app.schemas.web_statistics import (
     WebStatisticsCatalogItem,
@@ -19,6 +18,7 @@ from app.schemas.web_statistics import (
     WebStatisticsResponse,
     WebStatisticsSummary,
 )
+from app.timezones import owner_timezone
 
 _MAX_STATISTICS_DAYS = 366
 _LONG_ABSENT_AFTER_DAYS = 42
@@ -39,16 +39,15 @@ def _money(value: Decimal) -> Decimal:
 def _statistics_window(
     date_from: date,
     date_to: date,
-) -> tuple[datetime, datetime, str, ZoneInfo]:
+    timezone: ZoneInfo,
+) -> tuple[datetime, datetime]:
     if date_to < date_from:
         raise ValueError("date_to_before_date_from")
     if (date_to - date_from).days + 1 > _MAX_STATISTICS_DAYS:
         raise ValueError("date_range_too_large")
-    timezone_name = get_settings().app_timezone
-    timezone = ZoneInfo(timezone_name)
     local_start = datetime.combine(date_from, time.min, timezone)
     local_end = datetime.combine(date_to + timedelta(days=1), time.min, timezone)
-    return local_start.astimezone(UTC), local_end.astimezone(UTC), timezone_name, timezone
+    return local_start.astimezone(UTC), local_end.astimezone(UTC)
 
 
 def _known_amount(booking: Booking) -> Decimal | None:
@@ -197,7 +196,8 @@ def get_statistics(
     date_to: date,
     now: datetime | None = None,
 ) -> WebStatisticsResponse:
-    starts_at, ends_at, timezone_name, timezone = _statistics_window(date_from, date_to)
+    timezone = owner_timezone(session, identity.user_id)
+    starts_at, ends_at = _statistics_window(date_from, date_to, timezone)
     current = now or datetime.now(UTC)
     if current.tzinfo is None:
         current = current.replace(tzinfo=UTC)
@@ -381,7 +381,7 @@ def get_statistics(
     return WebStatisticsResponse(
         date_from=date_from,
         date_to=date_to,
-        timezone=timezone_name,
+        timezone=str(timezone),
         generated_through=generated_day,
         long_absent_after_days=_LONG_ABSENT_AFTER_DAYS,
         long_absent_decay_days=_LONG_ABSENT_DECAY_DAYS,
