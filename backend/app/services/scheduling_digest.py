@@ -9,7 +9,6 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.config import get_settings
 from app.models import (
     AuditEvent,
     Booking,
@@ -31,15 +30,15 @@ from app.schemas.scheduling_digest import (
 )
 from app.services.scheduling_common import lock_owner_schedule
 from app.services.web_statistics import _long_absent_clients, _visit_history_rows
-from app.timezones import owner_timezone
+from app.timezones import configured_timezone_name, owner_timezone
 
 
 def list_digest_owners(session: Session) -> FinalizationDigestOwnersResponse:
-    fallback_timezone = get_settings().app_timezone
+    fallback_timezone = configured_timezone_name()
     rows = session.execute(
         select(
             User.telegram_user_id,
-            text("users.timezone"),
+            User.timezone,
         )
         .where(
             User.is_active.is_(True),
