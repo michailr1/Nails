@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, tzinfo
 
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,10 @@ from app.auth import RequestIdentity
 from app.schemas.scheduling import DateResolveRequest, DateResolveResponse
 from app.services.scheduling_common import SchedulingDomainError
 from app.timezones import owner_timezone
+
+
+def _local_today(timezone: tzinfo) -> date:
+    return datetime.now(timezone).date()
 
 
 def _date_in_year(year: int, month: int, day_of_month: int) -> date:
@@ -38,7 +42,7 @@ def resolve_date(
     body: DateResolveRequest,
 ) -> DateResolveResponse:
     timezone = owner_timezone(session, identity.user_id)
-    today = datetime.now(timezone).date()
+    today = _local_today(timezone)
 
     if body.kind == "absolute":
         resolved = body.day
