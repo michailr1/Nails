@@ -8,8 +8,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class FinalizationDigestOwner(BaseModel):
+    telegram_user_id: int
+    timezone: str
+
+
 class FinalizationDigestOwnersResponse(BaseModel):
     telegram_user_ids: list[int]
+    owners: list[FinalizationDigestOwner] = Field(default_factory=list)
 
 
 class FinalizationDigestClaimRequest(BaseModel):
