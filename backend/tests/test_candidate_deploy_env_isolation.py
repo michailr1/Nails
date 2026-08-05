@@ -97,6 +97,13 @@ def test_candidate_adapter_rejects_production_env_before_docker(tmp_path):
     )
     fake_docker.chmod(0o700)
 
+    exact_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     env = os.environ.copy()
     env.update(
         {
@@ -105,7 +112,7 @@ def test_candidate_adapter_rejects_production_env_before_docker(tmp_path):
         }
     )
     result = subprocess.run(
-        [str(ADAPTER), "0" * 40],
+        [str(ADAPTER), exact_head],
         cwd=ROOT,
         env=env,
         capture_output=True,
