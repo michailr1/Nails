@@ -42,11 +42,6 @@ def test_digest_reuses_statistics_long_absent_selection(monkeypatch):
 
     monkeypatch.setattr(scheduling_digest, "_visit_history_rows", fake_history)
     monkeypatch.setattr(scheduling_digest, "_long_absent_clients", fake_selection)
-    monkeypatch.setattr(
-        scheduling_digest,
-        "app_timezone",
-        lambda: ZoneInfo("Europe/Moscow"),
-    )
 
     session = object()
     identity = SimpleNamespace(user_id="owner")
@@ -56,6 +51,7 @@ def test_digest_reuses_statistics_long_absent_selection(monkeypatch):
         identity,
         current=current,
         generated_day=date(2026, 7, 22),
+        timezone=ZoneInfo("Europe/Moscow"),
     )
 
     assert calls == [(session, identity, current)]
