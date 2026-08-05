@@ -91,6 +91,7 @@ class User(TimestampMixin, Base):
         Enum(UserRole, name="user_role"), nullable=False, default=UserRole.master
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     onboarding_state: Mapped[OnboardingState | None] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
