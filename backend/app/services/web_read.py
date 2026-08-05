@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.client_models import ClientTelegramIdentity, ClientTelegramIdentityStatus
-from app.config import get_settings
 from app.models import Booking, Client, ClientProfileStatus, Service
 from app.schemas.scheduling_catalog_bookings import CatalogBookingSummary
 from app.schemas.web_read import (
@@ -19,6 +18,7 @@ from app.schemas.web_read import (
     WebClientListResponse,
 )
 from app.services.scheduling_presenters import booking_summary
+from app.timezones import owner_timezone
 
 _MAX_CALENDAR_DAYS = 31
 
@@ -26,21 +26,15 @@ _MAX_CALENDAR_DAYS = 31
 def _calendar_window(
     date_from: date,
     date_to: date,
-) -> tuple[datetime, datetime, str, ZoneInfo]:
+    timezone: ZoneInfo,
+) -> tuple[datetime, datetime]:
     if date_to < date_from:
         raise ValueError("date_to_before_date_from")
     if (date_to - date_from).days + 1 > _MAX_CALENDAR_DAYS:
         raise ValueError("date_range_too_large")
-    timezone_name = get_settings().app_timezone
-    timezone = ZoneInfo(timezone_name)
     local_start = datetime.combine(date_from, time.min, timezone)
     local_end = datetime.combine(date_to + timedelta(days=1), time.min, timezone)
-    return (
-        local_start.astimezone(UTC),
-        local_end.astimezone(UTC),
-        timezone_name,
-        timezone,
-    )
+    return local_start.astimezone(UTC), local_end.astimezone(UTC)
 
 
 def web_booking_summary(
@@ -92,10 +86,8 @@ def list_calendar(
     date_from: date,
     date_to: date,
 ) -> WebCalendarResponse:
-    starts_at, ends_at, timezone_name, timezone = _calendar_window(
-        date_from,
-        date_to,
-    )
+    timezone = owner_timezone(session, identity.user_id)
+    starts_at, ends_at = _calendar_window(date_from, date_to, timezone)
     rows = session.execute(
         select(Booking, Client, Service)
         .join(Client, Client.id == Booking.client_id)
@@ -112,7 +104,7 @@ def list_calendar(
     return WebCalendarResponse(
         date_from=date_from,
         date_to=date_to,
-        timezone=timezone_name,
+        timezone=str(timezone),
         bookings=[
             web_booking_summary(
                 booking_summary(booking, client, service, timezone),
