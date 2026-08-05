@@ -1,8 +1,8 @@
 [Unit]
-Description=Run Nails finalization digest daily
+Description=Evaluate Nails finalization digest for each owner local evening
 
 [Timer]
-OnCalendar=*-*-* 23:30:00 Europe/Moscow
+OnCalendar=*-*-* *:30:00
 Persistent=true
 AccuracySec=1m
 Unit=nails-finalization-digest.service
