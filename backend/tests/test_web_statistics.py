@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import app.services.web_statistics as web_statistics
 from app.models import BookingStatus
@@ -57,14 +58,18 @@ def _fixed_item(kind: str, name: str, price: str):
     }
 
 
+def _use_moscow_owner_timezone(monkeypatch):
+    monkeypatch.setattr(
+        web_statistics,
+        "owner_timezone",
+        lambda session, owner_user_id: ZoneInfo("Europe/Moscow"),
+    )
+
+
 def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
     monkeypatch,
 ):
-    monkeypatch.setattr(
-        web_statistics,
-        "get_settings",
-        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
-    )
+    _use_moscow_owner_timezone(monkeypatch)
     owner_id = uuid.uuid4()
     client_id = uuid.uuid4()
     client = SimpleNamespace(id=client_id, public_name="Анна")
@@ -139,11 +144,7 @@ def test_statistics_counts_ended_scheduled_visit_without_manual_confirmation(
 
 
 def test_statistics_catalog_revenue_uses_snapshot_lower_bound(monkeypatch):
-    monkeypatch.setattr(
-        web_statistics,
-        "get_settings",
-        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
-    )
+    _use_moscow_owner_timezone(monkeypatch)
     client = SimpleNamespace(id=uuid.uuid4(), public_name="Анна")
     service = SimpleNamespace(public_name="Педикюр")
     rows = [
@@ -183,11 +184,7 @@ def test_statistics_catalog_revenue_uses_snapshot_lower_bound(monkeypatch):
 
 
 def test_statistics_does_not_guess_manual_override_distribution(monkeypatch):
-    monkeypatch.setattr(
-        web_statistics,
-        "get_settings",
-        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
-    )
+    _use_moscow_owner_timezone(monkeypatch)
     client = SimpleNamespace(id=uuid.uuid4(), public_name="Анна")
     service = SimpleNamespace(public_name="Маникюр")
     rows = [
@@ -227,11 +224,7 @@ def test_statistics_does_not_guess_manual_override_distribution(monkeypatch):
 def test_statistics_excludes_cancelled_and_no_show_and_keeps_unknown_price_visible(
     monkeypatch,
 ):
-    monkeypatch.setattr(
-        web_statistics,
-        "get_settings",
-        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
-    )
+    _use_moscow_owner_timezone(monkeypatch)
     client = SimpleNamespace(id=uuid.uuid4(), public_name="Оксана")
     service = SimpleNamespace(public_name="Педикюр")
     starts_at = datetime(2026, 7, 20, 10, 0, tzinfo=UTC)
@@ -287,11 +280,7 @@ def test_statistics_excludes_cancelled_and_no_show_and_keeps_unknown_price_visib
 
 
 def test_long_absent_list_is_rhythm_based_and_self_cleaning(monkeypatch):
-    monkeypatch.setattr(
-        web_statistics,
-        "get_settings",
-        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
-    )
+    _use_moscow_owner_timezone(monkeypatch)
     current = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
     eligible_id = uuid.uuid4()
     one_visit_id = uuid.uuid4()
