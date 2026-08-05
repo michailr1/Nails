@@ -1,4 +1,4 @@
-name: nails
+name: ${NAILS_COMPOSE_PROJECT_NAME:-nails}
 
 services:
   nails-db:
@@ -136,14 +136,14 @@ services:
 
 volumes:
   nails-postgres-data:
-    name: nails-postgres-data
+    name: ${NAILS_POSTGRES_VOLUME_NAME:-nails-postgres-data}
 
 networks:
   nails-edge:
-    name: nails-edge
+    name: ${NAILS_EDGE_NETWORK_NAME:-nails-edge}
     driver: bridge
     driver_opts:
       com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
   nails-internal:
-    name: nails-internal
+    name: ${NAILS_INTERNAL_NETWORK_NAME:-nails-internal}
     internal: true

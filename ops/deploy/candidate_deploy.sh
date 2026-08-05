@@ -7,8 +7,21 @@ die() {
   exit 1
 }
 
-[[ -f "${BASH_SOURCE[0]}" ]] || die "candidate_deploy.sh must be executed from a regular file"
-[[ $# -eq 1 ]] || die "usage: NAILS_CANDIDATE_ENV=/absolute/path candidate_deploy.sh <exact-sha>"
+[[ -f "${BASH_SOURCE[0]}" ]] || die "candidate adapter must be executed from a regular file"
+[[ $# -eq 1 ]] || die "usage: NAILS_CANDIDATE_ENV=/absolute/path <candidate-adapter> <exact-sha>"
+
+SHA="$1"
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "exact SHA must contain 40 lowercase hexadecimal characters"
+ACTION="${NAILS_CANDIDATE_ACTION:-up}"
+[[ "$ACTION" == up || "$ACTION" == status || "$ACTION" == down ]] || die "NAILS_CANDIDATE_ACTION must be up, status, or down"
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
+COMPOSE_FILE="$REPO_ROOT/compose.yaml"
+[[ -f "$COMPOSE_FILE" ]] || die "compose.yaml is missing from the exact candidate tree"
+actual_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+[[ "$actual_sha" == "$SHA" ]] || die "candidate tree SHA $actual_sha does not match requested $SHA"
+[[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)" ]] || die "candidate tree must be clean"
 
 CANDIDATE_ENV="${NAILS_CANDIDATE_ENV:-}"
 [[ -n "$CANDIDATE_ENV" ]] || die "NAILS_CANDIDATE_ENV is required"
@@ -18,155 +31,123 @@ CANDIDATE_ENV="${NAILS_CANDIDATE_ENV:-}"
 mode="$(stat -c '%a' "$CANDIDATE_ENV")"
 (( (8#$mode & 8#077) == 0 )) || die "candidate env must not be accessible by group or others"
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy.sh"
-[[ -f "$DEPLOY_SCRIPT" ]] || die "normative deploy.sh is missing"
-
-assignment='BACKEND_ENV="/opt/nails/.env"'
-forward_call='bash "$WORKTREE/ops/client_forward/deploy_runtime.sh"'
-forward_assert='  systemctl is-active --quiet nails-client-forward.service && die "client forward is active while client runtime is disabled"'
-
-[[ "$(grep -Fxc "$assignment" "$DEPLOY_SCRIPT")" -eq 1 ]] || die "deploy.sh BACKEND_ENV contract changed; adapter requires review"
-forward_count="$(grep -Fc "$forward_call" "$DEPLOY_SCRIPT")"
-[[ "$forward_count" -gt 0 ]] || die "deploy.sh client-forward invocation contract changed; adapter requires review"
-[[ "$(grep -Fxc "$forward_assert" "$DEPLOY_SCRIPT")" -eq 1 ]] || die "deploy.sh client-forward disabled assertion contract changed; adapter requires review"
-
-bot_stop_count="$(awk 'index($0, "compose stop ") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$DEPLOY_SCRIPT")"
-bot_up_count="$(awk 'index($0, "compose up ") && index($0, "--force-recreate") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$DEPLOY_SCRIPT")"
-bot_remove_count="$(awk 'index($0, "compose rm ") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$DEPLOY_SCRIPT")"
-[[ "$bot_stop_count" -gt 0 && "$bot_up_count" -gt 0 && "$bot_remove_count" -gt 0 ]] || die "deploy.sh client-bot runtime contract changed; adapter requires review"
-bot_guard_count="$((bot_stop_count + bot_up_count + bot_remove_count))"
-
-production_bot_id_before="$(docker inspect -f '{{.Id}}' nails-nails-client-bot-1 2>/dev/null)" || die "production Compose client-bot container is required"
-[[ -n "$production_bot_id_before" ]] || die "production Compose client-bot container ID is empty"
-[[ "$(docker inspect -f '{{.State.Running}}' nails-nails-client-bot-1)" == true ]] || die "production Compose client-bot container must be running"
-
-render_dir="${NAILS_CANDIDATE_RENDER_DIR:-}"
-tmp_root="/opt/nails/tmp"
-if [[ -n "$render_dir" ]]; then
-  [[ "$render_dir" == /* && -d "$render_dir" && ! -L "$render_dir" ]] || die "render dir must be an absolute regular directory"
-  tmp_root="${NAILS_CANDIDATE_TMP_ROOT:-$render_dir}"
-  [[ "$tmp_root" == /* && -d "$tmp_root" && ! -L "$tmp_root" ]] || die "candidate tmp root must be an absolute regular directory"
-elif [[ -n "${NAILS_CANDIDATE_TMP_ROOT:-}" ]]; then
-  die "NAILS_CANDIDATE_TMP_ROOT is allowed only with render mode"
-fi
-
-install -d -m 700 "$tmp_root"
-runtime_script="$(mktemp "$tmp_root/candidate-deploy.XXXXXX.sh")"
-forward_guard="$(mktemp "$tmp_root/candidate-client-forward.XXXXXX.sh")"
-legacy_unit_backup="$(mktemp "$tmp_root/candidate-client-bot-unit.XXXXXX")"
-legacy_unit=/etc/systemd/system/nails-client-bot.service
-legacy_existed=false
-legacy_enabled="$(systemctl is-enabled nails-client-bot.service 2>/dev/null || true)"
-legacy_active="$(systemctl is-active nails-client-bot.service 2>/dev/null || true)"
-legacy_restore=false
-if [[ -f "$legacy_unit" ]]; then
-  cp -a "$legacy_unit" "$legacy_unit_backup"
-  legacy_existed=true
-fi
-
-restore_legacy_client_bot_unit() {
-  [[ "$legacy_restore" == true ]] || return 0
-  systemctl disable --now nails-client-bot.service >/dev/null 2>&1 || true
-  if [[ "$legacy_existed" == true ]]; then
-    cp -a "$legacy_unit_backup" "$legacy_unit"
-  else
-    rm -f "$legacy_unit"
-  fi
-  systemctl daemon-reload
-  [[ "$legacy_enabled" == enabled ]] && systemctl enable nails-client-bot.service >/dev/null 2>&1 || true
-  [[ "$legacy_active" == active ]] && systemctl start nails-client-bot.service >/dev/null 2>&1 || true
-  printf 'production_legacy_client_bot_unit_restored=true\n'
+read_env_value() {
+  local key="$1"
+  local line
+  line="$(grep -E "^${key}=" "$CANDIDATE_ENV" | tail -n 1 || true)"
+  [[ -n "$line" ]] || return 1
+  printf '%s' "${line#*=}" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
 }
 
-cleanup() {
-  local status=$?
-  set +e
-  restore_legacy_client_bot_unit
-  rm -f -- "$runtime_script" "$forward_guard" "$legacy_unit_backup"
-  return "$status"
+api_port="$(read_env_value NAILS_API_PORT || true)"
+web_port="$(read_env_value NAILS_WEB_PORT || true)"
+database_url="$(read_env_value DATABASE_URL || true)"
+client_bot_enabled="$(read_env_value CLIENT_BOT_ENABLED || printf 'false')"
+hermes_sync_enabled="$(read_env_value HERMES_ACCESS_SYNC_ENABLED || printf 'false')"
+
+[[ "$api_port" =~ ^[0-9]+$ && "$api_port" -ge 1024 && "$api_port" -le 65535 ]] || die "candidate NAILS_API_PORT must be an unprivileged TCP port"
+[[ "$web_port" =~ ^[0-9]+$ && "$web_port" -ge 1024 && "$web_port" -le 65535 ]] || die "candidate NAILS_WEB_PORT must be an unprivileged TCP port"
+[[ "$api_port" != 8210 ]] || die "candidate API port must not be the production port"
+[[ "$web_port" != 8220 ]] || die "candidate web port must not be the production port"
+[[ "$api_port" != "$web_port" ]] || die "candidate API and web ports must differ"
+[[ "$database_url" == *"@nails-db:5432/"* ]] || die "candidate DATABASE_URL must target the isolated nails-db service"
+[[ "$database_url" != *"127.0.0.1"* && "$database_url" != *"localhost"* ]] || die "candidate DATABASE_URL must not target a host database"
+[[ "$client_bot_enabled" == false ]] || die "candidate client bot must be disabled"
+[[ "$hermes_sync_enabled" == false ]] || die "candidate Hermes access sync must be disabled"
+
+suffix="${SHA:0:12}"
+project="nails-candidate-${suffix}"
+volume="${project}-postgres"
+edge_network="${project}-edge"
+internal_network="${project}-internal"
+
+compose() {
+  NAILS_COMPOSE_PROJECT_NAME="$project" \
+  NAILS_POSTGRES_VOLUME_NAME="$volume" \
+  NAILS_EDGE_NETWORK_NAME="$edge_network" \
+  NAILS_INTERNAL_NETWORK_NAME="$internal_network" \
+  docker compose --env-file "$CANDIDATE_ENV" -f "$COMPOSE_FILE" -p "$project" "$@"
 }
-trap cleanup EXIT
 
-cat >"$forward_guard" <<'GUARD'
-#!/usr/bin/env bash
-set -Eeuo pipefail
-[[ $# -ge 1 ]] || { printf 'PRECONDITION_FAILED: client-forward guard action is required\n' >&2; exit 1; }
-case "$1" in
-  snapshot)
-    [[ -n "${NAILS_DEPLOY_WORKTREE:-}" ]] || { printf 'PRECONDITION_FAILED: NAILS_DEPLOY_WORKTREE is required for snapshot\n' >&2; exit 1; }
-    exec bash "${NAILS_DEPLOY_WORKTREE}/ops/client_forward/deploy_runtime.sh" "$@"
-    ;;
-  stop|install|restore) printf 'candidate_client_forward_%s_skipped=true\n' "$1" ;;
-  *) printf 'PRECONDITION_FAILED: unsupported client-forward guard action: %s\n' "$1" >&2; exit 1 ;;
-esac
-GUARD
-chmod 700 "$forward_guard"
+production_ids_before="$(docker ps -aq --filter 'name=^/nails-nails-')"
+production_volume_before="$(docker volume inspect -f '{{.Name}}' nails-postgres-data 2>/dev/null || true)"
 
-awk \
-  -v env_target="$assignment" \
-  -v forward_target="$forward_call" \
-  -v assertion_target="$forward_assert" '
-  {
-    p = index($0, forward_target)
-    trimmed = $0
-    sub(/^[[:space:]]+/, "", trimmed)
-    indent = substr($0, 1, length($0) - length(trimmed))
-    if ($0 == env_target) {
-      print "BACKEND_ENV=\"${NAILS_CANDIDATE_ENV:-/opt/nails/.env}\""
-    } else if (p > 0) {
-      print substr($0, 1, p - 1) "bash \"$NAILS_CANDIDATE_CLIENT_FORWARD_GUARD\"" substr($0, p + length(forward_target))
-    } else if ($0 == assertion_target) {
-      print "  printf '\''candidate_client_forward_preserved=true\\n'\''"
-    } else if (index(trimmed, "compose stop ") && index(trimmed, "nails-client-bot")) {
-      print indent ": # candidate preserves production client-bot stop"
-    } else if (index(trimmed, "compose up ") && index(trimmed, "--force-recreate") && index(trimmed, "nails-client-bot")) {
-      print indent ": # candidate preserves production client-bot recreate"
-    } else if (index(trimmed, "compose rm ") && index(trimmed, "nails-client-bot")) {
-      print indent ": # candidate preserves production client-bot removal"
-    } else {
-      print
-    }
-  }' "$DEPLOY_SCRIPT" >"$runtime_script"
-chmod 700 "$runtime_script"
+verify_production_unchanged() {
+  local production_ids_after production_volume_after
+  production_ids_after="$(docker ps -aq --filter 'name=^/nails-nails-')"
+  production_volume_after="$(docker volume inspect -f '{{.Name}}' nails-postgres-data 2>/dev/null || true)"
+  [[ "$production_ids_after" == "$production_ids_before" ]] || die "production container set changed during candidate action"
+  [[ "$production_volume_after" == "$production_volume_before" ]] || die "production database volume changed during candidate action"
+}
 
-[[ "$(grep -Fxc 'BACKEND_ENV="${NAILS_CANDIDATE_ENV:-/opt/nails/.env}"' "$runtime_script")" -eq 1 ]] || die "failed to construct isolated candidate deploy script"
-[[ "$(grep -Fc 'bash "$NAILS_CANDIDATE_CLIENT_FORWARD_GUARD"' "$runtime_script")" -eq "$forward_count" ]] || die "failed to guard every client-forward invocation"
-[[ "$(grep -Fc "$forward_call" "$runtime_script")" -eq 0 ]] || die "unguarded client-forward invocation remains"
-remaining_stop="$(awk 'index($0, "compose stop ") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$runtime_script")"
-remaining_up="$(awk 'index($0, "compose up ") && index($0, "--force-recreate") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$runtime_script")"
-remaining_remove="$(awk 'index($0, "compose rm ") && index($0, "nails-client-bot") { count++ } END { print count + 0 }' "$runtime_script")"
-[[ "$remaining_stop" -eq 0 ]] || die "unguarded client-bot stop remains"
-[[ "$remaining_up" -eq 0 ]] || die "unguarded client-bot recreate remains"
-[[ "$remaining_remove" -eq 0 ]] || die "unguarded client-bot removal remains"
-[[ "$(grep -Fc 'candidate preserves production client-bot stop' "$runtime_script")" -eq "$bot_stop_count" ]] || die "failed to guard every client-bot stop"
-[[ "$(grep -Fc 'candidate preserves production client-bot recreate' "$runtime_script")" -eq "$bot_up_count" ]] || die "failed to guard every client-bot recreate"
-[[ "$(grep -Fc 'candidate preserves production client-bot removal' "$runtime_script")" -eq "$bot_remove_count" ]] || die "failed to guard every client-bot removal"
-
-if [[ -n "$render_dir" ]]; then
-  install -m 700 "$runtime_script" "$render_dir/runtime.sh"
-  install -m 700 "$forward_guard" "$render_dir/client-forward-guard.sh"
-  printf 'candidate_render_only=true\n'
-  printf 'candidate_render_forward_count=%s\n' "$forward_count"
-  printf 'candidate_render_client_bot_guard_count=%s\n' "$bot_guard_count"
+if [[ "$ACTION" == down ]]; then
+  compose down --volumes --remove-orphans
+  verify_production_unchanged
+  printf 'candidate_action=down\n'
+  printf 'candidate_project=%s\n' "$project"
+  printf 'candidate_cleanup_ok=true\n'
+  printf 'production_runtime_unchanged=true\n'
+  printf 'production_db_unchanged=true\n'
   exit 0
 fi
 
-printf 'candidate_env_isolated=true\n'
-printf 'production_env_unchanged=true\n'
-printf 'production_client_forward_guarded=true\n'
-printf 'production_client_bot_guarded=true\n'
-printf 'production_legacy_client_bot_unit_snapshotted=true\n'
-legacy_restore=true
+if [[ "$ACTION" == status ]]; then
+  compose ps
+  verify_production_unchanged
+  printf 'candidate_action=status\n'
+  printf 'candidate_project=%s\n' "$project"
+  printf 'candidate_api_url=http://127.0.0.1:%s\n' "$api_port"
+  printf 'candidate_web_url=http://127.0.0.1:%s\n' "$web_port"
+  printf 'production_runtime_unchanged=true\n'
+  printf 'production_db_unchanged=true\n'
+  exit 0
+fi
 
-set +e
-NAILS_CANDIDATE_ENV="$CANDIDATE_ENV" NAILS_CANDIDATE_CLIENT_FORWARD_GUARD="$forward_guard" bash "$runtime_script" "$1"
-status=$?
-set -e
+failed=true
+cleanup_failed_up() {
+  local status=$?
+  if [[ "$failed" == true ]]; then
+    set +e
+    compose down --volumes --remove-orphans >/dev/null 2>&1
+  fi
+  return "$status"
+}
+trap cleanup_failed_up EXIT
 
-production_bot_id_after="$(docker inspect -f '{{.Id}}' nails-nails-client-bot-1 2>/dev/null)" || die "production Compose client-bot container disappeared during candidate deploy"
-[[ "$production_bot_id_after" == "$production_bot_id_before" ]] || die "production Compose client-bot container ID changed during candidate deploy"
-[[ "$(docker inspect -f '{{.State.Running}}' nails-nails-client-bot-1)" == true ]] || die "production Compose client-bot container stopped during candidate deploy"
-printf 'production_client_bot_preserved=true\n'
-printf 'production_client_bot_container_id_unchanged=true\n'
-exit "$status"
+[[ -z "$(docker ps -aq --filter "label=com.docker.compose.project=$project")" ]] || die "candidate project already exists; run candidate down first"
+[[ -z "$(docker volume ls -q --filter "name=^${volume}$")" ]] || die "candidate volume already exists; run candidate down first"
+
+compose up -d --build --wait nails-db nails-api nails-web
+
+api_health="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${api_port}/health")"
+api_readiness="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${api_port}/ready")"
+web_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 10 "http://127.0.0.1:${web_port}/")"
+[[ -n "$api_health" ]] || die "candidate API health response is empty"
+[[ -n "$api_readiness" ]] || die "candidate API readiness response is empty"
+[[ "$web_status" == 200 ]] || die "candidate web returned HTTP $web_status"
+
+candidate_db_id="$(compose ps -q nails-db)"
+candidate_api_id="$(compose ps -q nails-api)"
+candidate_web_id="$(compose ps -q nails-web)"
+[[ -n "$candidate_db_id" && -n "$candidate_api_id" && -n "$candidate_web_id" ]] || die "candidate isolated runtime is incomplete"
+[[ -z "$(compose ps -q nails-client-bot)" ]] || die "candidate client bot must not be created"
+
+verify_production_unchanged
+failed=false
+printf 'CANDIDATE_RUNTIME_OK=true\n'
+printf 'candidate_action=up\n'
+printf 'candidate_sha=%s\n' "$SHA"
+printf 'candidate_project=%s\n' "$project"
+printf 'candidate_volume=%s\n' "$volume"
+printf 'candidate_edge_network=%s\n' "$edge_network"
+printf 'candidate_internal_network=%s\n' "$internal_network"
+printf 'candidate_db_container=%s\n' "$candidate_db_id"
+printf 'candidate_api_container=%s\n' "$candidate_api_id"
+printf 'candidate_web_container=%s\n' "$candidate_web_id"
+printf 'candidate_api_url=http://127.0.0.1:%s\n' "$api_port"
+printf 'candidate_web_url=http://127.0.0.1:%s\n' "$web_port"
+printf 'candidate_client_bot_created=false\n'
+printf 'candidate_db_isolated=true\n'
+printf 'candidate_runtime_isolated=true\n'
+printf 'production_runtime_unchanged=true\n'
+printf 'production_db_unchanged=true\n'
