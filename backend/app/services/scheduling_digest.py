@@ -9,6 +9,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
+from app.config import get_settings
 from app.models import (
     AuditEvent,
     Booking,
@@ -25,6 +26,7 @@ from app.schemas.scheduling_digest import (
     FinalizationDigestClaimRequest,
     FinalizationDigestClaimResponse,
     FinalizationDigestLongAbsentClient,
+    FinalizationDigestOwner,
     FinalizationDigestOwnersResponse,
 )
 from app.services.scheduling_common import lock_owner_schedule
@@ -33,15 +35,29 @@ from app.timezones import owner_timezone
 
 
 def list_digest_owners(session: Session) -> FinalizationDigestOwnersResponse:
-    user_ids = session.scalars(
-        select(User.telegram_user_id)
+    fallback_timezone = get_settings().app_timezone
+    rows = session.execute(
+        select(
+            User.telegram_user_id,
+            text("users.timezone"),
+        )
         .where(
             User.is_active.is_(True),
             User.role.in_((UserRole.master, UserRole.admin)),
         )
         .order_by(User.telegram_user_id)
     ).all()
-    return FinalizationDigestOwnersResponse(telegram_user_ids=list(user_ids))
+    owners = [
+        FinalizationDigestOwner(
+            telegram_user_id=telegram_user_id,
+            timezone=timezone_name or fallback_timezone,
+        )
+        for telegram_user_id, timezone_name in rows
+    ]
+    return FinalizationDigestOwnersResponse(
+        telegram_user_ids=[owner.telegram_user_id for owner in owners],
+        owners=owners,
+    )
 
 
 def _addon_names(snapshot: Any) -> list[str]:
