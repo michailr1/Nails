@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.timezones import validate_timezone_name
+
 type AssistantStyle = Literal["business", "friendly", "casual", "playful", "custom"]
 
 
@@ -74,9 +76,21 @@ class DefaultWorkHoursUpdateRequest(BaseModel):
         return ordered
 
 
+class TimezoneUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timezone: str = Field(min_length=1, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        return validate_timezone_name(value)
+
+
 class MasterPreferencesResponse(BaseModel):
     preferred_name: str | None
     assistant_style: AssistantStyle | None
     assistant_style_details: str | None
     default_work_intervals: list[DefaultWorkInterval] | None
+    timezone: str
     is_complete: bool
