@@ -98,9 +98,10 @@ def test_direct_clocks_are_utc_or_explicit_owner_local():
 
 
 def test_browser_has_no_hardcoded_owner_timezone():
-    findings: list[str] = []
+    hardcoded: list[str] = []
+    legacy_identifier: list[str] = []
     for root in WEB_ROOTS:
-        findings.extend(
+        hardcoded.extend(
             _matches(
                 (root,),
                 ".js",
@@ -109,13 +110,16 @@ def test_browser_has_no_hardcoded_owner_timezone():
                 ),
             )
         )
+        legacy_identifier.extend(
+            _matches((root,), ".js", re.compile(r"\bAPP_TIMEZONE\b"))
+        )
 
-    assert len(findings) == 1
-    assert findings[0].startswith("backend/app/web_static/app.js:")
-    assert 'timeZone: "UTC"' in findings[0]
+    assert len(hardcoded) == 1
+    assert hardcoded[0].startswith("backend/app/web_static/app.js:")
+    assert 'timeZone: "UTC"' in hardcoded[0]
+    assert legacy_identifier == []
 
     app_source = (BACKEND_APP / "web_static" / "app.js").read_text(encoding="utf-8")
     assert "Europe/Moscow" not in app_source
-    assert "APP_TIMEZONE" not in app_source
     assert "/web/api/auth/session?include_timezone=true" in app_source
     assert "state.timezone = session.timezone" in app_source
