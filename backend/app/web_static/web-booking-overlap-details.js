@@ -2,13 +2,13 @@ function bookingConflictDateTime(value) {
   const date = new Date(value);
   return {
     date: new Intl.DateTimeFormat("ru-RU", {
-      timeZone: APP_TIMEZONE,
+      timeZone: state.timezone,
       day: "numeric",
       month: "long",
       year: "numeric",
     }).format(date),
     time: new Intl.DateTimeFormat("ru-RU", {
-      timeZone: APP_TIMEZONE,
+      timeZone: state.timezone,
       hour: "2-digit",
       minute: "2-digit",
     }).format(date),

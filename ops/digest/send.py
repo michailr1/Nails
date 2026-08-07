@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -14,6 +14,7 @@ import httpx
 logger = logging.getLogger("nails-finalization-digest")
 _MAX_MESSAGE_LENGTH = 3900
 _MAX_LONG_ABSENT_CLIENTS = 5
+_DIGEST_LOCAL_HOUR = 23
 
 
 def _required_env(name: str) -> str:
@@ -39,6 +40,44 @@ def _timezone() -> ZoneInfo:
         return ZoneInfo(value)
     except ZoneInfoNotFoundError as exc:
         raise RuntimeError("APP_TIMEZONE is invalid") from exc
+
+
+def _owner_timezone(value: object) -> ZoneInfo:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("backend returned an invalid owner timezone")
+    try:
+        return ZoneInfo(value.strip())
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError("backend returned an unknown owner timezone") from exc
+
+
+def _owner_entries(payload: dict[str, Any]) -> list[tuple[int, ZoneInfo]]:
+    owners = payload.get("owners")
+    if isinstance(owners, list) and owners:
+        result: list[tuple[int, ZoneInfo]] = []
+        for item in owners:
+            if not isinstance(item, dict):
+                raise ValueError("backend returned an invalid digest owner")
+            telegram_user_id = item.get("telegram_user_id")
+            if not isinstance(telegram_user_id, int) or telegram_user_id <= 0:
+                raise ValueError("backend returned an invalid Telegram user ID")
+            result.append((telegram_user_id, _owner_timezone(item.get("timezone"))))
+        return result
+
+    user_ids = payload.get("telegram_user_ids")
+    if not isinstance(user_ids, list):
+        raise ValueError("backend returned an invalid owners response")
+    fallback = _timezone()
+    result = []
+    for value in user_ids:
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError("backend returned an invalid Telegram user ID")
+        result.append((value, fallback))
+    return result
+
+
+def _is_digest_window(local_now: datetime) -> bool:
+    return local_now.hour == _DIGEST_LOCAL_HOUR
 
 
 def _api_base() -> str:
@@ -222,6 +261,9 @@ def _send_owner_digest(
     except ValueError as exc:
         raise ValueError("backend returned an invalid digest local day") from exc
 
+    timezone = now.tzinfo
+    if not isinstance(timezone, ZoneInfo):
+        timezone = _timezone()
     try:
         response = client.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
@@ -229,7 +271,7 @@ def _send_owner_digest(
                 "chat_id": telegram_user_id,
                 "text": _message(
                     bookings,
-                    now.tzinfo or _timezone(),
+                    timezone,
                     local_day,
                     long_absent_clients,
                 ),
@@ -266,27 +308,37 @@ def run() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     api_key = _required_env("INTERNAL_API_KEY")
     token = _telegram_token()
-    timezone = _timezone()
-    now = datetime.now(timezone)
+    now_utc = datetime.now(UTC)
 
     sent_count = 0
+    eligible_count = 0
     with httpx.Client(timeout=15.0) as client:
-        owners = _request_json(
+        owners_payload = _request_json(
             client,
             "GET",
             "/api/v1/scheduling/finalization-digest/owners",
             headers=_headers(api_key),
         )
-        user_ids = owners.get("telegram_user_ids")
-        if not isinstance(user_ids, list):
-            raise ValueError("backend returned an invalid owners response")
-        for value in user_ids:
-            if not isinstance(value, int) or value <= 0:
-                raise ValueError("backend returned an invalid Telegram user ID")
-            if _send_owner_digest(client, api_key, token, value, now):
+        for telegram_user_id, timezone in _owner_entries(owners_payload):
+            local_now = now_utc.astimezone(timezone)
+            if not _is_digest_window(local_now):
+                continue
+            eligible_count += 1
+            if _send_owner_digest(
+                client,
+                api_key,
+                token,
+                telegram_user_id,
+                local_now,
+            ):
                 sent_count += 1
 
-    logger.info("DIGEST_OK=true owners_sent=%s local_day=%s", sent_count, now.date())
+    logger.info(
+        "DIGEST_OK=true owners_eligible=%s owners_sent=%s checked_at_utc=%s",
+        eligible_count,
+        sent_count,
+        now_utc.isoformat(),
+    )
     return 0
 
 

@@ -26,6 +26,7 @@ from app.schemas.client_contour import (
 from app.services.client_binding import ClientBindingError, resolve_start_token
 from app.services.scheduling_common import SchedulingDomainError
 from app.services.scheduling_queries import find_free_slots_for_owner
+from app.timezones import owner_timezone_name
 
 NO_BINDING_MESSAGE = (
     "👋 Здравствуйте! Это бот для записи к мастеру. Запись открывается по личной "
@@ -87,6 +88,7 @@ def _binding_for_owner(
 
 
 def _projection(
+    session: Session,
     row: ClientTelegramIdentity,
     profile: MasterPublicProfile,
 ) -> ClientMasterProjection:
@@ -94,6 +96,7 @@ def _projection(
         binding_id=row.id,
         display_name=profile.display_name.strip(),
         public_contact=profile.public_contact.strip() if profile.public_contact else None,
+        timezone=owner_timezone_name(session, row.owner_user_id),
     )
 
 
@@ -107,7 +110,7 @@ def _available_projection(
     profile = session.get(MasterPublicProfile, row.owner_user_id)
     if profile is None or not profile.display_name.strip():
         return None
-    return _projection(row, profile)
+    return _projection(session, row, profile)
 
 
 def start_client_context(
@@ -196,7 +199,7 @@ def start_client_context(
             )
         )
     session.commit()
-    master = _projection(row, profile)
+    master = _projection(session, row, profile)
     return ClientContextResponse(
         state=ClientEntryState.ready,
         message=_welcome(master.display_name),

@@ -24,7 +24,6 @@ from app.services.scheduling_common import (
     DEFAULT_SUGGESTION_START,
     SLOT_STEP_MINUTES,
     SchedulingDomainError,
-    app_timezone,
     availability_for_day,
     calculate_reservation,
     ceil_to_step,
@@ -32,6 +31,7 @@ from app.services.scheduling_common import (
     overlaps,
 )
 from app.services.scheduling_lookup import get_active_addons, get_active_service
+from app.timezones import owner_timezone
 
 _DRAFT_TTL = timedelta(hours=1)
 
@@ -274,7 +274,7 @@ def _busy_intervals(
     owner_user_id: uuid.UUID,
     day: date,
 ) -> list[tuple[datetime, datetime]]:
-    timezone = app_timezone()
+    timezone = owner_timezone(session, owner_user_id)
     start_at, end_at = day_bounds(day, timezone)
     rows = session.scalars(
         select(Booking).where(
@@ -295,7 +295,7 @@ def draft_slots(
 ) -> ClientBookingDraftSlotsResponse:
     draft = _require_draft(session, context, draft_id, allow_submitted=True)
     composition = _composition(session, draft)
-    timezone = app_timezone()
+    timezone = owner_timezone(session, context.owner_user_id)
     availability = availability_for_day(session, context.owner_user_id, day)
     is_day_off = any(not item.is_available for item in availability)
     explicit_windows = [item for item in availability if item.is_available]
@@ -357,7 +357,13 @@ def select_booking_draft_slot(
     starts_at: datetime,
 ) -> ClientBookingDraftSummary:
     draft = _require_draft(session, context, draft_id, lock=True)
-    available = draft_slots(session, context, draft.id, starts_at.astimezone(app_timezone()).date())
+    timezone = owner_timezone(session, context.owner_user_id)
+    available = draft_slots(
+        session,
+        context,
+        draft.id,
+        starts_at.astimezone(timezone).date(),
+    )
     requested_utc = starts_at.astimezone(UTC)
     current = next(
         (slot for slot in available.starts_at if slot.astimezone(UTC) == requested_utc),
@@ -384,11 +390,12 @@ def submit_booking_draft(
         raise SchedulingDomainError("client_booking_slot_required", status_code=422)
     if draft.starts_at.astimezone(UTC) <= datetime.now(UTC):
         raise SchedulingDomainError("booking_request_start_in_past", status_code=422)
+    timezone = owner_timezone(session, context.owner_user_id)
     available = draft_slots(
         session,
         context,
         draft.id,
-        draft.starts_at.astimezone(app_timezone()).date(),
+        draft.starts_at.astimezone(timezone).date(),
     )
     selected_utc = draft.starts_at.astimezone(UTC)
     if not any(slot.astimezone(UTC) == selected_utc for slot in available.starts_at):

@@ -16,6 +16,7 @@ from app.models import (
     Client,
     Service,
 )
+from app.timezones import owner_timezone
 
 SLOT_STEP_MINUTES = 15
 DEFAULT_SUGGESTION_START = time(10)
@@ -87,6 +88,14 @@ def calculate_reservation(
         buffer_before_minutes=service.buffer_before_minutes,
         buffer_after_minutes=service.buffer_after_minutes,
     )
+
+
+def is_representable_local_datetime(value: datetime) -> bool:
+    """Return false for local wall times skipped by a timezone transition."""
+    if value.tzinfo is None:
+        return False
+    round_trip = value.astimezone(UTC).astimezone(value.tzinfo)
+    return round_trip.replace(fold=value.fold) == value
 
 
 def day_bounds(day: date, timezone: ZoneInfo) -> tuple[datetime, datetime]:
@@ -163,7 +172,7 @@ def ensure_reservation_available(
     *,
     exclude_booking_id: uuid.UUID | None = None,
 ) -> None:
-    timezone = app_timezone()
+    timezone = owner_timezone(session, owner_user_id)
     service_day = reservation.starts_at.astimezone(timezone).date()
     availability = availability_for_day(session, owner_user_id, service_day)
 

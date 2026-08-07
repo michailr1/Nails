@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,15 +13,16 @@ from app.services.scheduling_common import (
     DEFAULT_SUGGESTION_END,
     DEFAULT_SUGGESTION_START,
     SLOT_STEP_MINUTES,
-    app_timezone,
     availability_for_day,
     calculate_reservation,
     ceil_to_step,
     day_bounds,
+    is_representable_local_datetime,
     overlaps,
 )
 from app.services.scheduling_lookup import get_active_service
 from app.services.scheduling_presenters import booking_summary, service_summary
+from app.timezones import owner_timezone
 
 
 def _bookings_for_range(
@@ -51,7 +52,7 @@ def get_day_view(
     identity: RequestIdentity,
     day: date,
 ) -> CatalogDayViewResponse:
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     start_at, end_at = day_bounds(day, timezone)
     availability = availability_for_day(session, identity.user_id, day)
     bookings = _bookings_for_range(
@@ -87,7 +88,7 @@ def find_free_slots_for_owner(
     day: date,
     service_name: str,
 ) -> FreeSlotsResponse:
-    timezone = app_timezone()
+    timezone = owner_timezone(session, owner_user_id)
     service = get_active_service(session, owner_user_id, service_name)
     availability = availability_for_day(session, owner_user_id, day)
     is_day_off = any(not item.is_available for item in availability)
@@ -116,7 +117,7 @@ def find_free_slots_for_owner(
         if booking.status == BookingStatus.scheduled
     ]
 
-    starts: set[datetime] = set()
+    starts_by_utc: dict[datetime, datetime] = {}
     for start_time, end_time in suggestion_windows:
         interval_start = datetime.combine(day, start_time, tzinfo=timezone)
         interval_end = datetime.combine(day, end_time, tzinfo=timezone)
@@ -128,17 +129,18 @@ def find_free_slots_for_owner(
             minutes=service.duration_minutes + service.buffer_after_minutes
         )
         while candidate <= last_start:
-            reservation = calculate_reservation(service, candidate)
-            if not any(
-                overlaps(
-                    reservation.reserved_starts_at,
-                    reservation.reserved_ends_at,
-                    busy_start,
-                    busy_end,
-                )
-                for busy_start, busy_end in busy
-            ):
-                starts.add(candidate)
+            if is_representable_local_datetime(candidate):
+                reservation = calculate_reservation(service, candidate)
+                if not any(
+                    overlaps(
+                        reservation.reserved_starts_at,
+                        reservation.reserved_ends_at,
+                        busy_start,
+                        busy_end,
+                    )
+                    for busy_start, busy_end in busy
+                ):
+                    starts_by_utc.setdefault(candidate.astimezone(UTC), candidate)
             candidate += timedelta(minutes=SLOT_STEP_MINUTES)
 
     return FreeSlotsResponse(
@@ -149,7 +151,7 @@ def find_free_slots_for_owner(
         is_working=not is_day_off,
         step_minutes=SLOT_STEP_MINUTES,
         service=service_summary(service),
-        starts_at=sorted(starts),
+        starts_at=sorted(starts_by_utc.values(), key=lambda value: value.astimezone(UTC)),
     )
 
 

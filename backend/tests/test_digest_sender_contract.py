@@ -72,6 +72,47 @@ def test_message_uses_public_fields_and_never_turns_unknown_price_into_zero():
     assert "booking_id" not in message
 
 
+def test_owner_entries_keep_each_master_timezone():
+    sender = _load_sender()
+
+    entries = sender._owner_entries(
+        {
+            "telegram_user_ids": [700000001, 700000002],
+            "owners": [
+                {"telegram_user_id": 700000001, "timezone": "Europe/Moscow"},
+                {"telegram_user_id": 700000002, "timezone": "Europe/Berlin"},
+            ],
+        }
+    )
+
+    assert [(user_id, timezone.key) for user_id, timezone in entries] == [
+        (700000001, "Europe/Moscow"),
+        (700000002, "Europe/Berlin"),
+    ]
+
+
+def test_legacy_owner_response_uses_previous_global_timezone(monkeypatch):
+    sender = _load_sender()
+    monkeypatch.setenv("APP_TIMEZONE", "Europe/Moscow")
+
+    entries = sender._owner_entries({"telegram_user_ids": [700000001]})
+
+    assert entries[0][0] == 700000001
+    assert entries[0][1].key == "Europe/Moscow"
+
+
+def test_digest_window_is_owner_local_evening():
+    sender = _load_sender()
+    instant = datetime.fromisoformat("2026-08-04T20:30:00+00:00")
+
+    assert sender._is_digest_window(
+        instant.astimezone(ZoneInfo("Europe/Moscow"))
+    ) is True
+    assert sender._is_digest_window(
+        instant.astimezone(ZoneInfo("Europe/Berlin"))
+    ) is False
+
+
 def test_sender_keeps_bot_credential_outside_backend_requests(monkeypatch):
     sender = _load_sender()
     backend_calls = []

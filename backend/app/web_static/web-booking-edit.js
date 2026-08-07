@@ -47,7 +47,7 @@ bookingCard = function editableBookingCard(booking, timezone) {
 function localBookingParts(iso) {
   const date = new Date(iso);
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIMEZONE,
+    timeZone: state.timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

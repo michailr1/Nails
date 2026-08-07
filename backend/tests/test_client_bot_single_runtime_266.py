@@ -122,7 +122,7 @@ def test_one_claim_is_sent_once_and_acked_once(tmp_path: Path):
                 "text": (
                     "Запись подтверждена ✅\n"
                     "Маникюр\n"
-                    "2026-08-02T12:00:00+03:00"
+                    "02.08 в 11:00"
                 ),
             },
         )

@@ -13,6 +13,7 @@ class ClientNotificationClaim(BaseModel):
     notification_id: uuid.UUID | None = None
     telegram_user_id: int | None = None
     event_type: Literal["approved", "rejected", "cancelled"] | None = None
+    timezone: str | None = None
     payload: dict[str, object] = Field(default_factory=dict)
     attempts: int = 0
 

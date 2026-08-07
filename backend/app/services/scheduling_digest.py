@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta, tzinfo
 from decimal import Decimal
 from typing import Any
 
@@ -25,22 +25,38 @@ from app.schemas.scheduling_digest import (
     FinalizationDigestClaimRequest,
     FinalizationDigestClaimResponse,
     FinalizationDigestLongAbsentClient,
+    FinalizationDigestOwner,
     FinalizationDigestOwnersResponse,
 )
-from app.services.scheduling_common import app_timezone, lock_owner_schedule
+from app.services.scheduling_common import lock_owner_schedule
 from app.services.web_statistics import _long_absent_clients, _visit_history_rows
+from app.timezones import configured_timezone_name, owner_timezone
 
 
 def list_digest_owners(session: Session) -> FinalizationDigestOwnersResponse:
-    user_ids = session.scalars(
-        select(User.telegram_user_id)
+    fallback_timezone = configured_timezone_name()
+    rows = session.execute(
+        select(
+            User.telegram_user_id,
+            User.timezone,
+        )
         .where(
             User.is_active.is_(True),
             User.role.in_((UserRole.master, UserRole.admin)),
         )
         .order_by(User.telegram_user_id)
     ).all()
-    return FinalizationDigestOwnersResponse(telegram_user_ids=list(user_ids))
+    owners = [
+        FinalizationDigestOwner(
+            telegram_user_id=telegram_user_id,
+            timezone=timezone_name or fallback_timezone,
+        )
+        for telegram_user_id, timezone_name in rows
+    ]
+    return FinalizationDigestOwnersResponse(
+        telegram_user_ids=[owner.telegram_user_id for owner in owners],
+        owners=owners,
+    )
 
 
 def _addon_names(snapshot: Any) -> list[str]:
@@ -68,8 +84,8 @@ def _digest_booking(
     booking: Booking,
     client: Client,
     service: Service,
+    timezone: tzinfo,
 ) -> FinalizationDigestBooking:
-    timezone = app_timezone()
     return FinalizationDigestBooking(
         client_public_name=client.public_name,
         service_name=service.public_name,
@@ -91,10 +107,11 @@ def _digest_long_absent_clients(
     *,
     current: datetime,
     generated_day,
+    timezone: tzinfo,
 ) -> list[FinalizationDigestLongAbsentClient]:
     _, clients = _long_absent_clients(
         _visit_history_rows(session, identity, current=current),
-        timezone=app_timezone(),
+        timezone=timezone,
         generated_day=generated_day,
     )
     return [
@@ -131,7 +148,7 @@ def claim_finalization_digest(
             bookings=[],
         )
 
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     local_midnight = datetime.combine(body.local_day, time.min, tzinfo=timezone)
     day_start = local_midnight.astimezone(UTC)
     next_day_start = (local_midnight + timedelta(days=1)).astimezone(UTC)
@@ -204,7 +221,7 @@ def claim_finalization_digest(
         claim_id=claim_id,
         local_day=body.local_day,
         bookings=[
-            _digest_booking(booking, client, service)
+            _digest_booking(booking, client, service, timezone)
             for booking, client, service in rows
         ],
         long_absent_clients=_digest_long_absent_clients(
@@ -212,6 +229,7 @@ def claim_finalization_digest(
             identity,
             current=cutoff,
             generated_day=body.local_day,
+            timezone=timezone,
         ),
     )
 

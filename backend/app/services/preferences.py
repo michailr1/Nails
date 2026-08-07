@@ -6,14 +6,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
-from app.models import AuditEvent
+from app.models import AuditEvent, User
 from app.models_preferences import MasterPreferences
 from app.schemas.preferences import (
     AssistantStyleUpdateRequest,
     DefaultWorkHoursUpdateRequest,
     MasterPreferencesResponse,
     PreferredNameUpdateRequest,
+    TimezonePreferenceResponse,
+    TimezoneUpdateRequest,
 )
+from app.timezones import owner_timezone_name
 
 
 def _load_preferences(
@@ -75,6 +78,15 @@ def get_master_preferences(
     identity: RequestIdentity,
 ) -> MasterPreferencesResponse:
     return _serialize(_load_preferences(session, identity.user_id, lock=False))
+
+
+def get_timezone_preference(
+    session: Session,
+    identity: RequestIdentity,
+) -> TimezonePreferenceResponse:
+    return TimezonePreferenceResponse(
+        timezone=owner_timezone_name(session, identity.user_id)
+    )
 
 
 def save_preferred_name(
@@ -156,3 +168,25 @@ def save_default_work_hours(
         session.commit()
 
     return _serialize(_load_preferences(session, identity.user_id, lock=False))
+
+
+def save_timezone(
+    session: Session,
+    identity: RequestIdentity,
+    body: TimezoneUpdateRequest,
+) -> TimezonePreferenceResponse:
+    user = session.get(User, identity.user_id)
+    if user is None:
+        raise RuntimeError("master user not found")
+    current = owner_timezone_name(session, identity.user_id)
+    if current != body.timezone or user.timezone is None:
+        user.timezone = body.timezone
+        _add_audit(
+            session,
+            identity,
+            "master_preferences.timezone_saved",
+            {"timezone": body.timezone},
+        )
+        session.commit()
+
+    return TimezonePreferenceResponse(timezone=body.timezone)

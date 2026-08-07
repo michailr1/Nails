@@ -27,11 +27,11 @@ from app.services.normalization import normalize_public_name
 from app.services.scheduling_common import (
     ReservationTimes,
     SchedulingDomainError,
-    app_timezone,
     ensure_reservation_available,
     lock_owner_schedule,
 )
 from app.services.scheduling_presenters import booking_summary, client_card_summary
+from app.timezones import owner_timezone
 
 _NAME_ALIASES = {
     "аня": "анна",
@@ -162,7 +162,7 @@ def reschedule_booking(
 ) -> BookingMutationResponse:
     lock_owner_schedule(session, identity.user_id)
     booking, client, service = _find_booking(session, identity, body, lock=True)
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     if booking.status != BookingStatus.scheduled:
         raise SchedulingDomainError("booking_not_scheduled")
     if booking.starts_at.astimezone(UTC) == body.new_starts_at.astimezone(UTC):
@@ -218,7 +218,7 @@ def cancel_booking(
         lock=True,
         allow_cancelled_repeat=True,
     )
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     if booking.status == BookingStatus.cancelled:
         return BookingMutationResponse(
             booking=booking_summary(booking, client, service, timezone),
@@ -278,7 +278,7 @@ def finalize_booking(
 ) -> BookingMutationResponse:
     lock_owner_schedule(session, identity.user_id)
     booking, client, service = _find_booking(session, identity, body, lock=True)
-    timezone = app_timezone()
+    timezone = owner_timezone(session, identity.user_id)
     if booking.status == BookingStatus.cancelled:
         raise SchedulingDomainError("booking_cancelled")
 

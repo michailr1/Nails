@@ -24,7 +24,6 @@ from app.services.scheduling_bookings import (
 )
 from app.services.scheduling_common import (
     SchedulingDomainError,
-    app_timezone,
     calculate_reservation,
     ensure_reservation_available,
     lock_owner_schedule,
@@ -36,6 +35,7 @@ from app.services.scheduling_lookup import (
 )
 from app.services.scheduling_presenters import booking_summary
 from app.services.web_read import web_booking_summary
+from app.timezones import owner_timezone
 
 _EDITABLE_STATUSES = {BookingStatus.scheduled, BookingStatus.completed}
 
@@ -274,7 +274,12 @@ def update_booking(
         )
         session.commit()
 
-    summary = booking_summary(booking, client, service, app_timezone())
+    summary = booking_summary(
+        booking,
+        client,
+        service,
+        owner_timezone(session, identity.user_id),
+    )
     return WebBookingUpdateResponse(
         booking=web_booking_summary(summary, client_id=client.id),
         changed=bool(changed_fields),

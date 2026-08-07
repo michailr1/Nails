@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from app.timezones import (
+    owner_timezone,
+    owner_timezone_name,
+    timezone_from_name,
+    validate_timezone_name,
+)
+
+ROOT = Path(__file__).resolve().parents[2]
+SERVICES = ROOT / "backend" / "app" / "services"
+
+
+class FakeResult:
+    def __init__(self, value):
+        self.value = value
+
+    def scalar_one_or_none(self):
+        return self.value
+
+
+class FakeSession:
+    def __init__(self, value):
+        self.value = value
+        self.calls = []
+
+    def execute(self, statement, params):
+        self.calls.append((str(statement), params))
+        return FakeResult(self.value)
+
+
+class OwnerMappingSession:
+    def __init__(self, values):
+        self.values = values
+        self.calls = []
+
+    def execute(self, statement, params):
+        self.calls.append((str(statement), params))
+        return FakeResult(self.values.get(params["owner_user_id"]))
+
+
+def test_explicit_timezone_is_validated_and_resolved():
+    assert validate_timezone_name("Europe/Moscow") == "Europe/Moscow"
+    assert timezone_from_name("Europe/Moscow") == ZoneInfo("Europe/Moscow")
+
+
+def test_invalid_timezone_is_rejected():
+    with pytest.raises(ValueError, match="timezone_unknown"):
+        validate_timezone_name("Mars/Olympus")
+
+
+def test_empty_timezone_is_rejected():
+    with pytest.raises(ValueError, match="timezone_required"):
+        validate_timezone_name("   ")
+
+
+def test_owner_timezone_uses_stored_value():
+    owner_id = uuid.uuid4()
+    session = FakeSession("Asia/Yekaterinburg")
+
+    assert owner_timezone_name(session, owner_id) == "Asia/Yekaterinburg"
+    assert owner_timezone(session, owner_id) == ZoneInfo("Asia/Yekaterinburg")
+    assert session.calls[0][1] == {"owner_user_id": str(owner_id)}
+
+
+def test_owner_timezone_null_falls_back_to_previous_global_setting(monkeypatch):
+    owner_id = uuid.uuid4()
+    session = FakeSession(None)
+    monkeypatch.setattr(
+        "app.timezones.get_settings",
+        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
+    )
+
+    assert owner_timezone_name(session, owner_id) == "Europe/Moscow"
+    assert owner_timezone(session, owner_id) == ZoneInfo("Europe/Moscow")
+
+
+def test_owner_timezone_isolated_by_owner(monkeypatch):
+    moscow_owner = uuid.uuid4()
+    berlin_owner = uuid.uuid4()
+    session = OwnerMappingSession(
+        {
+            str(moscow_owner): "Europe/Moscow",
+            str(berlin_owner): "Europe/Berlin",
+        }
+    )
+    monkeypatch.setattr(
+        "app.timezones.get_settings",
+        lambda: SimpleNamespace(app_timezone="Asia/Yekaterinburg"),
+    )
+
+    assert owner_timezone(session, moscow_owner).key == "Europe/Moscow"
+    assert owner_timezone(session, berlin_owner).key == "Europe/Berlin"
+    assert [call[1]["owner_user_id"] for call in session.calls] == [
+        str(moscow_owner),
+        str(berlin_owner),
+    ]
+
+
+def test_fallback_and_explicit_previous_timezone_are_identical(monkeypatch):
+    owner_id = uuid.uuid4()
+    monkeypatch.setattr(
+        "app.timezones.get_settings",
+        lambda: SimpleNamespace(app_timezone="Europe/Moscow"),
+    )
+
+    fallback = owner_timezone(FakeSession(None), owner_id)
+    explicit = owner_timezone(FakeSession("Europe/Moscow"), owner_id)
+
+    assert fallback == explicit
+    assert fallback.key == explicit.key == "Europe/Moscow"
+
+
+def test_same_utc_instant_can_belong_to_different_owner_local_days():
+    instant = datetime(2026, 8, 4, 21, 30, tzinfo=UTC)
+
+    assert instant.astimezone(ZoneInfo("Europe/Berlin")).date().isoformat() == "2026-08-04"
+    assert instant.astimezone(ZoneInfo("Europe/Moscow")).date().isoformat() == "2026-08-05"
+
+
+def test_draft_submit_resolves_day_from_context_owner_timezone():
+    source = (SERVICES / "client_booking_draft_submit.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, context.owner_user_id)" in source
+    assert "draft.starts_at.astimezone(timezone).date()" in source
+    assert "app_timezone" not in source
+
+
+def test_client_booking_drafts_resolve_all_local_days_from_owner_timezone():
+    source = (SERVICES / "client_booking_drafts.py").read_text(encoding="utf-8")
+
+    assert source.count("owner_timezone(session, context.owner_user_id)") == 3
+    assert "owner_timezone(session, owner_user_id)" in source
+    assert "starts_at.astimezone(timezone).date()" in source
+    assert "draft.starts_at.astimezone(timezone).date()" in source
+    assert "app_timezone" not in source
+
+
+def test_availability_paths_resolve_identity_owner_timezone():
+    for filename in ("scheduling_availability.py", "scheduling_availability_preview.py"):
+        source = (SERVICES / filename).read_text(encoding="utf-8")
+        assert "owner_timezone(session, identity.user_id)" in source
+        assert "app_timezone" not in source
+
+
+def test_booking_presenter_resolves_identity_owner_timezone():
+    source = (SERVICES / "scheduling_bookings.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "app_timezone" not in source
+
+
+def test_booking_management_resolves_identity_owner_timezone():
+    source = (SERVICES / "scheduling_management.py").read_text(encoding="utf-8")
+
+    assert source.count("owner_timezone(session, identity.user_id)") == 3
+    assert "app_timezone" not in source
+
+
+def test_web_booking_update_resolves_identity_owner_timezone():
+    source = (SERVICES / "web_booking_update.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "app_timezone" not in source
+
+
+def test_date_resolution_uses_request_owner_timezone():
+    source = (SERVICES / "scheduling_dates.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "datetime.now(timezone).date()" in source
+    assert "app_timezone" not in source
+
+
+def test_scheduling_queries_use_owner_timezone_for_day_bounds_and_slots():
+    source = (SERVICES / "scheduling_queries.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "owner_timezone(session, owner_user_id)" in source
+    assert "app_timezone" not in source
+
+
+def test_digest_uses_one_owner_timezone_for_boundaries_and_presenters():
+    source = (SERVICES / "scheduling_digest.py").read_text(encoding="utf-8")
+
+    assert "owner_timezone(session, identity.user_id)" in source
+    assert "datetime.combine(body.local_day, time.min, tzinfo=timezone)" in source
+    assert "_digest_booking(booking, client, service, timezone)" in source
+    assert "timezone=timezone" in source
+    assert "app_timezone" not in source

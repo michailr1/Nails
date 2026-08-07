@@ -8,10 +8,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
 from app.client_bot import TelegramApi
+from app.services.scheduling_common import app_timezone
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,9 +114,34 @@ class ClientBotRuntimeState:
         os.replace(temporary, path)
 
 
-def notification_text(event_type: str, payload: dict[str, Any]) -> str:
+def format_client_appointment_time(
+    value: object,
+    *,
+    timezone: ZoneInfo | None = None,
+) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    local = parsed.astimezone(timezone or app_timezone())
+    return local.strftime("%d.%m в %H:%M")
+
+
+def notification_text(
+    event_type: str,
+    payload: dict[str, Any],
+    *,
+    timezone: ZoneInfo | None = None,
+) -> str:
     service = str(payload.get("service_name") or "Запись")
-    starts_at = str(payload.get("starts_at") or "")
+    starts_at = format_client_appointment_time(
+        payload.get("starts_at"), timezone=timezone
+    )
     details = f"\n{service}" + (f"\n{starts_at}" if starts_at else "")
     if event_type == "approved":
         return f"Запись подтверждена ✅{details}"
@@ -179,12 +206,16 @@ class NotificationDrainer:
         if self._stop.is_set():
             self._api.ack(claim_id, "retry", "runtime_stopping")
             return
+        timezone_name = str(claim.get("timezone") or "").strip()
+        timezone = ZoneInfo(timezone_name) if timezone_name else None
         try:
             self._telegram.call(
                 "sendMessage",
                 chat_id=chat_id,
                 text=notification_text(
-                    str(claim["event_type"]), dict(claim.get("payload") or {})
+                    str(claim["event_type"]),
+                    dict(claim.get("payload") or {}),
+                    timezone=timezone,
                 ),
             )
         except Exception as exc:

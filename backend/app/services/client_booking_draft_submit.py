@@ -16,7 +16,8 @@ from app.services.client_booking_drafts import (
 )
 from app.services.client_booking_requests import create_client_booking_request
 from app.services.client_contour import ClientBindingContext
-from app.services.scheduling_common import SchedulingDomainError, app_timezone
+from app.services.scheduling_common import SchedulingDomainError
+from app.timezones import owner_timezone
 
 
 def _submitted_request(
@@ -92,11 +93,12 @@ def submit_booking_draft_idempotent(
     if draft.starts_at.astimezone(UTC) <= datetime.now(UTC):
         raise SchedulingDomainError("booking_request_start_in_past", status_code=422)
 
+    timezone = owner_timezone(session, context.owner_user_id)
     available = draft_slots(
         session,
         context,
         draft.id,
-        draft.starts_at.astimezone(app_timezone()).date(),
+        draft.starts_at.astimezone(timezone).date(),
     )
     selected_utc = draft.starts_at.astimezone(UTC)
     if not any(slot.astimezone(UTC) == selected_utc for slot in available.starts_at):

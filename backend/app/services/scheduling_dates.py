@@ -1,13 +1,24 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from contextvars import ContextVar
+from datetime import UTC, date, datetime, timedelta, tzinfo
 
+from sqlalchemy.orm import Session
+
+from app.auth import RequestIdentity
 from app.schemas.scheduling import DateResolveRequest, DateResolveResponse
-from app.services.scheduling_common import SchedulingDomainError, app_timezone
+from app.services.scheduling_common import SchedulingDomainError
+from app.timezones import owner_timezone
+
+_CURRENT_TIMEZONE: ContextVar[tzinfo] = ContextVar(
+    "scheduling_date_timezone",
+    default=UTC,
+)
 
 
 def _local_today() -> date:
-    return datetime.now(app_timezone()).date()
+    timezone = _CURRENT_TIMEZONE.get()
+    return datetime.now(timezone).date()
 
 
 def _date_in_year(year: int, month: int, day_of_month: int) -> date:
@@ -32,9 +43,17 @@ def _nearest_future_month_day(today: date, month: int, day_of_month: int) -> dat
     raise SchedulingDomainError("date_resolution_failed", status_code=422)
 
 
-def resolve_date(body: DateResolveRequest) -> DateResolveResponse:
-    timezone = app_timezone()
-    today = _local_today()
+def resolve_date(
+    session: Session,
+    identity: RequestIdentity,
+    body: DateResolveRequest,
+) -> DateResolveResponse:
+    timezone = owner_timezone(session, identity.user_id)
+    token = _CURRENT_TIMEZONE.set(timezone)
+    try:
+        today = _local_today()
+    finally:
+        _CURRENT_TIMEZONE.reset(token)
 
     if body.kind == "absolute":
         resolved = body.day

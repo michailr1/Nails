@@ -22,6 +22,7 @@ class ClientMasterProjection(BaseModel):
     binding_id: uuid.UUID
     display_name: str
     public_contact: str | None = None
+    timezone: str
 
 
 class ClientContextResponse(BaseModel):

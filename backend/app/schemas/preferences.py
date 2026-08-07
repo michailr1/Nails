@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.timezones import validate_timezone_name
+
 type AssistantStyle = Literal["business", "friendly", "casual", "playful", "custom"]
 
 
@@ -72,6 +74,21 @@ class DefaultWorkHoursUpdateRequest(BaseModel):
             if current.start_time < previous.end_time:
                 raise ValueError("default work intervals must not overlap")
         return ordered
+
+
+class TimezoneUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timezone: str = Field(min_length=1, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        return validate_timezone_name(value)
+
+
+class TimezonePreferenceResponse(BaseModel):
+    timezone: str
 
 
 class MasterPreferencesResponse(BaseModel):
