@@ -114,10 +114,20 @@ cleanup_failed_up() {
 }
 trap cleanup_failed_up EXIT
 
+diagnose_start_failure() {
+  printf 'candidate_start_diagnostics_begin=true\n' >&2
+  compose ps -a >&2 || true
+  compose logs --no-color --tail 200 nails-db nails-api >&2 || true
+  printf 'candidate_start_diagnostics_end=true\n' >&2
+}
+
 [[ -z "$(docker ps -aq --filter "label=com.docker.compose.project=$project")" ]] || die "candidate project already exists; run candidate down first"
 [[ -z "$(docker volume ls -q --filter "name=^${volume}$")" ]] || die "candidate volume already exists; run candidate down first"
 
-compose up -d --build --wait nails-db nails-api nails-web
+if ! compose up -d --build --wait nails-db nails-api nails-web; then
+  diagnose_start_failure
+  die "candidate compose startup failed; diagnostics emitted before cleanup"
+fi
 
 api_health="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${api_port}/health")"
 api_readiness="$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${api_port}/ready")"
