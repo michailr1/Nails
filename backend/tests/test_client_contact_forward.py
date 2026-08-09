@@ -76,6 +76,7 @@ def test_free_text_without_public_contact_is_queued_and_claimed_privately(
     payload = claim.json()
     assert payload["claimed"] is True
     assert payload["master_telegram_user_id"] == master.telegram_user_id
+    assert payload["kind"] == "client_message"
     assert payload["client_public_name"] == "Анна"
     assert payload["message_text"] == "Можно завтра после шести?"
 
