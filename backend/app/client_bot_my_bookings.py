@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
 
 _VISIBLE_STATUSES = {"pending", "approved"}
 _STATUS_LABELS = {
