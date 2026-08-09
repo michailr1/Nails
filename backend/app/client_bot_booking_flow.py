@@ -276,6 +276,9 @@ class DraftPlatformBot(PlatformBot):
             raise TypeError("DraftPlatformBot requires DraftNailsClientApi")
         return self._nails
 
+    def _summary_keyboard(self, draft_id: str) -> dict[str, Any]:
+        return draft_summary_keyboard(draft_id)
+
     def _show_addons(self, chat_id: int, draft: dict[str, Any]) -> None:
         if not draft.get("addons"):
             self._send(
@@ -418,7 +421,7 @@ class DraftPlatformBot(PlatformBot):
             self._send(
                 chat_id,
                 draft_summary_text(draft),
-                draft_summary_keyboard(draft_id),
+                self._summary_keyboard(draft_id),
             )
             return
         if action == "send":
