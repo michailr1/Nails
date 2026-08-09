@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from app.client_bot_booking_flow import draft_summary_keyboard, draft_summary_text
+from app.client_bot_booking_flow import draft_summary_text
 from app.client_bot_my_bookings import booking_request_text, upcoming_booking_requests
 from app.client_bot_onboarding import OnboardingDraftPlatformBot
 
@@ -23,25 +23,25 @@ def _telegram_contact(user: dict[str, Any]) -> str:
     return f"Telegram ID {telegram_user_id}"
 
 
-def _note_keyboard(draft_id: str) -> dict[str, Any]:
-    return {
-        "inline_keyboard": [
-            [
-                {
-                    "text": "📝 Заметка мастеру",
-                    "callback_data": f"note:{draft_id}",
-                }
-            ]
-        ]
-    }
-
-
 class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
     def __init__(self, telegram, nails) -> None:
         super().__init__(telegram, nails)
         self._pending_messages: dict[int, str] = {}
         self._pending_request_notes: dict[int, str] = {}
         self._request_bindings: dict[tuple[int, str], str] = {}
+
+    def _summary_keyboard(self, draft_id: str) -> dict[str, Any]:
+        keyboard = super()._summary_keyboard(draft_id)
+        rows = list(keyboard.get("inline_keyboard") or [])
+        rows.append(
+            [
+                {
+                    "text": "📝 Заметка мастеру",
+                    "callback_data": f"note:{draft_id}",
+                }
+            ]
+        )
+        return {"inline_keyboard": rows}
 
     def _menu_keyboard(
         self,
@@ -137,17 +137,6 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
         chat_id = int((message.get("chat") or {}).get("id") or 0)
         callback_id = str(callback.get("id") or "")
 
-        if action == "t":
-            super().handle_callback(callback)
-            if telegram_user_id > 0 and chat_id != 0:
-                draft_id = str(uuid.UUID(rest.split(":", 1)[0]))
-                self._send(
-                    chat_id,
-                    "Можно добавить заметку мастеру — необязательно.",
-                    _note_keyboard(draft_id),
-                )
-            return
-
         if action not in {"requests", "cancelreq", "write", "help", "note"}:
             return super().handle_callback(callback)
         if callback_id:
@@ -226,7 +215,7 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
             self._send(
                 chat_id,
                 prefix + draft_summary_text(updated),
-                draft_summary_keyboard(draft_id),
+                self._summary_keyboard(draft_id),
             )
             return
 
