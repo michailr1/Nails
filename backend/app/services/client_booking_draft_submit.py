@@ -117,6 +117,7 @@ def submit_booking_draft_idempotent(
         service_name=composition.service.public_name,
         addon_names=addon_names,
         addon_quantities=addon_quantities,
+        note=draft.note,
         starts_at=draft.starts_at,
         idempotency_key=f"client-draft:{draft.id}",
         source_draft_id=draft.id,
