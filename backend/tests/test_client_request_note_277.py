@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import date, time, timedelta
 from pathlib import Path
 
@@ -8,7 +7,7 @@ from sqlalchemy import select
 
 from app.client_models import BookingRequest, ClientContactForward, MasterPublicProfile
 from app.db import get_session_factory
-from app.models import AuditEvent
+from app.models import AuditEvent, User
 from app.services.client_binding import create_master_link_token
 
 CLIENT_KEY = "c" * 64
@@ -48,7 +47,13 @@ def test_request_note_is_optional_private_and_non_domain(
     create_availability,
     auth_headers,
 ):
-    master = create_user(telegram_user_id=860000001, timezone="Europe/Moscow")
+    master = create_user(telegram_user_id=860000001)
+    with get_session_factory()() as session:
+        stored_master = session.get(User, master.id)
+        assert stored_master is not None
+        stored_master.timezone = "Europe/Moscow"
+        session.commit()
+
     create_service(master.id, public_name="Маникюр", duration_minutes=60)
     day = date.today() + timedelta(days=20)
     create_availability(master.id, day=day, start_time=time(11), end_time=time(18))
