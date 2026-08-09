@@ -18,10 +18,23 @@ ACTION="${NAILS_CANDIDATE_ACTION:-up}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
 COMPOSE_FILE="$REPO_ROOT/compose.yaml"
+POSTGRES_INIT_SQL="$REPO_ROOT/deployment/postgres/init-app-user.sql"
 [[ -f "$COMPOSE_FILE" ]] || die "compose.yaml is missing from the exact candidate tree"
+
+normalize_container_readable_bind() {
+  local path="$1"
+  local mode
+  [[ -f "$path" && ! -L "$path" ]] || die "container-readable bind must be a regular non-symlink file: $path"
+  chmod 0644 "$path"
+  mode="$(stat -c '%a' "$path")"
+  [[ "$mode" == 644 ]] || die "container-readable bind must have mode 0644: $path"
+  (( (8#$mode & 8#004) != 0 )) || die "container-readable bind must be readable by a non-root container user: $path"
+}
+
 actual_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 [[ "$actual_sha" == "$SHA" ]] || die "candidate tree SHA $actual_sha does not match requested $SHA"
 [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)" ]] || die "candidate tree must be clean"
+normalize_container_readable_bind "$POSTGRES_INIT_SQL"
 
 CANDIDATE_ENV="${NAILS_CANDIDATE_ENV:-}"
 [[ -n "$CANDIDATE_ENV" ]] || die "NAILS_CANDIDATE_ENV is required"
