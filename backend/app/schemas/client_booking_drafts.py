@@ -115,7 +115,7 @@ class ClientBookingDraftSummary(BaseModel):
     service_name: str
     addon_names: list[str]
     addon_quantities: dict[str, int]
-    note: str | None
+    note: str | None = None
     starts_at: datetime | None
     duration_minutes: int
     buffer_before_minutes: int
