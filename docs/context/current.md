@@ -8,10 +8,12 @@
 
 ```text
 repository=michailr1/Nails
-production_host=de.funti.cc
-public_master_portal=https://de.funti.cc:8446/web/
-production_repo=/opt/nails/repo
-production_branch=main
+production host: de.funti.cc
+public master portal: https://de.funti.cc:8446/web/
+production repo: /opt/nails/repo
+production branch: main
+backend env: /opt/nails/.env
+internal API: http://127.0.0.1:8210
 production_sha=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
 running_api_sha=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
 running_web_sha=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
@@ -25,9 +27,19 @@ legacy_client_bot_active=inactive
 current_master_timezone_stored=null
 current_master_timezone_effective=Europe/Moscow
 last_verified_backup=/opt/nails/backups/nails-before-deploy-20260807T162338Z.sql.gz
+last_verified_deploy=DEPLOY_OK=true
 ```
 
 Production working tree clean. Existing users keep `users.timezone=NULL`; effective timezone falls back to configured `Europe/Moscow`. Production `.env` was not changed by the timezone rollout.
+
+Operational runtime facts retained as mandatory context anchors:
+
+- Hermes plugins: `nails-onboarding`, `nails-scheduling`;
+- один живой Telegram-тест за раз;
+- роли только `master`, `admin`, `client`;
+- имя помощника — «Нэйли»;
+- Нэйли — личная помощница мастера, а не CRM;
+- основной пользовательский раздел каталога — «Мой прайс».
 
 ## Release contract
 
@@ -35,7 +47,7 @@ Production working tree clean. Existing users keep `users.timezone=NULL`; effect
 - VPS-агент только исполняет утверждённые candidate/deploy/diagnostic runbook'и.
 - PR candidate проверяется из exact `origin/pr/<number>` без изменения production checkout.
 - Production deploy выполняется только постоянным `ops/deploy/deploy.sh <exact-SHA>`.
-- Отдельного finalize entrypoint нет.
+- отдельного finalize entrypoint нет.
 - Успех считается доказанным только по фактическому tool/VPS-отчёту.
 
 ## Последний завершённый большой этап
