@@ -13,7 +13,7 @@ from app.client_models import (
     MasterPublicProfile,
 )
 from app.db import get_session_factory
-from app.models import Booking, Service
+from app.models import AuditEvent, Booking, Service
 from app.services.client_binding import create_master_link_token
 
 CLIENT_KEY = "c" * 64
@@ -168,6 +168,25 @@ def test_master_approval_uses_corrected_service_time_price_and_duration(
         assert service is not None and service.public_name == "Педикюр"
         assert booking.duration_minutes_snapshot == 75
         assert booking.price_amount == Decimal("1234")
+        audit = session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.object_id == request.id,
+                AuditEvent.action == "client_booking_request.approved",
+            )
+            .order_by(AuditEvent.id.desc())
+        )
+        assert audit is not None
+        assert audit.safe_changes["structural_changes"] == {
+            "service_changed": True,
+            "addons_changed": False,
+            "time_changed": True,
+            "price_overridden": True,
+            "duration_overridden": True,
+        }
+        serialized = str(audit.safe_changes)
+        assert "Мария" not in serialized
+        assert "950000002" not in serialized
 
 
 def test_failed_corrected_approval_leaves_request_pending_and_original_values(
