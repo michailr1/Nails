@@ -14,23 +14,24 @@ production repo: /opt/nails/repo
 production branch: main
 backend env: /opt/nails/.env
 internal API: http://127.0.0.1:8210
-production_sha=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
-running_api_sha=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
-running_web_sha=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
-running_client_bot_sha=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
+production_sha=8852d09a17ddd9cb2563d1377e62d0e12d0a4aaa
+running_api_sha=8852d09a17ddd9cb2563d1377e62d0e12d0a4aaa
+running_web_sha=8852d09a17ddd9cb2563d1377e62d0e12d0a4aaa
+running_client_bot_sha=8852d09a17ddd9cb2563d1377e62d0e12d0a4aaa
 alembic_head=0023
 api_health=200
 api_readiness=200
 public_web=200
 client_bot_singleton=true
 legacy_client_bot_active=inactive
+client_forward_state=active
 current_master_timezone_stored=null
 current_master_timezone_effective=Europe/Moscow
-last_verified_backup=/opt/nails/backups/nails-before-deploy-20260807T162338Z.sql.gz
+last_verified_backup=/opt/nails/backups/nails-before-deploy-20260809T024639Z.sql.gz
 last_verified_deploy=DEPLOY_OK=true
 ```
 
-Production working tree clean. Existing users keep `users.timezone=NULL`; effective timezone falls back to configured `Europe/Moscow`. Production `.env` was not changed by the timezone rollout.
+Production working tree clean. Production `.env` unchanged; no manual SQL/runtime mutations were used for the last release.
 
 Operational runtime facts retained as mandatory context anchors:
 
@@ -50,70 +51,91 @@ Operational runtime facts retained as mandatory context anchors:
 - отдельного finalize entrypoint нет.
 - Успех считается доказанным только по фактическому tool/VPS-отчёту.
 
-## Последний завершённый большой этап
+## Последний завершённый этап — #285
 
-PR #287 добавил per-master timezone:
+PR #291 / production `8852d09a17ddd9cb2563d1377e62d0e12d0a4aaa` закрыл оставшийся timezone-регресс клиентского submit-flow:
 
-- nullable `users.timezone` и миграцию `0023`;
-- owner-aware timezone для scheduling, calendar, statistics, exports, digest, client bot и web;
-- IANA validation и preferences API;
-- spring-DST guard для nonexistent local wall times и дедупликацию UTC slot instants;
-- owner timezone в client notification outbox;
-- удаление frontend-зависимости от `APP_TIMEZONE`.
+- draft `16.08 14:45` и `✅ Заявка отправлена` теперь показывают один owner-local момент;
+- UTC submit serialization больше не превращается в пользовательские `11:45`;
+- regression проверен для Europe/Moscow и America/New_York;
+- production formatter acceptance `14:45 -> 14:45` прошёл;
+- alembic остаётся `0023`.
 
-Exact candidate `9330f835b9ea3b109245466fc53cacabcf7ab891` был принят, production работает на `cc28b9976cdbd640db61da6e9ebbcbdaaf41d506`.
+Issue #285 закрыт как completed.
 
-## Активный production-дефект #285
+## Активный блокер #290
 
-Реальная Telegram-приёмка после deploy выявила пропущенный путь:
+Production feedback выявил два связанных дефекта клиентского контура:
 
-- сводка черновика показывает `16.08 в 14:45`;
-- после отправки той же заявки сообщение `✅ Заявка отправлена` показывает `16.08 в 11:45`.
+1. pending-заявка в кабинете мастера фактически read-only: только «подтвердить / не получится»;
+2. новая заявка появляется в кабинете, но Нэйли не уведомляет мастера в Telegram.
 
-Причина подтверждена в `backend/app/client_bot_booking_flow.py`: submit-ответ API сериализуется в UTC, а клиентский бот форматировал `result.starts_at` без `astimezone(master timezone)`.
-
-Issue #285 переоткрыт. Активная ветка:
+Активная ветка:
 
 ```text
-fix/client-submit-timezone-285
-base=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
+fix/pending-request-edit-notify-290
+base=8852d09a17ddd9cb2563d1377e62d0e12d0a4aaa
+candidate_migration=0024
 ```
 
-Критерий: slot/draft/submit/cabinet/notifications должны показывать один owner-local момент; отдельный regression для Europe/Moscow и America/New_York, без фиксированного `+03`.
+Архитектурный срез:
 
-## Следующий блокер #290
+- не создавать второй booking engine: финальное подтверждение использует существующий `create_booking()` и его fresh catalog/day-off/overlap validation;
+- мастер до подтверждения может изменить основную процедуру, дополнения, время и при необходимости индивидуальную цену/длительность;
+- браузер не конструирует timezone offset вручную: время выбирается из owner-aware server slots;
+- request mutation происходит только после успешного создания Booking; ошибка/cancel оставляет pending request исходным;
+- для уведомления мастера переиспользуется существующий durable `client-forward` claim/ack/retry runtime;
+- migration `0024` добавляет forward `kind` и owner-scoped nullable `dedupe_key` с partial unique index;
+- новый request и master-forward фиксируются одной DB transaction; idempotent resubmit не создаёт второй forward;
+- delivery failure снимает claim и повторяется, не откатывая/не теряя уже committed BookingRequest;
+- системный forward отображается как `📅 Новая заявка на запись`, а не как свободный текст клиентки.
 
-После hotfix #285 реализовать issue #290:
+## Fresh-volume DB blocker и исправление
 
-1. мастер может до подтверждения pending-заявки изменить процедуру, дополнения и время, используя существующий booking/catalog/overlap domain;
-2. Booking создаётся только после явного финального подтверждения и fresh validation;
-3. клиентка получает финальные подтверждённые значения;
-4. при новой клиентской заявке Нэйли немедленно уведомляет мастера в trusted Telegram-контуре;
-5. уведомление идемпотентно, owner-scoped и retryable; сбой доставки не теряет заявку.
+Первые candidate-запуски #292 остановились до feature acceptance на инициализации нового PostgreSQL volume.
 
-Не создавать второй booking engine или новое хранилище без доказанной необходимости. Сначала инвентаризировать существующие booking-edit, client-forward/outbox и trusted Telegram delivery механизмы.
+Финальная причина подтверждена: `candidate_deploy.sh` и permanent `deploy.sh` работают под `umask 077`. После создания exact worktree обычный tracked `deployment/postgres/init-app-user.sql` фактически получал host mode `0600`. Bind mount переносил эти права в контейнер, а PostgreSQL init scripts читает непривилегированный пользователь `postgres`; результат — `Permission denied`, application role `nails_app` не создавалась и API не мог подключиться.
 
-## После критичных блокеров
+Production не падал только потому, что production volume уже инициализирован. Тот же дефект блокировал бы восстановление/развёртывание на свежий том, поэтому это часть recovery-contract, а не только candidate harness.
+
+Исправление:
+
+- `umask 077` сохраняется без изменений: он по-прежнему защищает candidate env, backup и runtime artifacts;
+- после exact tree validation в `candidate_deploy.sh` SQL-init точечно нормализуется в `0644` до первого `compose up`;
+- после `git worktree add` в permanent `deploy.sh` тот же SQL-init точечно нормализуется в `0644` до первого backup/compose/build действия;
+- оба пути проверяют exact mode `0644` и `other-read` bit, то есть файл доступен non-root container user;
+- SQL-init не содержит секретов; `APP_DB_USER`/`APP_DB_PASSWORD` приходят через psql `\getenv` из environment;
+- regression `test_candidate_deploy_env_isolation.py` фиксирует `umask 077`, оба permission-normalization path и порядок вызовов;
+- bind-mount audit: единственный второй `:ro` bind — `/run/nails-hermes-access`, он не из Git worktree и имеет отдельную group boundary `group_add: 42891` для backend user `nails`;
+- ручной VPS `chmod`, SQL или repair по-прежнему запрещены: exact candidate должен сам привести безопасный публичный bind к требуемому режиму.
+
+После зелёного exact-head CI isolated candidate #292 повторяется с нуля на новом SHA.
+
+Отдельно обнаружен latent debt: обычный `web-booking-edit.js` всё ещё строит `starts_at` с hardcoded `+03:00`. В #290 этот код не переиспользуется; исправить общий editor отдельным узким срезом после критичных блокеров либо раньше, если acceptance покажет влияние.
+
+## После #290
 
 Порядок:
 
-1. #285 — исправить расхождение времени submit confirmation;
-2. #290 — редактирование pending-заявки мастером + Telegram notification мастеру;
-3. #277/#280 — упростить клиентский flow: меньше шагов, необязательные дополнения без навязанного экрана, читаемые разделы, «Как в прошлый раз», «Мои записи»;
-4. #284/#282 — эффективный рабочий график и объяснение ограничений дня;
-5. #286/#268 — account menu и оставшийся mobile cabinet UX;
+1. #290 — редактирование pending-заявки + Telegram notification мастеру;
+2. #277/#280 — упростить клиентский flow: убрать навязанный отдельный шаг дополнений, сократить путь записи, разделы прайса, «Как в прошлый раз», «Мои записи»;
+3. #284/#282 — эффективный рабочий график и объяснение ограничений дня;
+4. #286/#268 — account menu и оставшийся mobile cabinet UX;
+5. hardcoded `+03:00` в общем booking editor — owner-aware edit contract;
 6. #252 — убрать глобальные render overrides/script-order coupling.
 
 ## Точка продолжения
 
 ```text
-production_sha=cc28b9976cdbd640db61da6e9ebbcbdaaf41d506
+production_sha=8852d09a17ddd9cb2563d1377e62d0e12d0a4aaa
 alembic_head=0023
-active_issue=285
-active_branch=fix/client-submit-timezone-285
-next_issue=290
+active_issue=290
+active_branch=fix/pending-request-edit-notify-290
+candidate_migration=0024
+next_issue=277/280
 client_bot_singleton=true
+client_forward_state=active
 current_master_timezone_effective=Europe/Moscow
-release_flow=exact PR-head candidate -> same accepted release -> deploy.sh
-next=finish #285 regression tests and CI, candidate acceptance, merge/deploy, then implement #290
+release_flow=exact PR-head candidate -> GitHub merge -> exact main deploy.sh
+next=full CI on final permission-fix head -> repeat isolated candidate #292 -> merge/deploy if green
 ```

@@ -204,11 +204,22 @@ class ClientTelegramContext(Base):
 class ClientContactForward(Base):
     __tablename__ = "client_contact_forwards"
     __table_args__ = (
+        CheckConstraint(
+            "kind IN ('client_message', 'booking_request_created')",
+            name="ck_client_contact_forwards_kind_valid",
+        ),
         Index(
             "ix_client_contact_forwards_pending",
             "sent_at",
             "claimed_at",
             "created_at",
+        ),
+        Index(
+            "uq_client_contact_forwards_owner_dedupe",
+            "owner_user_id",
+            "dedupe_key",
+            unique=True,
+            postgresql_where=text("dedupe_key IS NOT NULL"),
         ),
     )
 
@@ -225,6 +236,10 @@ class ClientContactForward(Base):
         ForeignKey("client_telegram_identities.id", ondelete="CASCADE"),
         nullable=False,
     )
+    kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="client_message", server_default="client_message"
+    )
+    dedupe_key: Mapped[str | None] = mapped_column(String(160))
     client_public_name: Mapped[str] = mapped_column(String(160), nullable=False)
     message_text: Mapped[str] = mapped_column(String(2000), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

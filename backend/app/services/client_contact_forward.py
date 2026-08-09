@@ -7,7 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import ClientTransportIdentity
-from app.client_models import ClientContactForward, ClientTelegramIdentity
+from app.client_models import (
+    BookingRequest,
+    ClientContactForward,
+    ClientTelegramIdentity,
+)
 from app.models import User, UserRole
 from app.schemas.client_contour import (
     ClientContactForwardAckResponse,
@@ -16,6 +20,7 @@ from app.schemas.client_contour import (
 )
 from app.services.client_contour import require_client_binding
 from app.services.scheduling_common import SchedulingDomainError
+from app.timezones import owner_timezone
 
 CLAIM_TTL = timedelta(minutes=5)
 
@@ -49,6 +54,7 @@ def enqueue_client_contact_forward(
     row = ClientContactForward(
         owner_user_id=context.owner_user_id,
         binding_id=binding.id,
+        kind="client_message",
         client_public_name=client_name,
         message_text=message_text,
     )
@@ -57,6 +63,36 @@ def enqueue_client_contact_forward(
     return ClientContactForwardResponse(
         accepted=True,
         message="Передам мастеру.",
+    )
+
+
+def enqueue_booking_request_master_forward(
+    session: Session,
+    request: BookingRequest,
+) -> None:
+    """Add a durable master notification to the caller's request transaction."""
+    timezone = owner_timezone(session, request.owner_user_id)
+    local_start = request.starts_at.astimezone(timezone)
+    addons = list(request.addon_names or [])
+    addon_text = ", ".join(addons) if addons else "без дополнений"
+    client_name = (request.requested_public_name or "Клиентка").strip() or "Клиентка"
+    message_text = "\n".join(
+        (
+            f"Процедура: {request.service_name}",
+            f"Дополнения: {addon_text}",
+            f"Время: {local_start:%d.%m в %H:%M}",
+            "Откройте кабинет, чтобы проверить, изменить и подтвердить заявку.",
+        )
+    )
+    session.add(
+        ClientContactForward(
+            owner_user_id=request.owner_user_id,
+            binding_id=request.binding_id,
+            kind="booking_request_created",
+            dedupe_key=f"booking-request:{request.id}",
+            client_public_name=client_name,
+            message_text=message_text,
+        )
     )
 
 
@@ -95,6 +131,7 @@ def claim_client_contact_forward(session: Session) -> ClientContactForwardClaim:
         claim_id=claim_id,
         forward_id=row.id,
         master_telegram_user_id=master.telegram_user_id,
+        kind=row.kind,
         client_public_name=row.client_public_name,
         message_text=row.message_text,
     )

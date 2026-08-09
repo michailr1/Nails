@@ -83,6 +83,7 @@ class ClientContactForwardClaim(BaseModel):
     claim_id: uuid.UUID | None = None
     forward_id: uuid.UUID | None = None
     master_telegram_user_id: int | None = None
+    kind: str | None = None
     client_public_name: str | None = None
     message_text: str | None = None
 
