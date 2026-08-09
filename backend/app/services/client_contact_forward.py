@@ -76,14 +76,15 @@ def enqueue_booking_request_master_forward(
     addons = list(request.addon_names or [])
     addon_text = ", ".join(addons) if addons else "без дополнений"
     client_name = (request.requested_public_name or "Клиентка").strip() or "Клиентка"
-    message_text = "\n".join(
-        (
-            f"Процедура: {request.service_name}",
-            f"Дополнения: {addon_text}",
-            f"Время: {local_start:%d.%m в %H:%M}",
-            "Откройте кабинет, чтобы проверить, изменить и подтвердить заявку.",
-        )
-    )
+    lines = [
+        f"Процедура: {request.service_name}",
+        f"Дополнения: {addon_text}",
+        f"Время: {local_start:%d.%m в %H:%M}",
+    ]
+    if request.note:
+        lines.extend(("", f"Заметка клиентки: {request.note}"))
+    lines.extend(("", "Откройте кабинет, чтобы проверить, изменить и подтвердить заявку."))
+    message_text = "\n".join(lines)
     session.add(
         ClientContactForward(
             owner_user_id=request.owner_user_id,
