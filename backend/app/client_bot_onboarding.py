@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 from app.client_bot import master_picker_keyboard
-from app.client_bot_booking_flow import DraftPlatformBot, draft_date_picker_keyboard
+from app.client_bot_booking_flow import (
+    DraftPlatformBot,
+    draft_date_picker_keyboard,
+    draft_submitted_text,
+)
 from app.client_bot_catalog_sections import (
     catalog_categories,
     category_page,
@@ -26,10 +29,6 @@ CONTACT_PROMPT = (
     "Чтобы мастер мог узнать вас и связаться по записи, поделитесь номером "
     "телефона кнопкой ниже. Номер увидит только ваш мастер."
 )
-
-
-def _parse_slot(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def contact_request_keyboard() -> dict[str, Any]:
@@ -320,12 +319,8 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
         result = api.submit_draft(telegram_user_id, draft_id)
         if result.get("status") != "pending":
             raise ValueError("unexpected booking request status")
-        parsed = _parse_slot(result["starts_at"])
         self._send(
             chat_id,
-            "✅ Заявка отправлена\n"
-            f"{result.get('service_name')}\n"
-            f"{parsed:%d.%m} в {parsed:%H:%M}\n\n"
-            "Мастер подтвердит запись. Пока время не забронировано.",
+            draft_submitted_text(draft, result),
             self._menu_keyboard(telegram_user_id, draft["master"]),
         )
