@@ -26,8 +26,12 @@ def test_production_compose_defaults_are_preserved_and_parameterized():
 def test_postgres_init_uses_sql_not_host_executable_script():
     compose_source = COMPOSE.read_text(encoding="utf-8")
     sql_source = POSTGRES_INIT_SQL.read_text(encoding="utf-8")
+    sql_mount = (
+        "./deployment/postgres/init-app-user.sql:"
+        "/docker-entrypoint-initdb.d/10-init-app-user.sql:ro"
+    )
 
-    assert "./deployment/postgres/init-app-user.sql:/docker-entrypoint-initdb.d/10-init-app-user.sql:ro" in compose_source
+    assert sql_mount in compose_source
     assert "init-app-user.sh:/docker-entrypoint-initdb.d" not in compose_source
     assert "\\getenv app_user APP_DB_USER" in sql_source
     assert "\\getenv app_password APP_DB_PASSWORD" in sql_source
