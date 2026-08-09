@@ -36,6 +36,11 @@ function requestCountLabel(count) {
   return `${count} просят записаться`;
 }
 
+function requestNoteBlock(request) {
+  if (!request.note) return "";
+  return `<div class="info-note"><strong>Заметка клиентки</strong><br>${escapeHtml(request.note)}</div>`;
+}
+
 function requestCard(request) {
   return `<article class="panel client-request-card" data-request-id="${escapeHtml(request.id)}">
     <div class="client-request-head">
@@ -46,6 +51,7 @@ function requestCard(request) {
       <strong>${escapeHtml(request.service_name)}</strong>
       <span>${escapeHtml(requestAddonLabel(request))}</span>
     </div>
+    ${requestNoteBlock(request)}
     <p class="client-request-note">Это просьба о времени, а не запись. Вы можете изменить состав и время перед подтверждением.</p>
     <div class="client-request-actions">
       <button class="primary-button" type="button" data-request-approve="${escapeHtml(request.id)}">Проверить и подтвердить</button>
@@ -181,6 +187,7 @@ function renderClientRequestDialog(request, clients, services, preselect = null)
       <button class="ghost-button" value="close" type="submit" aria-label="Закрыть">×</button>
     </div>
     <div class="client-request-summary"><span>Клиентка попросила:</span><strong>${escapeHtml(request.service_name)}</strong><span>${escapeHtml(requestAddonLabel(request))}</span><span>${escapeHtml(requestDateTime(request.starts_at))}</span></div>
+    ${requestNoteBlock(request)}
     <label class="catalog-field"><span>Основная процедура</span><select name="service_name" required>${bases.map((service) => `<option value="${escapeHtml(service.public_name)}" ${service.public_name === request.service_name ? "selected" : ""}>${escapeHtml(service.public_name)}</option>`).join("")}</select></label>
     <div class="booking-addons"><span class="booking-field-title">Дополнения <em>необязательно</em></span>${requestAddonChoices(addons, request)}</div>
     <div class="booking-edit-date-time"><label class="booking-edit-field">Дата<input name="day" type="date" value="${escapeHtml(requestIsoDate(request.starts_at))}" required></label><label class="booking-edit-field">Свободное время<select name="starts_at" required></select></label></div>
