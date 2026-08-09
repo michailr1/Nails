@@ -90,6 +90,26 @@ candidate_migration=0024
 - delivery failure снимает claim и повторяется, не откатывая/не теряя уже committed BookingRequest;
 - системный forward отображается как `📅 Новая заявка на запись`, а не как свободный текст клиентки.
 
+## Candidate blocker, найденный 9 августа
+
+Первый isolated candidate PR #292 остановился до проверки feature-кода:
+
+```text
+CANDIDATE_OK=false
+reason=CANDIDATE_API_UNHEALTHY_DURING_UP
+root_cause=deployment/postgres/init-app-user.sh tracked as Git mode 100644
+```
+
+Fresh Postgres initdb не исполнил bind-mounted shell script и не создал application role `nails_app`; API поэтому не мог аутентифицироваться к isolated candidate DB. Production checkout/runtime/DB остались неизменными, cleanup прошёл.
+
+Исправление класса ошибки:
+
+- `deployment/postgres/init-app-user.sh` должен быть tracked как `100755`;
+- regression `test_candidate_deploy_env_isolation.py` теперь проверяет Git mode `100755` для init-script;
+- VPS `chmod` запрещён: candidate обязан работать из exact Git tree без ручной коррекции permissions.
+
+После нового exact-head CI candidate acceptance #292 повторяется с нуля.
+
 Отдельно обнаружен latent debt: обычный `web-booking-edit.js` всё ещё строит `starts_at` с hardcoded `+03:00`. В #290 этот код не переиспользуется; исправить общий editor отдельным узким срезом после критичных блокеров либо раньше, если acceptance покажет влияние.
 
 ## После #290
@@ -116,5 +136,5 @@ client_bot_singleton=true
 client_forward_state=active
 current_master_timezone_effective=Europe/Moscow
 release_flow=exact PR-head candidate -> GitHub merge -> exact main deploy.sh
-next=finish #290 tests/CI/candidate acceptance, merge/deploy, then simplify client booking flow
+next=verify init-app-user.sh Git mode 100755 on final head -> CI -> repeat isolated candidate #292
 ```
