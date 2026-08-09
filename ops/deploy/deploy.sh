@@ -364,7 +364,7 @@ gzip -t "$DB_BACKUP"
 cp -a "${PROFILE}/plugins" "${RUNTIME_BACKUP}/plugins.before"
 cp -a "${PROFILE}/skills" "${RUNTIME_BACKUP}/skills.before"
 [[ -d "$BACKUP_RUNTIME" ]] && cp -a "$BACKUP_RUNTIME" "${RUNTIME_BACKUP}/backup-runtime.before"
-[[ -f "$BACKUP_SERVICE" ]] && cp -a "$BACKUP_SERVICE" "$BACKUP_SERVICE"
+[[ -f "$BACKUP_SERVICE" ]] && cp -a "$BACKUP_SERVICE" "${RUNTIME_BACKUP}/nails-backup.service.before"
 [[ -f "$BACKUP_TIMER" ]] && cp -a "$BACKUP_TIMER" "${RUNTIME_BACKUP}/nails-backup.timer.before"
 systemctl is-enabled nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-enabled.before" 2>/dev/null || true
 systemctl is-active nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-active.before" 2>/dev/null || true
