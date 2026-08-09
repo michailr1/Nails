@@ -4,7 +4,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTER = ROOT / "ops" / "deploy" / "candidate_deploy.sh"
+PERMANENT_DEPLOY = ROOT / "ops" / "deploy" / "deploy.sh"
 COMPOSE = ROOT / "compose.yaml"
+BACKEND_DOCKERFILE = ROOT / "backend" / "Dockerfile"
 POSTGRES_INIT_SQL = ROOT / "deployment" / "postgres" / "init-app-user.sql"
 
 
@@ -39,6 +41,52 @@ def test_postgres_init_uses_sql_not_host_executable_script():
     assert "ALTER DATABASE %I OWNER TO %I" in sql_source
     assert "ALTER SCHEMA public OWNER TO %I" in sql_source
     assert "REVOKE CREATE ON SCHEMA public FROM PUBLIC" in sql_source
+
+
+def _assert_postgres_bind_permission_contract(source: str, target: str) -> None:
+    assert "umask 077" in source
+    assert "normalize_container_readable_bind()" in source
+    assert 'chmod 0644 "$path"' in source
+    assert 'mode="$(stat -c \'%a\' "$path")"' in source
+    assert '[[ "$mode" == 644 ]]' in source
+    assert "8#004" in source
+    assert target in source
+
+
+def test_candidate_normalizes_init_sql_after_exact_tree_validation():
+    source = ADAPTER.read_text(encoding="utf-8")
+    target = 'normalize_container_readable_bind "$POSTGRES_INIT_SQL"'
+
+    _assert_postgres_bind_permission_contract(source, target)
+    assert source.index("candidate tree must be clean") < source.index(target)
+    assert source.index(target) < source.index('CANDIDATE_ENV="${NAILS_CANDIDATE_ENV:-}"')
+
+
+def test_permanent_deploy_normalizes_init_sql_immediately_after_checkout():
+    source = PERMANENT_DEPLOY.read_text(encoding="utf-8")
+    checkout = 'git -C "$REPO" worktree add --detach "$WORKTREE" "$RELEASE_SHA"'
+    target = (
+        'normalize_container_readable_bind '
+        '"$WORKTREE/deployment/postgres/init-app-user.sql"'
+    )
+
+    _assert_postgres_bind_permission_contract(source, target)
+    assert source.index(checkout) < source.index(target)
+    assert source.index(target) < source.index("validate_client_runtime_config")
+
+
+def test_non_root_bind_mount_inventory_has_explicit_access_boundary():
+    compose_source = COMPOSE.read_text(encoding="utf-8")
+    dockerfile_source = BACKEND_DOCKERFILE.read_text(encoding="utf-8")
+
+    assert compose_source.count(":ro") == 2
+    assert (
+        "./deployment/postgres/init-app-user.sql:"
+        "/docker-entrypoint-initdb.d/10-init-app-user.sql:ro"
+    ) in compose_source
+    assert "/run/nails-hermes-access:/run/nails-hermes-access:ro" in compose_source
+    assert 'group_add:\n      - "42891"' in compose_source
+    assert "USER nails" in dockerfile_source
 
 
 def test_candidate_adapter_never_delegates_to_release_deploy():
