@@ -5,18 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ADAPTER = ROOT / "ops" / "deploy" / "candidate_deploy.sh"
 COMPOSE = ROOT / "compose.yaml"
-POSTGRES_INIT_SCRIPT = ROOT / "deployment" / "postgres" / "init-app-user.sh"
-
-
-def _git_mode(path: Path) -> str:
-    relative = path.relative_to(ROOT)
-    output = subprocess.check_output(
-        ["git", "ls-files", "-s", "--", str(relative)],
-        cwd=ROOT,
-        text=True,
-    ).strip()
-    assert output, f"tracked file not found: {relative}"
-    return output.split(maxsplit=1)[0]
+POSTGRES_INIT_SQL = ROOT / "deployment" / "postgres" / "init-app-user.sql"
 
 
 def test_candidate_adapter_is_executable():
@@ -32,6 +21,20 @@ def test_production_compose_defaults_are_preserved_and_parameterized():
     assert "name: ${NAILS_INTERNAL_NETWORK_NAME:-nails-internal}" in source
     assert "${NAILS_API_PORT:-8210}:8000" in source
     assert "${NAILS_WEB_PORT:-8220}:8080" in source
+
+
+def test_postgres_init_uses_sql_not_host_executable_script():
+    compose_source = COMPOSE.read_text(encoding="utf-8")
+    sql_source = POSTGRES_INIT_SQL.read_text(encoding="utf-8")
+
+    assert "./deployment/postgres/init-app-user.sql:/docker-entrypoint-initdb.d/10-init-app-user.sql:ro" in compose_source
+    assert "init-app-user.sh:/docker-entrypoint-initdb.d" not in compose_source
+    assert "\\getenv app_user APP_DB_USER" in sql_source
+    assert "\\getenv app_password APP_DB_PASSWORD" in sql_source
+    assert "CREATE ROLE %I LOGIN PASSWORD %L" in sql_source
+    assert "ALTER DATABASE %I OWNER TO %I" in sql_source
+    assert "ALTER SCHEMA public OWNER TO %I" in sql_source
+    assert "REVOKE CREATE ON SCHEMA public FROM PUBLIC" in sql_source
 
 
 def test_candidate_adapter_never_delegates_to_release_deploy():
@@ -142,8 +145,3 @@ def test_candidate_adapter_rejects_production_env_before_docker(tmp_path):
     assert result.returncode != 0
     assert "candidate env must not be the production env" in result.stderr
     assert not docker_marker.exists()
-
-
-def test_fresh_postgres_init_script_is_executable_from_git():
-    assert POSTGRES_INIT_SCRIPT.read_text(encoding="utf-8").startswith("#!/bin/sh\n")
-    assert _git_mode(POSTGRES_INIT_SCRIPT) == "100755"
