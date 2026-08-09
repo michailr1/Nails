@@ -23,7 +23,11 @@ def test_price_sections_are_native_collapsible_groups() -> None:
     assert 'catalogPositionLabel(items.length)' in source
     assert 'hasEditingCard ? "open" : ""' in source
     assert 'items.some(({ index }) => index === expandedServiceIndex)' in source
-    assert 'index === expandedServiceIndex ? serviceEditorCard(service, index) : serviceSummaryCard(service, index)' in source
+    renderer = (
+        'index === expandedServiceIndex ? serviceEditorCard(service, index) '
+        ': serviceSummaryCard(service, index)'
+    )
+    assert renderer in source
 
 
 def test_catalog_renderer_uses_browser_lexical_catalog_state_not_this_binding() -> None:
@@ -70,15 +74,24 @@ def test_catalog_time_format_covers_base_addon_and_buffer() -> None:
 
 def test_catalog_russian_position_count_rules_are_complete() -> None:
     source = _read("web-catalog-readability.js")
-    assert 'if (mod10 === 1 && mod100 !== 11) return `${count} позиция`;' in source
-    assert 'if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return `${count} позиции`;' in source
+    singular = 'if (mod10 === 1 && mod100 !== 11) return `${count} позиция`;'
+    few = (
+        'if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) '
+        'return `${count} позиции`;'
+    )
+    assert singular in source
+    assert few in source
     assert 'return `${count} позиций`;' in source
 
 
 def test_catalog_empty_state_and_collapsed_default_remain_explicit() -> None:
     source = _read("web-catalog-readability.js")
-    assert 'if (!serviceCatalogDraft.length) return \'<div class="panel empty">В прайсе пока нет позиций.</div>\';' in source
-    # There is no unconditional open attribute; it is tied exclusively to active editor membership.
+    empty_state = (
+        'if (!serviceCatalogDraft.length) return '
+        '\'<div class="panel empty">В прайсе пока нет позиций.</div>\';'
+    )
+    assert empty_state in source
+    # There is no unconditional open attribute; it is tied to active editor membership.
     assert '${hasEditingCard ? "open" : ""}' in source
 
 
