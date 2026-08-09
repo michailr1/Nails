@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -38,6 +38,10 @@ def _start_binding(client, master, telegram_user_id: int) -> str:
     )
     assert response.status_code == 200
     return response.json()["master"]["binding_id"]
+
+
+def _instant(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
 
 def test_request_note_is_optional_private_and_non_domain(
@@ -109,9 +113,10 @@ def test_request_note_is_optional_private_and_non_domain(
     assert selected_json["note"] == NOTE
     selected_starts_at = selected_json["starts_at"]
     assert selected_starts_at is not None
+    selected_instant = _instant(selected_starts_at)
 
-    # Note updates are informational only. In particular they must preserve an
-    # already selected slot, including blank -> null normalization and restore.
+    # Note updates are informational only. API responses may serialize the same
+    # instant either with the owner-local offset or as UTC Z, so compare instants.
     blanked = client.put(
         f"/api/v1/client/booking-drafts/{draft_id}/note",
         headers=_client_headers(960000001),
@@ -119,7 +124,7 @@ def test_request_note_is_optional_private_and_non_domain(
     )
     assert blanked.status_code == 200, blanked.text
     assert blanked.json()["note"] is None
-    assert blanked.json()["starts_at"] == selected_starts_at
+    assert _instant(blanked.json()["starts_at"]) == selected_instant
 
     restored = client.put(
         f"/api/v1/client/booking-drafts/{draft_id}/note",
@@ -128,7 +133,7 @@ def test_request_note_is_optional_private_and_non_domain(
     )
     assert restored.status_code == 200, restored.text
     assert restored.json()["note"] == NOTE
-    assert restored.json()["starts_at"] == selected_starts_at
+    assert _instant(restored.json()["starts_at"]) == selected_instant
 
     too_long_after_slot = client.put(
         f"/api/v1/client/booking-drafts/{draft_id}/note",
@@ -142,7 +147,7 @@ def test_request_note_is_optional_private_and_non_domain(
     )
     assert reread.status_code == 200, reread.text
     assert reread.json()["note"] == NOTE
-    assert reread.json()["starts_at"] == selected_starts_at
+    assert _instant(reread.json()["starts_at"]) == selected_instant
 
     submitted = client.post(
         f"/api/v1/client/booking-drafts/{draft_id}/submit",
