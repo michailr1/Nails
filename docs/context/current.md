@@ -90,31 +90,26 @@ candidate_migration=0024
 - delivery failure снимает claim и повторяется, не откатывая/не теряя уже committed BookingRequest;
 - системный forward отображается как `📅 Новая заявка на запись`, а не как свободный текст клиентки.
 
-## Candidate blocker, найденный 9 августа
+## Fresh-volume DB blocker и исправление
 
-Два isolated candidate запуска остановились до проверки feature-кода на одном инфраструктурном классе ошибки.
+Первые candidate-запуски #292 остановились до feature acceptance на инициализации нового PostgreSQL volume.
 
-Первый head `6788ce8...` показал отсутствие application role в fresh candidate DB. Попытка сделать bind-mounted `init-app-user.sh` executable в Git (`100755`) устранила этот симптом в CI, но второй VPS candidate на `a5260bb...` доказал реальную границу окружения:
+Финальная причина подтверждена: `candidate_deploy.sh` и permanent `deploy.sh` работают под `umask 077`. После создания exact worktree обычный tracked `deployment/postgres/init-app-user.sql` фактически получал host mode `0600`. Bind mount переносил эти права в контейнер, а PostgreSQL init scripts читает непривилегированный пользователь `postgres`; результат — `Permission denied`, application role `nails_app` не создавалась и API не мог подключиться.
 
-```text
-CANDIDATE_OK=false
-reason=CANDIDATE_DB_UNHEALTHY
-failure=Permission denied while executing /docker-entrypoint-initdb.d/10-init-app-user.sh
-```
+Production не падал только потому, что production volume уже инициализирован. Тот же дефект блокировал бы восстановление/развёртывание на свежий том, поэтому это часть recovery-contract, а не только candidate harness.
 
-Причина: host/worktree filesystem на VPS не гарантирует exec для bind-mounted файлов. Официальный Postgres entrypoint запускает executable `.sh` как отдельный процесс, поэтому executable host bind остаётся зависимым от mount `exec/noexec` semantics.
+Исправление:
 
-Исправление класса ошибки теперь не использует host executable вообще:
+- `umask 077` сохраняется без изменений: он по-прежнему защищает candidate env, backup и runtime artifacts;
+- после exact tree validation в `candidate_deploy.sh` SQL-init точечно нормализуется в `0644` до первого `compose up`;
+- после `git worktree add` в permanent `deploy.sh` тот же SQL-init точечно нормализуется в `0644` до первого backup/compose/build действия;
+- оба пути проверяют exact mode `0644` и `other-read` bit, то есть файл доступен non-root container user;
+- SQL-init не содержит секретов; `APP_DB_USER`/`APP_DB_PASSWORD` приходят через psql `\getenv` из environment;
+- regression `test_candidate_deploy_env_isolation.py` фиксирует `umask 077`, оба permission-normalization path и порядок вызовов;
+- bind-mount audit: единственный второй `:ro` bind — `/run/nails-hermes-access`, он не из Git worktree и имеет отдельную group boundary `group_add: 42891` для backend user `nails`;
+- ручной VPS `chmod`, SQL или repair по-прежнему запрещены: exact candidate должен сам привести безопасный публичный bind к требуемому режиму.
 
-- `deployment/postgres/init-app-user.sh` удалён;
-- добавлен `deployment/postgres/init-app-user.sql`;
-- SQL получает `APP_DB_USER`/`APP_DB_PASSWORD` через psql `\getenv`;
-- compose bind-mount'ит `.sql` в `/docker-entrypoint-initdb.d/10-init-app-user.sql:ro`;
-- официальный Postgres entrypoint передаёт `.sql` непосредственно `psql`, поэтому host executable bit и `noexec` больше не участвуют;
-- regression `test_candidate_deploy_env_isolation.py` запрещает возврат shell bind и проверяет SQL init contract;
-- VPS chmod/manual SQL/manual candidate repair по-прежнему запрещены.
-
-После зелёного exact-head CI candidate acceptance #292 повторяется с нуля.
+После зелёного exact-head CI isolated candidate #292 повторяется с нуля на новом SHA.
 
 Отдельно обнаружен latent debt: обычный `web-booking-edit.js` всё ещё строит `starts_at` с hardcoded `+03:00`. В #290 этот код не переиспользуется; исправить общий editor отдельным узким срезом после критичных блокеров либо раньше, если acceptance покажет влияние.
 
@@ -142,5 +137,5 @@ client_bot_singleton=true
 client_forward_state=active
 current_master_timezone_effective=Europe/Moscow
 release_flow=exact PR-head candidate -> GitHub merge -> exact main deploy.sh
-next=verify SQL init exact head -> CI clean DB/compose-smoke -> repeat isolated candidate #292
+next=full CI on final permission-fix head -> repeat isolated candidate #292 -> merge/deploy if green
 ```
