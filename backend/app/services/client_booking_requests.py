@@ -131,6 +131,7 @@ def create_client_booking_request(
     starts_at: datetime,
     idempotency_key: str,
     source_draft_id: uuid.UUID | None = None,
+    note: str | None = None,
 ) -> BookingRequest:
     binding = context.binding
     if binding.status == ClientTelegramIdentityStatus.revoked:
@@ -166,6 +167,7 @@ def create_client_booking_request(
             existing.service_name != service_name
             or existing.addon_names != addon_names
             or existing.addon_quantities != addon_quantities
+            or existing.note != note
             or existing.starts_at.astimezone(UTC) != starts_at.astimezone(UTC)
         ):
             raise SchedulingDomainError("idempotency_conflict", status_code=409)
@@ -186,6 +188,7 @@ def create_client_booking_request(
             existing.service_name != service_name
             or existing.addon_names != addon_names
             or existing.addon_quantities != addon_quantities
+            or existing.note != note
             or existing.starts_at.astimezone(UTC) != starts_at.astimezone(UTC)
         ):
             raise SchedulingDomainError("idempotency_conflict", status_code=409)
@@ -201,6 +204,7 @@ def create_client_booking_request(
         service_name=service_name,
         addon_names=list(addon_names),
         addon_quantities=dict(addon_quantities),
+        note=note,
         starts_at=starts_at,
         status=BookingRequestStatus.pending,
         idempotency_key=idempotency_key,

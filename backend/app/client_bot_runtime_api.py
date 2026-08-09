@@ -126,6 +126,19 @@ class RuntimeDraftNailsClientApi(DraftNailsClientApi):
             binding_id=binding_id,
         )
 
+    def update_draft_note(
+        self,
+        telegram_user_id: int,
+        draft_id: str,
+        note: str | None,
+    ) -> dict[str, Any]:
+        return self._request(
+            "PUT",
+            f"/api/v1/client/booking-drafts/{draft_id}/note",
+            telegram_user_id=telegram_user_id,
+            json={"note": note},
+        )
+
     def booking_requests(
         self,
         telegram_user_id: int,

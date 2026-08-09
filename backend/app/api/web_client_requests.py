@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from app.auth import RequestIdentity
 from app.db import get_db_session
 from app.schemas.client_booking_requests import (
-    BookingRequestListResponse,
-    BookingRequestPublic,
     MasterBookingRequestApprove,
+    MasterBookingRequestListResponse,
+    MasterBookingRequestPublic,
 )
 from app.schemas.scheduling import FreeSlotsResponse
 from app.services.client_booking_requests import (
@@ -54,8 +54,8 @@ def _translate_domain_error(exc: SchedulingDomainError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=detail)
 
 
-def _public(row) -> BookingRequestPublic:
-    return BookingRequestPublic(
+def _public(row) -> MasterBookingRequestPublic:
+    return MasterBookingRequestPublic(
         id=row.id,
         status=row.status,
         client_id=row.client_id,
@@ -63,19 +63,20 @@ def _public(row) -> BookingRequestPublic:
         service_name=row.service_name,
         addon_names=list(row.addon_names),
         addon_quantities=dict(row.addon_quantities),
+        note=row.note,
         starts_at=row.starts_at,
         booking_id=row.booking_id,
         created_at=row.created_at,
     )
 
 
-@router.get("", response_model=BookingRequestListResponse)
+@router.get("", response_model=MasterBookingRequestListResponse)
 def list_pending_requests(
     session: SessionDependency,
     identity: ReadIdentityDependency,
-) -> BookingRequestListResponse:
+) -> MasterBookingRequestListResponse:
     rows = list_master_booking_requests(session, identity, status="pending")
-    return BookingRequestListResponse(requests=[_public(row) for row in rows])
+    return MasterBookingRequestListResponse(requests=[_public(row) for row in rows])
 
 
 @router.get("/slots", response_model=FreeSlotsResponse)
@@ -91,14 +92,14 @@ def request_slots(
         raise _translate_domain_error(exc) from exc
 
 
-@router.post("/{booking_request_id}/approve", response_model=BookingRequestPublic)
+@router.post("/{booking_request_id}/approve", response_model=MasterBookingRequestPublic)
 def approve_request(
     booking_request_id: uuid.UUID,
     body: MasterBookingRequestApprove,
     request: Request,
     session: SessionDependency,
     identity: WriteIdentityDependency,
-) -> BookingRequestPublic:
+) -> MasterBookingRequestPublic:
     validate_web_boundary(request)
     try:
         row = approve_master_booking_request(
@@ -119,13 +120,13 @@ def approve_request(
     return _public(row)
 
 
-@router.post("/{booking_request_id}/reject", response_model=BookingRequestPublic)
+@router.post("/{booking_request_id}/reject", response_model=MasterBookingRequestPublic)
 def reject_request(
     booking_request_id: uuid.UUID,
     request: Request,
     session: SessionDependency,
     identity: WriteIdentityDependency,
-) -> BookingRequestPublic:
+) -> MasterBookingRequestPublic:
     validate_web_boundary(request)
     try:
         row = reject_master_booking_request(

@@ -167,6 +167,7 @@ class BookingRequest(Base):
     addon_quantities: Mapped[dict[str, int]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
+    note: Mapped[str | None] = mapped_column(String(300))
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     booking_id: Mapped[uuid.UUID | None] = mapped_column(

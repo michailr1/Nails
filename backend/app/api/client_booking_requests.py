@@ -17,6 +17,8 @@ from app.schemas.client_booking_requests import (
     BookingRequestStatusValue,
     ClientBookingRequestCreate,
     MasterBookingRequestApprove,
+    MasterBookingRequestListResponse,
+    MasterBookingRequestPublic,
 )
 from app.services.client_booking_requests import (
     approve_master_booking_request,
@@ -66,6 +68,13 @@ def _public(row) -> BookingRequestPublic:
         starts_at=row.starts_at,
         booking_id=row.booking_id,
         created_at=row.created_at,
+    )
+
+
+def _master_public(row) -> MasterBookingRequestPublic:
+    return MasterBookingRequestPublic(
+        **_public(row).model_dump(),
+        note=row.note,
     )
 
 
@@ -145,33 +154,35 @@ def cancel_request(
 
 @router.get(
     "/api/v1/scheduling/client-requests",
-    response_model=BookingRequestListResponse,
+    response_model=MasterBookingRequestListResponse,
 )
 def master_list_requests(
     session: SessionDependency,
     identity: TrustedIdentityDependency,
     status: Annotated[BookingRequestStatusValue | None, Query()] = None,
-) -> BookingRequestListResponse:
+) -> MasterBookingRequestListResponse:
     rows = list_master_booking_requests(
         session,
         identity,
         status=status.value if status is not None else None,
     )
-    return BookingRequestListResponse(requests=[_public(row) for row in rows])
+    return MasterBookingRequestListResponse(
+        requests=[_master_public(row) for row in rows]
+    )
 
 
 @router.post(
     "/api/v1/scheduling/client-requests/{booking_request_id}/approve",
-    response_model=BookingRequestPublic,
+    response_model=MasterBookingRequestPublic,
 )
 def master_approve_request(
     booking_request_id: str,
     body: MasterBookingRequestApprove,
     session: SessionDependency,
     identity: TrustedIdentityDependency,
-) -> BookingRequestPublic:
+) -> MasterBookingRequestPublic:
     try:
-        return _public(
+        return _master_public(
             approve_master_booking_request(
                 session,
                 identity,
@@ -192,15 +203,15 @@ def master_approve_request(
 
 @router.post(
     "/api/v1/scheduling/client-requests/{booking_request_id}/reject",
-    response_model=BookingRequestPublic,
+    response_model=MasterBookingRequestPublic,
 )
 def master_reject_request(
     booking_request_id: str,
     session: SessionDependency,
     identity: TrustedIdentityDependency,
-) -> BookingRequestPublic:
+) -> MasterBookingRequestPublic:
     try:
-        return _public(
+        return _master_public(
             reject_master_booking_request(
                 session,
                 identity,
