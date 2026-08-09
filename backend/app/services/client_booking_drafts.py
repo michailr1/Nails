@@ -187,6 +187,7 @@ def draft_summary(
             for addon in composition.addons
             if composition.quantities[addon.id] != 1
         },
+        note=draft.note,
         starts_at=draft.starts_at,
         duration_minutes=composition.duration_minutes,
         buffer_before_minutes=composition.service.buffer_before_minutes,
@@ -225,6 +226,7 @@ def create_booking_draft(
         service_name=service.public_name,
         addon_names=[],
         addon_quantities={},
+        note=None,
         starts_at=None,
         expires_at=now + _DRAFT_TTL,
     )
@@ -263,6 +265,20 @@ def update_booking_draft_composition(
     draft.addon_names = canonical_names
     draft.addon_quantities = quantities
     draft.starts_at = None
+    _touch(draft)
+    result = draft_summary(session, context, draft)
+    session.commit()
+    return result
+
+
+def update_booking_draft_note(
+    session: Session,
+    context: ClientBindingContext,
+    draft_id: uuid.UUID,
+    note: str | None,
+) -> ClientBookingDraftSummary:
+    draft = _require_draft(session, context, draft_id, lock=True)
+    draft.note = note
     _touch(draft)
     result = draft_summary(session, context, draft)
     session.commit()
@@ -413,6 +429,7 @@ def submit_booking_draft(
         service_name=composition.service.public_name,
         addon_names=addon_names,
         addon_quantities=addon_quantities,
+        note=draft.note,
         starts_at=draft.starts_at,
         idempotency_key=f"client-draft:{draft.id}:{selected_utc:%Y%m%d%H%M}",
     )
