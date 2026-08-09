@@ -86,7 +86,10 @@ def test_direct_clocks_are_utc_or_explicit_owner_local():
         )
         and not (
             finding.startswith("backend/app/client_bot_booking_flow.py:")
-            and "datetime.now(ZoneInfo(timezone_name)).date()" in finding
+            and (
+                "datetime.now(ZoneInfo(timezone_name)).date()" in finding
+                or "datetime.now(_draft_timezone(draft)).date()" in finding
+            )
         )
         and not (
             finding.startswith("backend/app/client_bot.py:")
@@ -95,6 +98,13 @@ def test_direct_clocks_are_utc_or_explicit_owner_local():
     ]
 
     assert unexpected == []
+
+    draft_source = (BACKEND_APP / "client_bot_booking_flow.py").read_text(
+        encoding="utf-8"
+    )
+    assert "def _draft_timezone(draft: dict[str, Any]) -> ZoneInfo:" in draft_source
+    assert "return ZoneInfo(timezone_name)" in draft_source
+    assert "datetime.now(_draft_timezone(draft)).date()" in draft_source
 
 
 def test_browser_has_no_hardcoded_owner_timezone():
