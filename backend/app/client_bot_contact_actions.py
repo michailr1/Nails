@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
+from app.client_bot_my_bookings import booking_request_text, upcoming_booking_requests
 from app.client_bot_onboarding import OnboardingDraftPlatformBot
 
 MAX_CLIENT_MESSAGE_LENGTH = 500
@@ -19,26 +19,6 @@ def _telegram_contact(user: dict[str, Any]) -> str:
     if username:
         return f"@{username} · Telegram ID {telegram_user_id}"
     return f"Telegram ID {telegram_user_id}"
-
-
-def _request_status(value: str) -> str:
-    return {
-        "pending": "Ждёт ответа мастера",
-        "approved": "Подтверждена",
-        "rejected": "Отклонена",
-        "cancelled": "Отменена",
-    }.get(value, value)
-
-
-def _request_text(item: dict[str, Any]) -> str:
-    starts_at = datetime.fromisoformat(str(item["starts_at"]).replace("Z", "+00:00"))
-    return "\n".join(
-        (
-            str(item.get("service_name") or "Процедура"),
-            f"{starts_at:%d.%m} в {starts_at:%H:%M}",
-            _request_status(str(item.get("status") or "")),
-        )
-    )
 
 
 class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
@@ -76,11 +56,17 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
         binding_id: str,
     ) -> None:
         payload = self._runtime_api().booking_requests(telegram_user_id, binding_id)
-        requests = list(payload.get("requests") or [])
+        catalog = self._nails.catalog(telegram_user_id, binding_id)
+        master = catalog["master"]
+        requests = upcoming_booking_requests(payload)
         if not requests:
-            self._send(chat_id, "У вас пока нет заявок к этому мастеру.")
+            self._send(
+                chat_id,
+                "🗓 Мои записи\n\nБлижайших записей и заявок пока нет.",
+                self._menu_keyboard(telegram_user_id, master),
+            )
             return
-        for item in requests[:10]:
+        for item in requests[:8]:
             rows: list[list[dict[str, str]]] = []
             request_id = str(uuid.UUID(str(item.get("id") or "")))
             self._request_bindings[(telegram_user_id, request_id)] = binding_id
@@ -95,7 +81,7 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
                 )
             self._send(
                 chat_id,
-                _request_text(item),
+                booking_request_text(item, master),
                 {"inline_keyboard": rows} if rows else None,
             )
 
