@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.client_notification_models import ClientLinkRecord
 from app.models import AuditEvent, Client, ClientProfileStatus, User, UserRole
 from app.schemas.client_booking_requests import BookingRequestResolutionValue
 from app.schemas.scheduling_catalog_bookings import CatalogBookingCreateRequest
+from app.services.client_contact_forward import enqueue_booking_request_master_forward
 from app.services.client_contour import ClientBindingContext
 from app.services.client_notifications import enqueue_booking_request_notification
 from app.services.normalization import normalize_public_name
@@ -210,6 +212,7 @@ def create_client_booking_request(
         actor_user_id=None,
         actor_type="client_bot",
     )
+    enqueue_booking_request_master_forward(session, request)
     session.commit()
     session.refresh(request)
     return request
@@ -475,6 +478,12 @@ def approve_master_booking_request(
     *,
     resolution: BookingRequestResolutionValue,
     selected_client_id: uuid.UUID | None,
+    service_name: str | None = None,
+    addon_names: list[str] | None = None,
+    addon_quantities: dict[str, int] | None = None,
+    starts_at: datetime | None = None,
+    price_override_amount: Decimal | None = None,
+    duration_override_minutes: int | None = None,
 ) -> BookingRequest:
     request = session.scalar(
         select(BookingRequest)
@@ -498,6 +507,19 @@ def approve_master_booking_request(
     if owner is None or owner.role != UserRole.master or not owner.is_active:
         raise SchedulingDomainError("booking_request_context_invalid", status_code=409)
 
+    final_service_name = service_name or request.service_name
+    final_addon_names = list(request.addon_names if addon_names is None else addon_names)
+    final_addon_quantities = dict(
+        request.addon_quantities if addon_quantities is None else addon_quantities
+    )
+    final_starts_at = starts_at or request.starts_at
+    _validate_request_catalog(
+        session,
+        owner_user_id=identity.user_id,
+        service_name=final_service_name,
+        addon_names=final_addon_names,
+    )
+
     client = _resolve_client_for_approval(
         session,
         request=request,
@@ -507,10 +529,12 @@ def approve_master_booking_request(
 
     booking_body = CatalogBookingCreateRequest(
         client_public_name=client.public_name,
-        service_name=request.service_name,
-        addon_names=list(request.addon_names),
-        addon_quantities=dict(request.addon_quantities),
-        starts_at=request.starts_at,
+        service_name=final_service_name,
+        addon_names=final_addon_names,
+        addon_quantities=final_addon_quantities,
+        starts_at=final_starts_at,
+        price_override_amount=price_override_amount,
+        duration_override_minutes=duration_override_minutes,
         idempotency_key=f"client-request:{request.id}",
     )
     response = create_booking(session, identity, booking_body)
@@ -518,6 +542,10 @@ def approve_master_booking_request(
     if request is None:
         raise SchedulingDomainError("booking_request_not_found", status_code=404)
     request.client_id = client.id
+    request.service_name = final_service_name
+    request.addon_names = final_addon_names
+    request.addon_quantities = final_addon_quantities
+    request.starts_at = final_starts_at
     request.booking_id = response.booking.id
     request.status = BookingRequestStatus.approved
     _safe_audit(
