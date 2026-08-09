@@ -66,6 +66,16 @@ compose() {
     "$@"
 }
 
+normalize_container_readable_bind() {
+  local path="$1"
+  local mode
+  [[ -f "$path" && ! -L "$path" ]] || die "container-readable bind must be a regular non-symlink file: $path"
+  chmod 0644 "$path"
+  mode="$(stat -c '%a' "$path")"
+  [[ "$mode" == 644 ]] || die "container-readable bind must have mode 0644: $path"
+  (( (8#$mode & 8#004) != 0 )) || die "container-readable bind must be readable by a non-root container user: $path"
+}
+
 API_IMAGE_RETAGGED="false"
 WEB_IMAGE_RETAGGED="false"
 CLIENT_BOT_IMAGE_RETAGGED="false"
@@ -340,6 +350,7 @@ printf 'prev_sha=%s release_sha=%s source_ref=%s\n' "$PREV_SHA" "$RELEASE_SHA" "
 log "1. Точное дерево релиза"
 git -C "$REPO" worktree add --detach "$WORKTREE" "$RELEASE_SHA" >/dev/null
 [[ "$(git -C "$WORKTREE" rev-parse HEAD)" == "$RELEASE_SHA" ]]
+normalize_container_readable_bind "$WORKTREE/deployment/postgres/init-app-user.sql"
 CLIENT_RUNTIME_ENABLED="$(validate_client_runtime_config)" || die "invalid client runtime configuration"
 printf 'client_runtime_enabled=%s\n' "$CLIENT_RUNTIME_ENABLED"
 
@@ -353,7 +364,7 @@ gzip -t "$DB_BACKUP"
 cp -a "${PROFILE}/plugins" "${RUNTIME_BACKUP}/plugins.before"
 cp -a "${PROFILE}/skills" "${RUNTIME_BACKUP}/skills.before"
 [[ -d "$BACKUP_RUNTIME" ]] && cp -a "$BACKUP_RUNTIME" "${RUNTIME_BACKUP}/backup-runtime.before"
-[[ -f "$BACKUP_SERVICE" ]] && cp -a "$BACKUP_SERVICE" "${RUNTIME_BACKUP}/nails-backup.service.before"
+[[ -f "$BACKUP_SERVICE" ]] && cp -a "$BACKUP_SERVICE" "$BACKUP_SERVICE"
 [[ -f "$BACKUP_TIMER" ]] && cp -a "$BACKUP_TIMER" "${RUNTIME_BACKUP}/nails-backup.timer.before"
 systemctl is-enabled nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-enabled.before" 2>/dev/null || true
 systemctl is-active nails-backup.timer >"${RUNTIME_BACKUP}/backup-timer-active.before" 2>/dev/null || true
