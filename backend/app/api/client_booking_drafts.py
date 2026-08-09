@@ -13,6 +13,7 @@ from app.db import get_db_session
 from app.schemas.client_booking_drafts import (
     ClientBookingDraftCompositionUpdate,
     ClientBookingDraftCreate,
+    ClientBookingDraftNoteUpdate,
     ClientBookingDraftSlotsResponse,
     ClientBookingDraftSlotUpdate,
     ClientBookingDraftSubmitResponse,
@@ -26,6 +27,7 @@ from app.services.client_booking_drafts import (
     get_booking_draft,
     select_booking_draft_slot,
     update_booking_draft_composition,
+    update_booking_draft_note,
 )
 from app.services.client_contour import require_client_binding
 from app.services.client_repeat_last import (
@@ -151,6 +153,25 @@ def update_composition(
             draft_id,
             addon_names=body.addon_names,
             addon_quantities=body.addon_quantities,
+        )
+    except SchedulingDomainError as exc:
+        raise _translate(exc) from exc
+
+
+@router.put("/{draft_id}/note", response_model=ClientBookingDraftSummary)
+def update_note(
+    draft_id: uuid.UUID,
+    body: ClientBookingDraftNoteUpdate,
+    session: SessionDependency,
+    identity: ClientIdentityDependency,
+) -> ClientBookingDraftSummary:
+    try:
+        context = _draft_context(session, identity, draft_id)
+        return update_booking_draft_note(
+            session,
+            context,
+            draft_id,
+            body.note,
         )
     except SchedulingDomainError as exc:
         raise _translate(exc) from exc
