@@ -69,10 +69,13 @@ def test_permanent_deploy_normalizes_init_sql_immediately_after_checkout():
         'normalize_container_readable_bind '
         '"$WORKTREE/deployment/postgres/init-app-user.sql"'
     )
+    runtime_validation = (
+        'CLIENT_RUNTIME_ENABLED="$(validate_client_runtime_config)"'
+    )
 
     _assert_postgres_bind_permission_contract(source, target)
     assert source.index(checkout) < source.index(target)
-    assert source.index(target) < source.index("validate_client_runtime_config")
+    assert source.index(target) < source.index(runtime_validation)
 
 
 def test_non_root_bind_mount_inventory_has_explicit_access_boundary():
