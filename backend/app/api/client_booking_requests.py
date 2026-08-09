@@ -58,6 +58,7 @@ def _public(row) -> BookingRequestPublic:
     return BookingRequestPublic(
         id=row.id,
         status=row.status,
+        client_id=row.client_id,
         requested_public_name=row.requested_public_name,
         service_name=row.service_name,
         addon_names=list(row.addon_names),
@@ -177,6 +178,12 @@ def master_approve_request(
                 _uuid(booking_request_id, code="invalid_booking_request_id"),
                 resolution=body.resolution,
                 selected_client_id=body.client_id,
+                service_name=body.service_name,
+                addon_names=body.addon_names,
+                addon_quantities=body.addon_quantities,
+                starts_at=body.starts_at,
+                price_override_amount=body.price_override_amount,
+                duration_override_minutes=body.duration_override_minutes,
             )
         )
     except SchedulingDomainError as exc:
