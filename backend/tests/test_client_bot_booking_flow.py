@@ -7,17 +7,23 @@ from app.client_bot_booking_flow import (
     draft_addon_keyboard,
     draft_date_picker_keyboard,
     draft_slot_picker_keyboard,
+    draft_submitted_text,
     draft_summary_keyboard,
+    draft_summary_text,
 )
 
 DRAFT_ID = "33333333-3333-4333-8333-333333333333"
 BINDING_ID = "11111111-1111-4111-8111-111111111111"
 
 
-def _draft():
+def _draft(*, timezone: str = "Europe/Moscow"):
     return {
         "draft_id": DRAFT_ID,
-        "master": {"binding_id": BINDING_ID, "display_name": "Настя"},
+        "master": {
+            "binding_id": BINDING_ID,
+            "display_name": "Настя",
+            "timezone": timezone,
+        },
         "service_name": "Маникюр",
         "addon_names": ["Ремонт"],
         "addon_quantities": {"ремонт": 2},
@@ -100,3 +106,37 @@ def test_quantity_controls_change_server_side_composition_values_only():
     selected, quantities = _composition_values(draft, toggle_index=1)
     assert selected == []
     assert quantities == {}
+
+
+def test_submit_confirmation_matches_draft_master_local_time():
+    draft = {
+        **_draft(),
+        "starts_at": "2026-08-16T14:45:00+03:00",
+        "duration_minutes": 50,
+        "price_type": "fixed",
+        "price_amount": "1100",
+        "currency": "RUB",
+    }
+    result = {
+        "status": "pending",
+        "service_name": "Маникюр",
+        "starts_at": "2026-08-16T11:45:00+00:00",
+    }
+
+    assert "16.08 в 14:45" in draft_summary_text(draft)
+    submitted = draft_submitted_text(draft, result)
+    assert "16.08 в 14:45" in submitted
+    assert "11:45" not in submitted
+
+
+def test_submit_confirmation_uses_owner_timezone_not_fixed_offset():
+    draft = _draft(timezone="America/New_York")
+    result = {
+        "status": "pending",
+        "service_name": "Маникюр",
+        "starts_at": "2026-08-16T18:45:00+00:00",
+    }
+
+    submitted = draft_submitted_text(draft, result)
+    assert "16.08 в 14:45" in submitted
+    assert "18:45" not in submitted
