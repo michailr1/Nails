@@ -7,6 +7,7 @@ from typing import Any
 from app.client_bot import master_picker_keyboard
 from app.client_bot_booking_flow import (
     DraftPlatformBot,
+    _draft_today,
     draft_date_picker_keyboard,
     draft_submitted_text,
 )
@@ -238,6 +239,7 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             "book",
             "cat",
             "pcat",
+            "svc",
             "help",
             "repeat",
             "send",
@@ -273,6 +275,29 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             )
             return
 
+        if action == "svc":
+            binding_id, index_text = rest.rsplit(":", 1)
+            binding_id = str(uuid.UUID(binding_id))
+            _catalog, service = self._catalog_service(
+                telegram_user_id,
+                binding_id,
+                int(index_text),
+            )
+            draft = self._draft_api().create_draft(
+                telegram_user_id,
+                binding_id,
+                str(service.get("public_name") or ""),
+            )
+            self._send(
+                chat_id,
+                f"{draft.get('service_name')}\nВыберите дату:",
+                draft_date_picker_keyboard(
+                    str(draft["draft_id"]),
+                    today=_draft_today(draft),
+                ),
+            )
+            return
+
         if action == "repeat":
             binding_id = str(uuid.UUID(rest))
             draft = self._runtime_api().create_repeat_last_draft(
@@ -282,7 +307,10 @@ class OnboardingDraftPlatformBot(DraftPlatformBot):
             self._send(
                 chat_id,
                 repeat_draft_text(draft),
-                draft_date_picker_keyboard(str(draft["draft_id"])),
+                draft_date_picker_keyboard(
+                    str(draft["draft_id"]),
+                    today=_draft_today(draft),
+                ),
             )
             return
 
