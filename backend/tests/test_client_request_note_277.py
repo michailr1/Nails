@@ -105,7 +105,44 @@ def test_request_note_is_optional_private_and_non_domain(
         json={"starts_at": starts_at},
     )
     assert selected.status_code == 200, selected.text
-    assert selected.json()["note"] == NOTE
+    selected_json = selected.json()
+    assert selected_json["note"] == NOTE
+    selected_starts_at = selected_json["starts_at"]
+    assert selected_starts_at is not None
+
+    # Note updates are informational only. In particular they must preserve an
+    # already selected slot, including blank -> null normalization and restore.
+    blanked = client.put(
+        f"/api/v1/client/booking-drafts/{draft_id}/note",
+        headers=_client_headers(960000001),
+        json={"note": "   "},
+    )
+    assert blanked.status_code == 200, blanked.text
+    assert blanked.json()["note"] is None
+    assert blanked.json()["starts_at"] == selected_starts_at
+
+    restored = client.put(
+        f"/api/v1/client/booking-drafts/{draft_id}/note",
+        headers=_client_headers(960000001),
+        json={"note": NOTE},
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["note"] == NOTE
+    assert restored.json()["starts_at"] == selected_starts_at
+
+    too_long_after_slot = client.put(
+        f"/api/v1/client/booking-drafts/{draft_id}/note",
+        headers=_client_headers(960000001),
+        json={"note": "x" * 301},
+    )
+    assert too_long_after_slot.status_code == 422
+    reread = client.get(
+        f"/api/v1/client/booking-drafts/{draft_id}",
+        headers=_client_headers(960000001),
+    )
+    assert reread.status_code == 200, reread.text
+    assert reread.json()["note"] == NOTE
+    assert reread.json()["starts_at"] == selected_starts_at
 
     submitted = client.post(
         f"/api/v1/client/booking-drafts/{draft_id}/submit",
