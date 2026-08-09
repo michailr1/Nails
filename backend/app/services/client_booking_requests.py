@@ -38,7 +38,15 @@ def _safe_audit(
     request_id: str,
     actor_user_id: uuid.UUID | None,
     actor_type: str,
+    structural_changes: dict[str, bool] | None = None,
 ) -> None:
+    safe_changes: dict[str, object] = {
+        "actor_type": actor_type,
+        "status": request.status,
+        "has_booking": request.booking_id is not None,
+    }
+    if structural_changes is not None:
+        safe_changes["structural_changes"] = structural_changes
     session.add(
         AuditEvent(
             owner_user_id=owner_user_id,
@@ -47,11 +55,7 @@ def _safe_audit(
             object_type="booking_request",
             object_id=request.id,
             request_id=request_id,
-            safe_changes={
-                "actor_type": actor_type,
-                "status": request.status,
-                "has_booking": request.booking_id is not None,
-            },
+            safe_changes=safe_changes,
         )
     )
 
@@ -513,6 +517,18 @@ def approve_master_booking_request(
         request.addon_quantities if addon_quantities is None else addon_quantities
     )
     final_starts_at = starts_at or request.starts_at
+    structural_changes = {
+        "service_changed": final_service_name != request.service_name,
+        "addons_changed": (
+            final_addon_names != list(request.addon_names)
+            or final_addon_quantities != dict(request.addon_quantities)
+        ),
+        "time_changed": (
+            final_starts_at.astimezone(UTC) != request.starts_at.astimezone(UTC)
+        ),
+        "price_overridden": price_override_amount is not None,
+        "duration_overridden": duration_override_minutes is not None,
+    }
     _validate_request_catalog(
         session,
         owner_user_id=identity.user_id,
@@ -556,6 +572,7 @@ def approve_master_booking_request(
         request_id=identity.request_id,
         actor_user_id=identity.user_id,
         actor_type="master",
+        structural_changes=structural_changes,
     )
     enqueue_booking_request_notification(session, request, event_type="approved")
     session.commit()
