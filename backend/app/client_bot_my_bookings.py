@@ -46,30 +46,20 @@ def upcoming_booking_requests(
     return result
 
 
-def my_bookings_text(
-    payload: dict[str, Any],
+def booking_request_text(
+    request: dict[str, Any],
     master: dict[str, Any],
-    *,
-    now: datetime | None = None,
 ) -> str:
-    requests = upcoming_booking_requests(payload, now=now)
-    if not requests:
-        return "🗓 Мои записи\n\nБлижайших записей и заявок пока нет."
-
     timezone = _master_timezone(master)
-    lines = ["🗓 Мои записи", ""]
-    for request in requests[:8]:
-        starts_at = _starts_at(request).astimezone(timezone)
-        status = str(request.get("status") or "")
-        service_name = str(request.get("service_name") or "Процедура").strip()
-        lines.append(f"{starts_at:%d.%m в %H:%M} — {service_name}")
-        quantities = request.get("addon_quantities") or {}
-        for addon_name in request.get("addon_names") or []:
-            name = str(addon_name)
-            quantity = int(quantities.get(name.casefold(), 1))
-            suffix = f" ×{quantity}" if quantity > 1 else ""
-            lines.append(f"+ {name}{suffix}")
-        lines.append(_STATUS_LABELS[status])
-        lines.append("")
-
-    return "\n".join(lines).rstrip()
+    starts_at = _starts_at(request).astimezone(timezone)
+    status = str(request.get("status") or "")
+    service_name = str(request.get("service_name") or "Процедура").strip()
+    lines = [f"{starts_at:%d.%m в %H:%M} — {service_name}"]
+    quantities = request.get("addon_quantities") or {}
+    for addon_name in request.get("addon_names") or []:
+        name = str(addon_name)
+        quantity = int(quantities.get(name.casefold(), 1))
+        suffix = f" ×{quantity}" if quantity > 1 else ""
+        lines.append(f"+ {name}{suffix}")
+    lines.append(_STATUS_LABELS[status])
+    return "\n".join(lines)
