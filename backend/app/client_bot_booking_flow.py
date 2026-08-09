@@ -98,11 +98,19 @@ class DraftNailsClientApi(NailsClientApi):
         )
 
 
-def _draft_today(draft: dict[str, Any]) -> date:
+def _draft_timezone(draft: dict[str, Any]) -> ZoneInfo:
     timezone_name = str((draft.get("master") or {}).get("timezone") or "")
     if not timezone_name:
         raise ValueError("draft master timezone is missing")
-    return datetime.now(ZoneInfo(timezone_name)).date()
+    return ZoneInfo(timezone_name)
+
+
+def _draft_local_datetime(draft: dict[str, Any], value: Any) -> datetime:
+    return _parse_slot(value).astimezone(_draft_timezone(draft))
+
+
+def _draft_today(draft: dict[str, Any]) -> date:
+    return datetime.now(_draft_timezone(draft)).date()
 
 
 def draft_date_picker_keyboard(
@@ -188,7 +196,7 @@ def draft_summary_text(draft: dict[str, Any]) -> str:
         lines.append(f"+ {name}{suffix}")
     starts_at = draft.get("starts_at")
     if starts_at:
-        parsed = _parse_slot(starts_at)
+        parsed = _draft_local_datetime(draft, starts_at)
         lines.extend(["", f"{parsed:%d.%m} в {parsed:%H:%M}"])
     lines.append(f"Около {int(draft.get('duration_minutes') or 0)} мин")
     lines.append(
@@ -211,6 +219,16 @@ def draft_summary_text(draft: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def draft_submitted_text(draft: dict[str, Any], result: dict[str, Any]) -> str:
+    parsed = _draft_local_datetime(draft, result["starts_at"])
+    return (
+        "✅ Заявка отправлена\n"
+        f"{result.get('service_name')}\n"
+        f"{parsed:%d.%m} в {parsed:%H:%M}\n\n"
+        "Мастер подтвердит запись. Пока время не забронировано."
+    )
 
 
 def draft_summary_keyboard(draft_id: str) -> dict[str, Any]:
@@ -408,12 +426,8 @@ class DraftPlatformBot(PlatformBot):
             result = api.submit_draft(telegram_user_id, draft_id)
             if result.get("status") != "pending":
                 raise ValueError("unexpected booking request status")
-            parsed = _parse_slot(result["starts_at"])
             self._send(
                 chat_id,
-                "✅ Заявка отправлена\n"
-                f"{result.get('service_name')}\n"
-                f"{parsed:%d.%m} в {parsed:%H:%M}\n\n"
-                "Мастер подтвердит запись. Пока время не забронировано.",
+                draft_submitted_text(draft, result),
                 master_menu_keyboard(draft["master"]),
             )
