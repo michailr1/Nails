@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import zoneinfo
-from datetime import UTC, datetime
+from datetime import datetime, UTC
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 _VISIBLE_STATUSES = {"pending", "approved"}
@@ -12,12 +12,12 @@ _STATUS_LABELS = {
 }
 
 
-def _master_timezone(master: dict[str, Any]) -> zoneinfo.ZoneInfo:
+def _master_timezone(master: dict[str, Any]) -> ZoneInfo:
     raw = str(master.get("timezone") or "Europe/Moscow").strip()
     try:
-        return zoneinfo.ZoneInfo(raw)
-    except zoneinfo.ZoneInfoNotFoundError:
-        return zoneinfo.ZoneInfo("Europe/Moscow")
+        return ZoneInfo(raw)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("Europe/Moscow")
 
 
 def _starts_at(request: dict[str, Any]) -> datetime:
