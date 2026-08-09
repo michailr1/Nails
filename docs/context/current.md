@@ -92,23 +92,29 @@ candidate_migration=0024
 
 ## Candidate blocker, найденный 9 августа
 
-Первый isolated candidate PR #292 остановился до проверки feature-кода:
+Два isolated candidate запуска остановились до проверки feature-кода на одном инфраструктурном классе ошибки.
+
+Первый head `6788ce8...` показал отсутствие application role в fresh candidate DB. Попытка сделать bind-mounted `init-app-user.sh` executable в Git (`100755`) устранила этот симптом в CI, но второй VPS candidate на `a5260bb...` доказал реальную границу окружения:
 
 ```text
 CANDIDATE_OK=false
-reason=CANDIDATE_API_UNHEALTHY_DURING_UP
-root_cause=deployment/postgres/init-app-user.sh tracked as Git mode 100644
+reason=CANDIDATE_DB_UNHEALTHY
+failure=Permission denied while executing /docker-entrypoint-initdb.d/10-init-app-user.sh
 ```
 
-Fresh Postgres initdb не исполнил bind-mounted shell script и не создал application role `nails_app`; API поэтому не мог аутентифицироваться к isolated candidate DB. Production checkout/runtime/DB остались неизменными, cleanup прошёл.
+Причина: host/worktree filesystem на VPS не гарантирует exec для bind-mounted файлов. Официальный Postgres entrypoint запускает executable `.sh` как отдельный процесс, поэтому executable host bind остаётся зависимым от mount `exec/noexec` semantics.
 
-Исправление класса ошибки:
+Исправление класса ошибки теперь не использует host executable вообще:
 
-- `deployment/postgres/init-app-user.sh` tracked как `100755`;
-- regression `test_candidate_deploy_env_isolation.py` проверяет Git mode `100755` для init-script;
-- VPS `chmod` запрещён: candidate обязан работать из exact Git tree без ручной коррекции permissions.
+- `deployment/postgres/init-app-user.sh` удалён;
+- добавлен `deployment/postgres/init-app-user.sql`;
+- SQL получает `APP_DB_USER`/`APP_DB_PASSWORD` через psql `\getenv`;
+- compose bind-mount'ит `.sql` в `/docker-entrypoint-initdb.d/10-init-app-user.sql:ro`;
+- официальный Postgres entrypoint передаёт `.sql` непосредственно `psql`, поэтому host executable bit и `noexec` больше не участвуют;
+- regression `test_candidate_deploy_env_isolation.py` запрещает возврат shell bind и проверяет SQL init contract;
+- VPS chmod/manual SQL/manual candidate repair по-прежнему запрещены.
 
-После нового exact-head CI candidate acceptance #292 повторяется с нуля.
+После зелёного exact-head CI candidate acceptance #292 повторяется с нуля.
 
 Отдельно обнаружен latent debt: обычный `web-booking-edit.js` всё ещё строит `starts_at` с hardcoded `+03:00`. В #290 этот код не переиспользуется; исправить общий editor отдельным узким срезом после критичных блокеров либо раньше, если acceptance покажет влияние.
 
@@ -136,5 +142,5 @@ client_bot_singleton=true
 client_forward_state=active
 current_master_timezone_effective=Europe/Moscow
 release_flow=exact PR-head candidate -> GitHub merge -> exact main deploy.sh
-next=verify final head has init-app-user.sh mode 100755 -> CI -> repeat isolated candidate #292
+next=verify SQL init exact head -> CI clean DB/compose-smoke -> repeat isolated candidate #292
 ```
