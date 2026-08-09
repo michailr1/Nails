@@ -104,8 +104,8 @@ Fresh Postgres initdb не исполнил bind-mounted shell script и не с
 
 Исправление класса ошибки:
 
-- `deployment/postgres/init-app-user.sh` должен быть tracked как `100755`;
-- regression `test_candidate_deploy_env_isolation.py` теперь проверяет Git mode `100755` для init-script;
+- `deployment/postgres/init-app-user.sh` tracked как `100755`;
+- regression `test_candidate_deploy_env_isolation.py` проверяет Git mode `100755` для init-script;
 - VPS `chmod` запрещён: candidate обязан работать из exact Git tree без ручной коррекции permissions.
 
 После нового exact-head CI candidate acceptance #292 повторяется с нуля.
@@ -136,5 +136,5 @@ client_bot_singleton=true
 client_forward_state=active
 current_master_timezone_effective=Europe/Moscow
 release_flow=exact PR-head candidate -> GitHub merge -> exact main deploy.sh
-next=verify init-app-user.sh Git mode 100755 on final head -> CI -> repeat isolated candidate #292
+next=verify final head has init-app-user.sh mode 100755 -> CI -> repeat isolated candidate #292
 ```
