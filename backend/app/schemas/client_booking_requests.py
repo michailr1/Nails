@@ -185,3 +185,11 @@ class BookingRequestPublic(BaseModel):
 
 class BookingRequestListResponse(BaseModel):
     requests: list[BookingRequestPublic]
+
+
+class MasterBookingRequestPublic(BookingRequestPublic):
+    note: str | None = None
+
+
+class MasterBookingRequestListResponse(BaseModel):
+    requests: list[MasterBookingRequestPublic]
