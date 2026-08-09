@@ -79,12 +79,14 @@ def _ack(
         raise ValueError("backend did not acknowledge contact forward")
 
 
-def _format_message(client_name: str, text: str) -> str:
-    return (
-        "💬 Сообщение из клиентского бота\n"
-        f"Клиентка: {client_name}\n\n"
-        f"{text}"
-    )[:3900]
+def _format_message(kind: str, client_name: str, text: str) -> str:
+    if kind == "client_message":
+        header = "💬 Сообщение из клиентского бота"
+    elif kind == "booking_request_created":
+        header = "📅 Новая заявка на запись"
+    else:
+        raise ValueError("backend returned an unsupported contact forward kind")
+    return f"{header}\nКлиентка: {client_name}\n\n{text}"[:3900]
 
 
 def _send_one(
@@ -104,12 +106,14 @@ def _send_one(
 
     claim_id = claim.get("claim_id")
     master_telegram_user_id = claim.get("master_telegram_user_id")
+    kind = claim.get("kind")
     client_name = claim.get("client_public_name")
     message_text = claim.get("message_text")
     if (
         not isinstance(claim_id, str)
         or not isinstance(master_telegram_user_id, int)
         or master_telegram_user_id <= 0
+        or kind not in {"client_message", "booking_request_created"}
         or not isinstance(client_name, str)
         or not client_name.strip()
         or not isinstance(message_text, str)
@@ -122,7 +126,7 @@ def _send_one(
             f"https://api.telegram.org/bot{telegram_token}/sendMessage",
             json={
                 "chat_id": master_telegram_user_id,
-                "text": _format_message(client_name.strip(), message_text.strip()),
+                "text": _format_message(kind, client_name.strip(), message_text.strip()),
                 "disable_web_page_preview": True,
             },
         )
