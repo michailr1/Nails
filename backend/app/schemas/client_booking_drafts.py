@@ -68,6 +68,20 @@ class ClientBookingDraftCompositionUpdate(BaseModel):
         return self
 
 
+class ClientBookingDraftNoteUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    note: str | None = Field(default=None, max_length=300)
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = value.strip()
+        return candidate or None
+
+
 class ClientBookingDraftSlotUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -101,6 +115,7 @@ class ClientBookingDraftSummary(BaseModel):
     service_name: str
     addon_names: list[str]
     addon_quantities: dict[str, int]
+    note: str | None
     starts_at: datetime | None
     duration_minutes: int
     buffer_before_minutes: int
