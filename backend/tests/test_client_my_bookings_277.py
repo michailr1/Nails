@@ -35,7 +35,7 @@ class FakeRuntimeApi(RuntimeDraftNailsClientApi):
                     "service_name": "Педикюр",
                     "addon_names": [],
                     "addon_quantities": {},
-                    "starts_at": "2026-08-17T09:00:00+00:00",
+                    "starts_at": "2099-08-17T09:00:00+00:00",
                 },
                 {
                     "id": CANCELLED_ID,
@@ -43,7 +43,7 @@ class FakeRuntimeApi(RuntimeDraftNailsClientApi):
                     "service_name": "Не показывать",
                     "addon_names": [],
                     "addon_quantities": {},
-                    "starts_at": "2026-08-16T08:00:00+00:00",
+                    "starts_at": "2099-08-16T08:00:00+00:00",
                 },
                 {
                     "id": APPROVED_ID,
@@ -51,7 +51,7 @@ class FakeRuntimeApi(RuntimeDraftNailsClientApi):
                     "service_name": "Маникюр",
                     "addon_names": ["Снятие"],
                     "addon_quantities": {"снятие": 1},
-                    "starts_at": "2026-08-16T09:45:00+00:00",
+                    "starts_at": "2099-08-16T09:45:00+00:00",
                 },
             ]
         }
