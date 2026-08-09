@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
@@ -13,12 +14,14 @@ from app.schemas.client_booking_requests import (
     BookingRequestPublic,
     MasterBookingRequestApprove,
 )
+from app.schemas.scheduling import FreeSlotsResponse
 from app.services.client_booking_requests import (
     approve_master_booking_request,
     list_master_booking_requests,
     reject_master_booking_request,
 )
 from app.services.scheduling_common import SchedulingDomainError
+from app.services.scheduling_queries import find_free_slots
 from app.services.web_auth import require_web_session_identity, validate_web_boundary
 from app.services.web_portal_auth import require_effective_owner_identity
 
@@ -75,6 +78,19 @@ def list_pending_requests(
     return BookingRequestListResponse(requests=[_public(row) for row in rows])
 
 
+@router.get("/slots", response_model=FreeSlotsResponse)
+def request_slots(
+    session: SessionDependency,
+    identity: ReadIdentityDependency,
+    day: date,
+    service_name: Annotated[str, Query(min_length=1, max_length=160)],
+) -> FreeSlotsResponse:
+    try:
+        return find_free_slots(session, identity, day, service_name)
+    except SchedulingDomainError as exc:
+        raise _translate_domain_error(exc) from exc
+
+
 @router.post("/{booking_request_id}/approve", response_model=BookingRequestPublic)
 def approve_request(
     booking_request_id: uuid.UUID,
@@ -91,6 +107,12 @@ def approve_request(
             booking_request_id,
             resolution=body.resolution,
             selected_client_id=body.client_id,
+            service_name=body.service_name,
+            addon_names=body.addon_names,
+            addon_quantities=body.addon_quantities,
+            starts_at=body.starts_at,
+            price_override_amount=body.price_override_amount,
+            duration_override_minutes=body.duration_override_minutes,
         )
     except SchedulingDomainError as exc:
         raise _translate_domain_error(exc) from exc
