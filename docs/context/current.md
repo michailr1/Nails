@@ -11,7 +11,7 @@ repository=michailr1/Nails
 production host=de.funti.cc
 public master portal=https://de.funti.cc:8446/web/
 production repo=/opt/nails/repo
-production branch=main
+production branch: main
 backend env=/opt/nails/.env
 internal API=http://127.0.0.1:8210
 production_sha=fb0ab3f14c69b72d5ff7210b93e1b8bfbcb7c484
@@ -25,7 +25,7 @@ public_web=200
 client_bot_singleton=true
 legacy_client_bot_active=inactive
 client_forward_state=active
-last_verified_deploy=read-only production diagnostic green
+last_verified_deploy=DEPLOY_OK=true
 ```
 
 Последняя production-проверка также подтвердила валидный backup, чистый working tree, отсутствие ручного SQL/runtime mutations и exact release SHA во всех runtime-компонентах.
@@ -36,12 +36,15 @@ last_verified_deploy=read-only production diagnostic green
 - VPS-агент только исполняет утверждённые candidate/deploy/diagnostic runbook'и.
 - PR candidate проверяется из exact `origin/pr/<number>` без изменения production checkout.
 - Production deploy выполняется только постоянным `ops/deploy/deploy.sh <exact-SHA>`.
+- отдельного finalize entrypoint нет.
 - Никакого ручного SQL, source edit, `.env` edit, runtime repair или rollback на VPS.
 - Успех считается доказанным только по фактическому GitHub/VPS-отчёту.
 
 Operational anchors:
 
 - Hermes plugins: `nails-onboarding`, `nails-scheduling`;
+- роли только `master`, `admin`, `client`;
+- один живой Telegram-тест за раз;
 - отдельный deterministic client bot `@smartnails_bot`;
 - один client-bot runtime на token;
 - имя помощницы — «Нэйли»;
