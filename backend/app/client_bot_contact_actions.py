@@ -3,10 +3,12 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from app.client_bot_booking_flow import draft_summary_keyboard, draft_summary_text
 from app.client_bot_my_bookings import booking_request_text, upcoming_booking_requests
 from app.client_bot_onboarding import OnboardingDraftPlatformBot
 
 MAX_CLIENT_MESSAGE_LENGTH = 500
+MAX_REQUEST_NOTE_LENGTH = 300
 
 
 def _binding_id(value: str) -> str:
@@ -21,10 +23,24 @@ def _telegram_contact(user: dict[str, Any]) -> str:
     return f"Telegram ID {telegram_user_id}"
 
 
+def _note_keyboard(draft_id: str) -> dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "📝 Заметка мастеру",
+                    "callback_data": f"note:{draft_id}",
+                }
+            ]
+        ]
+    }
+
+
 class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
     def __init__(self, telegram, nails) -> None:
         super().__init__(telegram, nails)
         self._pending_messages: dict[int, str] = {}
+        self._pending_request_notes: dict[int, str] = {}
         self._request_bindings: dict[tuple[int, str], str] = {}
 
     def _menu_keyboard(
@@ -86,12 +102,30 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
             )
 
     def _start_message(self, chat_id: int, telegram_user_id: int, binding_id: str) -> None:
+        self._pending_request_notes.pop(telegram_user_id, None)
         self._pending_messages[telegram_user_id] = binding_id
         self._send(
             chat_id,
             "Напишите одно сообщение мастеру — до 500 символов. "
             "Оно не изменит услугу, время или цену заявки.",
             {"force_reply": True, "input_field_placeholder": "Сообщение мастеру"},
+        )
+
+    def _start_request_note(
+        self,
+        chat_id: int,
+        telegram_user_id: int,
+        draft_id: str,
+    ) -> None:
+        self._runtime_api().draft(telegram_user_id, draft_id)
+        self._pending_messages.pop(telegram_user_id, None)
+        self._pending_request_notes[telegram_user_id] = draft_id
+        self._send(
+            chat_id,
+            "Напишите заметку мастеру — до 300 символов. "
+            "Она только для информации и не изменит услугу, время или цену. "
+            "Чтобы удалить заметку, отправьте «-».",
+            {"force_reply": True, "input_field_placeholder": "Заметка мастеру"},
         )
 
     def handle_callback(self, callback: dict[str, Any]) -> None:
@@ -103,7 +137,18 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
         chat_id = int((message.get("chat") or {}).get("id") or 0)
         callback_id = str(callback.get("id") or "")
 
-        if action not in {"requests", "cancelreq", "write", "help"}:
+        if action == "t":
+            super().handle_callback(callback)
+            if telegram_user_id > 0 and chat_id != 0:
+                draft_id = str(uuid.UUID(rest.split(":", 1)[0]))
+                self._send(
+                    chat_id,
+                    "Можно добавить заметку мастеру — необязательно.",
+                    _note_keyboard(draft_id),
+                )
+            return
+
+        if action not in {"requests", "cancelreq", "write", "help", "note"}:
             return super().handle_callback(callback)
         if callback_id:
             self._telegram.call("answerCallbackQuery", callback_query_id=callback_id)
@@ -128,6 +173,13 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
             return
         if action == "write":
             self._start_message(chat_id, telegram_user_id, _binding_id(rest))
+            return
+        if action == "note":
+            self._start_request_note(
+                chat_id,
+                telegram_user_id,
+                str(uuid.UUID(rest)),
+            )
             return
 
         binding_id = _binding_id(rest)
@@ -157,6 +209,27 @@ class ContactAwareOnboardingBot(OnboardingDraftPlatformBot):
         telegram_user_id = int(user.get("id") or 0)
         chat_id = int((message.get("chat") or {}).get("id") or 0)
         text = str(message.get("text") or "").strip()
+
+        draft_id = self._pending_request_notes.get(telegram_user_id)
+        if draft_id and text and not text.startswith("/"):
+            if len(text) > MAX_REQUEST_NOTE_LENGTH:
+                self._send(chat_id, "Заметка слишком длинная. Максимум 300 символов.")
+                return
+            note = None if text == "-" else text
+            updated = self._runtime_api().update_draft_note(
+                telegram_user_id,
+                draft_id,
+                note,
+            )
+            self._pending_request_notes.pop(telegram_user_id, None)
+            prefix = "Заметка удалена.\n\n" if note is None else "Заметка сохранена.\n\n"
+            self._send(
+                chat_id,
+                prefix + draft_summary_text(updated),
+                draft_summary_keyboard(draft_id),
+            )
+            return
+
         binding_id = self._pending_messages.get(telegram_user_id)
         if binding_id and text and not text.startswith("/"):
             if len(text) > MAX_CLIENT_MESSAGE_LENGTH:
