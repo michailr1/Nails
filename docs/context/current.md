@@ -37,11 +37,12 @@ Fresh preflight также подтвердил clean production checkout, не�
 - Основной агент пишет код, тесты и документацию, управляет GitHub, CI, review и merge.
 - VPS-агент только исполняет утверждённые candidate/deploy/diagnostic runbook'и.
 - PR candidate проверяется из exact `origin/pr/<number>` без изменения production checkout.
+- Exact candidate SHA всегда берётся из fresh GitHub PR/preflight; его нельзя пиновать внутри этого же изменяемого контекстного файла, иначе любой context commit сам делает такой SHA устаревшим.
 - Production deploy выполняется только постоянным `ops/deploy/deploy.sh <exact-SHA>`.
 - отдельного finalize entrypoint нет.
 - Никакого ручного SQL, source edit, `.env` edit, runtime repair или rollback на VPS.
 - Успех считается доказанным только по фактическому GitHub/VPS-отчёту.
-- Если fresh preflight противоречит `docs/context/current.md`, candidate acceptance обязан fail closed до обновления контекста через PR -> CI.
+- Если fresh production preflight противоречит `docs/context/current.md`, candidate acceptance обязан fail closed до обновления контекста через PR -> CI.
 
 Operational anchors:
 
@@ -113,7 +114,7 @@ active_issue=277
 active_pr=297
 active_branch=feat/catalog-sections-readability-277
 base=3e4eb842895f458a591ff30208d206a10af472e9
-candidate_head=50570a4eac8960a007a15e97518b76520c39a705
+candidate_head=resolve_from_fresh_GitHub_PR_preflight
 candidate_migration=none
 expected_alembic_head=0025
 ```
@@ -140,7 +141,7 @@ Repository regression:
 1. `e46b5a6...` — fail closed из-за временного harness с пустым `serviceCatalogDraft`;
 2. `e46b5a6...` — fail closed из-за временного harness, ошибочно привязавшего `catalogGroups()` к `this`; actual source `this` не использует;
 3. `99f8a5b...` — fail closed ДО startup из-за устаревшего `docs/context/current.md` (`fb0ab3.../0024` против fresh production `3e4eb842.../0025`);
-4. normative context обновлён через этот PR; CI #1420, Agent responsibility #1331 и Production infrastructure contract #219 зелёные для head перед этой точечной pin-правкой. После этой правки exact head обязан пройти новый CI перед candidate acceptance.
+4. production context обновлён через PR; следующий candidate должен использовать fresh exact PR head и baseline `3e4eb842.../0025`.
 
 Ни один предыдущий fail-closed не доказал product-source defect. Production во всех попытках остался неизменным и healthy.
 
@@ -160,9 +161,9 @@ alembic_head=0025
 active_issue=277
 active_pr=297
 active_branch=feat/catalog-sections-readability-277
-candidate_head=50570a4eac8960a007a15e97518b76520c39a705
+candidate_head=resolve_from_fresh_GitHub_PR_preflight
 client_bot_singleton=true
 client_forward_state=active
 release_flow=exact PR-head candidate -> GitHub ready -> merge exact head -> exact main deploy.sh
-next=new CI after candidate_head pin -> exact candidate acceptance using repository regression -> merge/deploy if green
+next=CI after context refresh -> exact candidate acceptance using repository regression -> merge/deploy if green
 ```
