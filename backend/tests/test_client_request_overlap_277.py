@@ -52,7 +52,7 @@ def _add_addon(owner_user_id, name: str, *, extra_minutes: int) -> None:
                 public_description=None,
                 price_amount=Decimal("500.00"),
                 currency="RUB",
-                duration_minutes=0,
+                duration_minutes=1,
                 buffer_before_minutes=0,
                 buffer_after_minutes=0,
                 is_active=True,
