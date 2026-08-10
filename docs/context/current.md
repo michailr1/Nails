@@ -113,7 +113,7 @@ active_issue=277
 active_pr=297
 active_branch=feat/catalog-sections-readability-277
 base=3e4eb842895f458a591ff30208d206a10af472e9
-candidate_head=will_change_after_context_update
+candidate_head=50570a4eac8960a007a15e97518b76520c39a705
 candidate_migration=none
 expected_alembic_head=0025
 ```
@@ -139,9 +139,10 @@ Repository regression:
 
 1. `e46b5a6...` — fail closed из-за временного harness с пустым `serviceCatalogDraft`;
 2. `e46b5a6...` — fail closed из-за временного harness, ошибочно привязавшего `catalogGroups()` к `this`; actual source `this` не использует;
-3. `99f8a5b...` — fail closed ДО startup из-за устаревшего `docs/context/current.md` (`fb0ab3.../0024` против fresh production `3e4eb842.../0025`). Это нормативный documentation conflict, сейчас устраняется через этот PR.
+3. `99f8a5b...` — fail closed ДО startup из-за устаревшего `docs/context/current.md` (`fb0ab3.../0024` против fresh production `3e4eb842.../0025`);
+4. normative context обновлён через этот PR; CI #1420, Agent responsibility #1331 и Production infrastructure contract #219 зелёные для head перед этой точечной pin-правкой. После этой правки exact head обязан пройти новый CI перед candidate acceptance.
 
-Ни один из этих fail-closed не доказал product-source defect. Production во всех попытках остался неизменным и healthy.
+Ни один предыдущий fail-closed не доказал product-source defect. Production во всех попытках остался неизменным и healthy.
 
 ## Что остаётся после catalog readability slice
 
@@ -159,8 +160,9 @@ alembic_head=0025
 active_issue=277
 active_pr=297
 active_branch=feat/catalog-sections-readability-277
+candidate_head=50570a4eac8960a007a15e97518b76520c39a705
 client_bot_singleton=true
 client_forward_state=active
 release_flow=exact PR-head candidate -> GitHub ready -> merge exact head -> exact main deploy.sh
-next=CI after context update -> exact candidate acceptance using repository regression -> merge/deploy if green
+next=new CI after candidate_head pin -> exact candidate acceptance using repository regression -> merge/deploy if green
 ```
