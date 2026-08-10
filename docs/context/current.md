@@ -141,7 +141,7 @@ Repository regression:
 1. `e46b5a6...` — fail closed из-за временного harness с пустым `serviceCatalogDraft`;
 2. `e46b5a6...` — fail closed из-за временного harness, ошибочно привязавшего `catalogGroups()` к `this`; actual source `this` не использует;
 3. `99f8a5b...` — fail closed ДО startup из-за устаревшего `docs/context/current.md` (`fb0ab3.../0024` против fresh production `3e4eb842.../0025`);
-4. production context обновлён через PR; следующий candidate должен использовать fresh exact PR head и baseline `3e4eb842.../0025`.
+4. production context обновлён через PR. Для обновлённого контекста CI #1422, Agent responsibility #1333 и Production infrastructure contract #221 зелёные. Следующий candidate использует fresh exact PR head и baseline `3e4eb842.../0025`.
 
 Ни один предыдущий fail-closed не доказал product-source defect. Production во всех попытках остался неизменным и healthy.
 
@@ -165,5 +165,5 @@ candidate_head=resolve_from_fresh_GitHub_PR_preflight
 client_bot_singleton=true
 client_forward_state=active
 release_flow=exact PR-head candidate -> GitHub ready -> merge exact head -> exact main deploy.sh
-next=CI after context refresh -> exact candidate acceptance using repository regression -> merge/deploy if green
+next=exact candidate acceptance using repository regression -> merge/deploy if green
 ```
