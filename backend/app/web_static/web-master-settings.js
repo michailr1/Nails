@@ -13,8 +13,32 @@ function masterSettingsAccountIcon() {
     </svg>`;
 }
 
+function removeLegacyMasterControls() {
+  document.querySelector(".sidebar-bottom")?.remove();
+  document.querySelector(".mobile-logout")?.remove();
+  document.querySelectorAll(".topbar-side > .logout-button").forEach((node) => node.remove());
+}
+
+function masterAccountHost() {
+  const topbar = document.querySelector(".topbar");
+  if (!topbar) return null;
+  let host = topbar.querySelector(".master-account-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.className = "master-account-host";
+    topbar.append(host);
+  }
+  return host;
+}
+
+function confirmMasterLogout() {
+  if (!window.confirm("Выйти из кабинета? Для следующего входа снова понадобится подтверждение в Telegram.")) return;
+  logout();
+}
+
 function installMasterSettingsButton() {
-  const host = document.querySelector(".topbar-side");
+  removeLegacyMasterControls();
+  const host = masterAccountHost();
   if (!host || host.querySelector("[data-master-account]")) return;
   const wrapper = document.createElement("div");
   wrapper.className = "master-account";
@@ -39,16 +63,28 @@ function installMasterSettingsButton() {
     menu.className = "master-account-menu";
     menu.setAttribute("role", "menu");
     menu.innerHTML = `
-      <button type="button" role="menuitem" data-open-master-settings>Настройки</button>`;
+      <button type="button" role="menuitem" data-open-master-profile>Профиль для клиенток</button>
+      <button type="button" role="menuitem" data-open-master-settings>Настройки</button>
+      <button type="button" role="menuitem" data-master-logout>Выйти</button>`;
     wrapper.append(menu);
     button.setAttribute("aria-expanded", "true");
-    const settingsButton = menu.querySelector("[data-open-master-settings]");
-    settingsButton.addEventListener("click", () => {
+
+    menu.querySelector("[data-open-master-profile]")?.addEventListener("click", () => {
+      masterSettingsCloseMenu();
+      button.setAttribute("aria-expanded", "false");
+      renderMasterPublicProfile();
+    });
+    menu.querySelector("[data-open-master-settings]")?.addEventListener("click", () => {
       masterSettingsCloseMenu();
       button.setAttribute("aria-expanded", "false");
       renderMasterSettings();
     });
-    settingsButton.focus();
+    menu.querySelector("[data-master-logout]")?.addEventListener("click", () => {
+      masterSettingsCloseMenu();
+      button.setAttribute("aria-expanded", "false");
+      confirmMasterLogout();
+    });
+    menu.querySelector("button")?.focus();
   });
 }
 
