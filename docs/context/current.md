@@ -16,10 +16,10 @@ production repo=/opt/nails/repo
 production branch: main
 backend env=/opt/nails/.env
 internal API=http://127.0.0.1:8210
-production_sha=ae01054ebec67e8925680ac521c919be112e6c0e
-running_api_sha=ae01054ebec67e8925680ac521c919be112e6c0e
-running_web_sha=ae01054ebec67e8925680ac521c919be112e6c0e
-running_client_bot_sha=ae01054ebec67e8925680ac521c919be112e6c0e
+production_sha=ed983b1e529eb4f0ebb378fd104101dbe4737d22
+running_api_sha=ed983b1e529eb4f0ebb378fd104101dbe4737d22
+running_web_sha=ed983b1e529eb4f0ebb378fd104101dbe4737d22
+running_client_bot_sha=ed983b1e529eb4f0ebb378fd104101dbe4737d22
 alembic_head=0025
 api_health=200
 api_readiness=200
@@ -30,7 +30,7 @@ client_forward_state=active
 last_verified_deploy=DEPLOY_OK=true
 ```
 
-Последний backup перед release #297: `/opt/nails/backups/nails-before-deploy-20260810T233634Z.sql.gz`, verified=true. Post-deploy acceptance также подтвердил clean working tree, unchanged production env, отсутствие manual SQL/runtime changes и exact runtime SHA во всех production-компонентах.
+Последний backup: `/opt/nails/backups/nails-before-deploy-20260811T064412Z.sql.gz`, verified=true. Release #298 менял только tests/context; production acceptance подтвердил product/API/schema/models/migrations/domain/frontend unchanged, clean worktree и unchanged env.
 
 ## Release contract
 
@@ -41,8 +41,7 @@ last_verified_deploy=DEPLOY_OK=true
 - Production deploy выполняется только постоянным `ops/deploy/deploy.sh <exact-SHA>`.
 - отдельного finalize entrypoint нет.
 - Никакого ручного SQL, source edit, `.env` edit, runtime repair или rollback на VPS.
-- Успех считается доказанным только по фактическому GitHub/VPS-отчёту.
-- Если fresh production preflight противоречит `docs/context/current.md`, candidate acceptance обязан fail closed до обновления контекста через PR -> CI.
+- Если fresh production preflight противоречит `docs/context/current.md`, candidate acceptance обязан fail closed до context update через PR -> CI.
 
 Operational anchors:
 
@@ -55,107 +54,72 @@ Operational anchors:
 - Нэйли — личная помощница мастера, а не CRM;
 - основной пользовательский раздел каталога — «Мой прайс».
 
-## Последние #277 production-срезы
+## #277 — завершённые production-срезы
 
-### PR #294 — короткий booking-flow
+- PR #294: короткий booking flow, addons больше не mandatory gate, repeat-last -> owner-local date picker.
+- PR #295: `Мои записи`, только будущие pending/approved, owner-local time.
+- PR #296: optional request note до 300 символов, trusted master surfaces, note-free client/audit boundaries, Alembic `0025`.
+- PR #297: сворачиваемые readable sections в кабинете мастера; production catalog contract 10/10.
+- PR #298: regression доказал master-added addon overlap before save; product code unchanged.
 
-Release `38621112d3276763c3909804df49d524cdcf945f`:
+## Live Telegram acceptance — найденный дефект
 
-- service -> date напрямую;
-- addon screen не mandatory gate;
-- `Как в прошлый раз` сохраняет состав и открывает owner-local date picker.
+Issue #277 был автоматически закрыт merge'ом #298, но reopen'нут, потому что обязательная реальная 360px Telegram-приёмка нашла UX-дефект на production `ed983b1...`.
 
-### PR #295 — «Мои записи»
+Скриншоты показали:
 
-Release `fb0ab3f14c69b72d5ff7210b93e1b8bfbcb7c484`:
+- в `Записаться` первым top-level пунктом идёт сырой catalog category `Дополнительно`;
+- в `Прайс` тот же сырой технический label показывается рядом с основными клиентскими разделами;
+- клиентке непонятно, что означает «Дополнительно» и почему это главный/первый выбор.
 
-- только будущие `pending`/`approved`;
-- owner-local время;
-- appointment-time sort;
-- pending cancellable, approved без cancel.
+Root cause: `client_bot_catalog_sections.py` использует raw `category` и first-seen catalog order. В booking фильтр `kind=base` корректный, но некоторые самостоятельные base services имеют category `Дополнительно`, поэтому технический label становится top-level intent.
 
-### PR #296 — optional request note
-
-Release `3e4eb842895f458a591ff30208d206a10af472e9`, Alembic `0025`:
-
-- note до 300 символов в draft/request snapshot;
-- note не меняет composition/slot/price/duration;
-- client projections note-free;
-- trusted master/API/BFF и durable master-forward получают note;
-- audit без свободного текста;
-- Telegram forward plain text, link preview disabled;
-- cabinet note escaped.
-
-### PR #297 — catalog sections/readability
-
-Current production release `ae01054ebec67e8925680ac521c919be112e6c0e`:
-
-- native collapsible `<details>/<summary>` sections в `Мой прайс`;
-- sections collapsed by default, active editor section auto-open;
-- existing editor/save/remove paths reused;
-- fixed/range/per-unit/on-request prices readable; missing price != `0 ₽`;
-- base/addon/buffer duration readable;
-- Russian position counts;
-- mobile <=760px stack, long-name wrap;
-- existing design tokens/dark theme preserved;
-- API/domain/DB schema unchanged;
-- exact repository readability contract passed 10/10 in candidate and production checkout.
-
-## Активный slice — #277 master-correction overlap acceptance
+## Активный fix — client category presentation
 
 ```text
 active_issue=277
-active_pr=298
-active_branch=test/request-overlap-277
-base=ae01054ebec67e8925680ac521c919be112e6c0e
+active_branch=fix/client-category-presentation-277
+base=ed983b1e529eb4f0ebb378fd104101dbe4737d22
 candidate_head=resolve_from_fresh_GitHub_PR_preflight
 candidate_migration=none
 expected_alembic_head=0025
 ```
 
-Цель — не менять product/domain код, а закрыть последний code-level acceptance gap #277 точным regression:
+Fix presentation-only:
 
-- клиентская заявка на base service 60 минут сама помещается до следующей записи;
-- мастер перед подтверждением добавляет addon `+50 мин`;
-- authoritative `create_booking()` должен вернуть `booking_overlap` до persistence;
-- request остаётся `pending`, без `booking_id` и без mutation исходных service/addons/time;
-- tentative create-new client не должен протечь после failed approval;
-- в БД не появляется вторая booking;
-- cabinet показывает явный `booking_overlap` текст, оставляет dialog открытым и refresh'ит slots.
+- raw catalog category/data не меняются;
+- callbacks продолжают адресовать raw category/index;
+- `Записаться`: primary client intents идут первыми; raw `Дополнительно` показывается последним как `Снятие и другие услуги`;
+- `Прайс`: `Маникюр`, `Педикюр`, `Дизайн`, `Парафинотерапия`, затем raw `Дополнительно` как `Дополнительные услуги`;
+- unknown categories сохраняются и не теряются;
+- catalog/domain/API/DB schema unchanged.
 
-PR #298 содержит только regression + этот context refresh. Product API/schema/model/migration/domain/frontend code не меняется.
+Regression `backend/tests/test_client_category_presentation_277.py` фиксирует live-bug order/labels и доказывает отсутствие mutation исходных catalog categories.
 
-CI history #298:
+## Что остаётся
 
-1. initial head `2b1ea1f...` — backend test упал только из-за invalid test fixture: addon был создан с `duration_minutes=0`, нарушая общий DB constraint `duration_minutes > 0`;
-2. fixture исправлена на valid positive duration; addon business-time в сценарии по-прежнему определяется `extra_minutes=50`;
-3. head до context refresh `439af8d...` прошёл backend test suite; exact candidate должен определяться только после этого context commit и нового CI.
+После fix/deploy повторить реальную Telegram 360px проверку:
 
-## Что остаётся после overlap slice
-
-После зелёного PR #298 и production evidence в #277 останется только **реальная 360px Telegram/mobile приёмка** клиентского booking flow:
-
-- разделы вместо плоского списка;
-- не более ~6 кнопок на страницу раздела;
-- короткие button labels не обрезаются;
+- `Записаться` — понятные primary sections, без сырого `Дополнительно` в начале;
+- раздел — <=6 коротких buttons/page;
 - price/time читаются в message text;
-- repeat-last виден при подходящем визите;
-- без addons можно отправить заявку;
-- optional note не создаёт mandatory step.
+- no-addons submit работает;
+- optional note не mandatory;
+- repeat-last при подходящем визите;
+- `Прайс` — понятные client-facing section labels/order.
 
-Это реальный UI acceptance, его нельзя честно заменить source-level тестом; потребуется один живой Telegram прогон с пользовательским участием. До этой точки все остальные #277 acceptance-пункты должны быть закрыты автоматизированными evidence.
+#277 закрывать только после этого повторного live acceptance.
 
 ## Точка продолжения
 
 ```text
-production_sha=ae01054ebec67e8925680ac521c919be112e6c0e
+production_sha=ed983b1e529eb4f0ebb378fd104101dbe4737d22
 alembic_head=0025
 active_issue=277
-active_pr=298
-active_branch=test/request-overlap-277
+active_branch=fix/client-category-presentation-277
 candidate_head=resolve_from_fresh_GitHub_PR_preflight
 client_bot_singleton=true
 client_forward_state=active
 release_flow=exact PR-head candidate -> GitHub ready -> merge exact head -> exact main deploy.sh
-next=new CI after context refresh -> isolated candidate acceptance of overlap regression -> merge/deploy if green -> one real Telegram 360px acceptance
+next=PR + CI for client category presentation -> isolated candidate -> deploy -> repeat live Telegram 360px acceptance
 ```

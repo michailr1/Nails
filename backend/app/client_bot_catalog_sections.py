@@ -9,6 +9,15 @@ from app.client_bot import format_service_price
 PAGE_SIZE = 6
 CatalogMode = Literal["book", "price"]
 
+_CATEGORY_PRIORITY = {
+    "маникюр": 10,
+    "педикюр": 20,
+    "дизайн": 30,
+    "парафинотерапия": 40,
+    "дополнительно": 100,
+    "другое": 110,
+}
+
 
 def _binding_id(payload: dict[str, Any]) -> str:
     value = str((payload.get("master") or {}).get("binding_id") or "")
@@ -27,6 +36,18 @@ def catalog_items(
     return services
 
 
+def _raw_category(service: dict[str, Any]) -> str:
+    return str(service.get("category") or "").strip() or "Другое"
+
+
+def client_category_label(category: str, *, mode: CatalogMode) -> str:
+    if category.casefold() == "дополнительно":
+        if mode == "book":
+            return "Снятие и другие услуги"
+        return "Дополнительные услуги"
+    return category
+
+
 def catalog_categories(
     payload: dict[str, Any],
     *,
@@ -34,10 +55,17 @@ def catalog_categories(
 ) -> list[str]:
     result: list[str] = []
     for service in catalog_items(payload, mode=mode):
-        category = str(service.get("category") or "").strip() or "Другое"
+        category = _raw_category(service)
         if category not in result:
             result.append(category)
-    return result
+    original_order = {category: index for index, category in enumerate(result)}
+    return sorted(
+        result,
+        key=lambda category: (
+            _CATEGORY_PRIORITY.get(category.casefold(), 50),
+            original_order[category],
+        ),
+    )
 
 
 def category_items(
@@ -50,7 +78,7 @@ def category_items(
     return [
         (index, service)
         for index, service in indexed
-        if (str(service.get("category") or "").strip() or "Другое") == category
+        if _raw_category(service) == category
     ]
 
 
@@ -95,7 +123,7 @@ def category_picker_keyboard(
     rows = [
         [
             {
-                "text": category[:48],
+                "text": client_category_label(category, mode=mode)[:48],
                 "callback_data": f"{action}:{binding_id}:{index}:0",
             }
         ]
@@ -137,7 +165,7 @@ def category_page(
     if not current:
         raise ValueError("stale category page")
 
-    lines = [category, ""]
+    lines = [client_category_label(category, mode=mode), ""]
     for number, (_, service) in enumerate(current, start=1):
         lines.append(f"{number}. {service_line(service, category)}")
     if mode == "book":
