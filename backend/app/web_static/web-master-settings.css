@@ -44,7 +44,7 @@
 
 .master-account-menu button:hover,
 .master-account-menu button:focus-visible {
-  background: var(--surface-soft);
+  background: var(--surface-muted);
 }
 
 .master-settings-backdrop {
@@ -54,7 +54,7 @@
   display: grid;
   place-items: center;
   padding: 18px;
-  background: var(--overlay);
+  background: color-mix(in srgb, var(--text) 38%, transparent);
 }
 
 .master-settings-panel {
