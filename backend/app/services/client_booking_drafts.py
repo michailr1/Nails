@@ -20,8 +20,6 @@ from app.services.client_booking_requests import create_client_booking_request
 from app.services.client_contour import ClientBindingContext
 from app.services.scheduling_bookings import _catalog_price_semantics
 from app.services.scheduling_common import (
-    DEFAULT_SUGGESTION_END,
-    DEFAULT_SUGGESTION_START,
     SLOT_STEP_MINUTES,
     SchedulingDomainError,
     availability_for_day,
@@ -29,6 +27,7 @@ from app.services.scheduling_common import (
     ceil_to_step,
     day_bounds,
     overlaps,
+    suggestion_windows_for_day,
 )
 from app.services.scheduling_lookup import get_active_addons, get_active_service
 from app.timezones import owner_timezone
@@ -313,18 +312,11 @@ def draft_slots(
     composition = _composition(session, draft)
     timezone = owner_timezone(session, context.owner_user_id)
     availability = availability_for_day(session, context.owner_user_id, day)
-    is_day_off = any(not item.is_available for item in availability)
-    explicit_windows = [item for item in availability if item.is_available]
-    if is_day_off:
-        windows: list[tuple] = []
-    elif explicit_windows:
-        windows = [
-            (item.start_time, item.end_time)
-            for item in explicit_windows
-            if item.start_time is not None and item.end_time is not None
-        ]
-    else:
-        windows = [(DEFAULT_SUGGESTION_START, DEFAULT_SUGGESTION_END)]
+    windows, is_day_off = suggestion_windows_for_day(
+        session,
+        context.owner_user_id,
+        day,
+    )
     busy = _busy_intervals(session, context.owner_user_id, day)
     starts: set[datetime] = set()
     for start_time, end_time in windows:
