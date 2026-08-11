@@ -82,6 +82,35 @@ def test_usual_hours_are_one_setting_under_master_icon():
     assert "web-master-settings.css" in index
 
 
+def test_master_account_menu_finishes_286_by_moving_not_duplicating_controls():
+    settings = (WEB / "web-master-settings.js").read_text(encoding="utf-8")
+    profile = (WEB / "web-public-profile-visible.js").read_text(encoding="utf-8")
+    css = (WEB / "web-master-settings.css").read_text(encoding="utf-8")
+
+    assert 'document.querySelector(".topbar-side")' not in settings
+    assert "master-account-host" in settings
+    assert "Профиль для клиенток" in settings
+    assert "data-open-master-settings" in settings
+    assert "data-master-logout" in settings
+    assert "confirmMasterLogout" in settings
+
+    # Старые элементы удаляются из фактического shell, а не остаются рядом с меню.
+    assert 'document.querySelector(".sidebar-bottom")?.remove()' in settings
+    assert 'document.querySelector(".mobile-logout")?.remove()' in settings
+
+    # Профиль больше не монтируется в раздел Клиентки; он открывается из account menu.
+    assert "renderPublicProfileOutsideClients() {}" in profile
+    assert "page.prepend(panel)" not in profile
+    assert "renderMasterPublicProfile" in profile
+
+    # Аватар имеет отдельную угловую геометрию, а mobile dialog ограничен viewport.
+    assert ".master-account-host" in css
+    assert "position: absolute" in css
+    assert "calc(100vw - 20px)" in css
+    assert "calc(100dvh - 20px)" in css
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in css
+
+
 def test_legacy_14_day_editor_is_removed_instead_of_duplicated():
     index = (WEB / "index.html").read_text(encoding="utf-8")
 
