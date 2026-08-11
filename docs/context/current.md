@@ -28,6 +28,7 @@ legacy_client_bot_active=inactive
 client_forward_state=active
 working_tree_clean=true
 production_env_unchanged=true
+DEPLOY_OK=true
 ```
 
 Последний backup: `/opt/nails/backups/nails-before-deploy-20260811T110226Z.sql.gz`, verified=true.
@@ -41,6 +42,7 @@ Release `65d59acc...` — PR #299, client category presentation: в `Запис�
 - Exact candidate SHA берётся из fresh GitHub PR/preflight и не self-pin'ится в этом файле.
 - Candidate проверяется из exact PR head без изменения production checkout.
 - Production deploy — только штатный `ops/deploy/deploy.sh <exact-main-SHA>` / нормативный `NAILS_RELEASE_REF=origin/main` entrypoint.
+- отдельного finalize entrypoint нет.
 - Никаких manual source/.env/SQL/DB/runtime fixes на VPS.
 - При расхождении fresh preflight и target release context — fail closed.
 
