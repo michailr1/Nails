@@ -6,7 +6,7 @@
 
 ## Фактическое production-состояние
 
-Production branch: main.
+production branch: main.
 
 **Exact checkout/origin/running SHA намеренно не хранится в этом tracked-файле.** Файл не может надёжно содержать SHA коммита, который содержит сам этот файл: любое обновление SHA создаёт новый SHA и снова делает значение устаревшим. Для release/candidate решений единственный источник exact SHA — свежий GitHub ref + фактический read-only production preflight.
 
