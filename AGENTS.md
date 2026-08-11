@@ -4,7 +4,7 @@
 
 Обязательные нормативные документы:
 
-- [`docs/context/current.md`](docs/context/current.md) — компактный актуальный handoff: production SHA, текущая задача, обнаруженные проблемы, принятые решения и точка продолжения;
+- [`docs/context/current.md`](docs/context/current.md) — компактный актуальный handoff: политика разрешения production state, текущая задача, обнаруженные проблемы, принятые решения и точка продолжения;
 - [`docs/product/product-principles.md`](docs/product/product-principles.md) — обязательная продуктовая философия: Нэйли как личная помощница мастера, язык мастера, «Мой прайс», прогрессивное раскрытие сложности и проектирование от ментальной модели мастера;
 - [`docs/operations/agent-responsibilities.md`](docs/operations/agent-responsibilities.md) — разделение ответственности основного и VPS-агента;
 - [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — проверенная production-топология, пути и правильный способ управления Hermes;
@@ -13,7 +13,9 @@
 
 Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные operational- и product-документы. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации, release-flow или пользовательскую терминологию по памяти предыдущего чата.
 
-Если `docs/context/current.md` противоречит свежему GitHub, production preflight, коду `ops/deploy/deploy.sh` или более узкому deployment report, основной агент обязан остановиться, установить фактическое состояние и обновить нормативные документы через branch → PR → CI.
+Exact production checkout/origin/running SHA **не self-pin'ится в tracked-документах**: файл не может содержать SHA коммита, который содержит сам этот файл. Exact SHA для candidate/release всегда устанавливается свежим GitHub ref и фактическим read-only production preflight. Отсутствие exact SHA в `docs/context/current.md` не является расхождением.
+
+Если `docs/context/current.md` противоречит свежему GitHub, production preflight, коду `ops/deploy/deploy.sh` или более узкому deployment report по фактам, которые документ действительно фиксирует, основной агент обязан остановиться, установить фактическое состояние и обновить нормативные документы через branch → PR → CI.
 
 ## Неизменяемая граница ответственности
 
@@ -115,7 +117,7 @@ NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>
 7. Основной агент анализирует candidate report и выполняет GitHub merge.
 8. Для точного смерженного `main` SHA VPS-агент выполняет единый штатный main deploy через `ops/deploy/deploy.sh`; отдельного finalize нет.
 9. Основной агент проводит пользовательскую приёмку.
-10. Основной агент обновляет `docs/context/current.md` после значимого production milestone или изменения точки продолжения.
+10. Основной агент обновляет `docs/context/current.md` после значимого production milestone или изменения точки продолжения, но не self-pin'ит туда exact SHA текущего tracked commit.
 11. Issue закрывает основной агент после выполнения всех критериев.
 
 Любая инструкция, передающая VPS-агенту написание кода, исправление файлов, изменение GitHub или несуществующий release entrypoint, противоречит этому контракту и не должна выполняться.
