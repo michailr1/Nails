@@ -106,7 +106,7 @@ def test_booking_creation_snapshots_service_and_is_idempotent(
     create_availability: Callable,
     auth_headers: Callable,
 ) -> None:
-    user = create_user()
+    user = create_user(timezone="Europe/Berlin")
     service = create_service(
         user.id,
         price_amount=Decimal("2500.00"),
