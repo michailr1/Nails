@@ -16,6 +16,7 @@ from app.models import (
     Client,
     Service,
 )
+from app.models_preferences import MasterPreferences
 from app.timezones import owner_timezone
 
 SLOT_STEP_MINUTES = 15
@@ -119,6 +120,61 @@ def availability_for_day(
     ).all()
 
 
+def _usual_work_windows(
+    session: Session,
+    owner_user_id: uuid.UUID,
+) -> list[tuple[time, time]]:
+    preferences = session.scalar(
+        select(MasterPreferences).where(MasterPreferences.user_id == owner_user_id)
+    )
+    raw_intervals = preferences.default_work_intervals if preferences is not None else None
+    windows: list[tuple[time, time]] = []
+    for item in raw_intervals or []:
+        if not isinstance(item, dict):
+            continue
+        start_value = item.get("start_time")
+        end_value = item.get("end_time")
+        if not isinstance(start_value, str) or not isinstance(end_value, str):
+            continue
+        try:
+            start_time = time.fromisoformat(start_value)
+            end_time = time.fromisoformat(end_value)
+        except ValueError:
+            continue
+        if start_time < end_time:
+            windows.append((start_time, end_time))
+    return windows
+
+
+def suggestion_windows_for_day(
+    session: Session,
+    owner_user_id: uuid.UUID,
+    day: date,
+) -> tuple[list[tuple[time, time]], bool]:
+    """Resolve ADR-006 suggestion windows: date override -> usual hours -> fallback.
+
+    The returned boolean is the whole-day day-off marker. Positive windows only
+    shape suggestions and never turn into a hard booking restriction.
+    """
+    availability = availability_for_day(session, owner_user_id, day)
+    if any(not item.is_available for item in availability):
+        return [], True
+
+    explicit_windows = [
+        (item.start_time, item.end_time)
+        for item in availability
+        if item.is_available and item.start_time is not None and item.end_time is not None
+    ]
+    if explicit_windows:
+        return explicit_windows, False
+
+    usual_windows = _usual_work_windows(session, owner_user_id)
+    if usual_windows:
+        return usual_windows, False
+
+    return [(DEFAULT_SUGGESTION_START, DEFAULT_SUGGESTION_END)], False
+
+
 def overlaps(
     starts_at: datetime,
     ends_at: datetime,
@@ -178,7 +234,7 @@ def ensure_reservation_available(
 
     # ADR-006: explicit booking is open by default. A false row is the existing
     # whole-day day-off marker. Positive intervals only bound suggested slots;
-    # they never gate an explicitly requested booking time.
+    # usual hours and fallback windows likewise never gate an explicit booking.
     if any(not interval.is_available for interval in availability):
         raise SchedulingDomainError("booking_on_day_off")
 
