@@ -1,3 +1,15 @@
+.topbar {
+  position: relative;
+  padding-right: 58px;
+}
+
+.master-account-host {
+  position: absolute;
+  z-index: 35;
+  top: 0;
+  right: 0;
+}
+
 .master-account {
   position: relative;
 }
@@ -21,7 +33,7 @@
   z-index: 40;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 180px;
+  min-width: 220px;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -53,14 +65,18 @@
   inset: 0;
   display: grid;
   place-items: center;
+  overflow: auto;
   padding: 18px;
   background: color-mix(in srgb, var(--text) 38%, transparent);
 }
 
 .master-settings-panel {
-  width: min(620px, 100%);
-  max-height: min(760px, calc(100vh - 36px));
+  box-sizing: border-box;
+  width: min(620px, calc(100vw - 36px));
+  max-width: 100%;
+  max-height: min(760px, calc(100dvh - 36px));
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .master-settings-heading,
@@ -82,6 +98,15 @@
   margin-bottom: 10px;
 }
 
+.master-settings-heading > div {
+  min-width: 0;
+}
+
+.master-settings-heading h2,
+.master-settings-heading p {
+  overflow-wrap: anywhere;
+}
+
 .master-settings-close {
   width: 44px;
   height: 44px;
@@ -91,32 +116,57 @@
   line-height: 1;
 }
 
-.master-settings-form {
+.master-settings-form,
+.client-public-profile-form {
   display: grid;
+  min-width: 0;
   gap: 0;
 }
 
+.client-public-profile-form label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.client-public-profile-form input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
 .master-setting-row {
+  min-width: 0;
   padding: 18px 0;
   border-top: 1px solid var(--border);
 }
 
+.master-setting-row > div {
+  min-width: 0;
+}
+
 .master-setting-row p {
   margin: 5px 0 0;
+  overflow-wrap: anywhere;
 }
 
 .master-setting-value {
   flex: 0 0 auto;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   font-weight: 600;
 }
 
 .master-work-hours-fields {
   flex: 0 0 auto;
+  min-width: 0;
   gap: 10px;
 }
 
 .master-work-hours-fields label {
   display: grid;
+  min-width: 0;
   gap: 5px;
 }
 
@@ -126,23 +176,52 @@
 }
 
 .master-work-hours-fields input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
 }
 
 .master-settings-actions {
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
+  min-width: 0;
   padding-top: 18px;
 }
 
+.master-settings-actions > button {
+  max-width: 100%;
+}
+
+.master-profile-panel .client-public-profile-summary {
+  margin: 16px 0;
+}
+
 @media (max-width: 760px) {
+  .topbar {
+    padding-right: 54px;
+  }
+
+  .master-account-host {
+    top: 0;
+    right: 0;
+  }
+
   .master-settings-backdrop {
     align-items: end;
+    place-items: end center;
     padding: 10px;
   }
 
   .master-settings-panel {
-    max-height: calc(100vh - 20px);
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    margin: 0;
+  }
+
+  .master-settings-heading {
+    gap: 10px;
   }
 
   .master-setting-row {
@@ -151,15 +230,40 @@
     gap: 12px;
   }
 
+  .master-setting-value {
+    align-self: flex-start;
+  }
+
   .master-work-hours-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     width: 100%;
   }
 
-  .master-work-hours-fields label {
-    flex: 1 1 0;
+  .master-settings-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    width: 100%;
   }
 
-  .master-work-hours-fields input {
+  .master-settings-actions > button {
     width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 390px) {
+  .master-settings-backdrop {
+    padding: 6px;
+  }
+
+  .master-settings-panel {
+    width: calc(100vw - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+
+  .master-account-menu {
+    width: min(240px, calc(100vw - 20px));
+    min-width: 0;
   }
 }
