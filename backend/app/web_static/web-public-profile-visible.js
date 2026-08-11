@@ -36,7 +36,7 @@ function masterPublicProfilePanel(profile = {}) {
         <label><span>Контакт <small>необязательно</small></span><input name="public_contact" maxlength="160" placeholder="Телефон или @username"></label>
         <p class="booking-edit-error" role="alert"></p>
         <div class="master-settings-actions">
-          <button class="primary-button" type="submit">Сохранить</button>
+          <button class="primary-button" type="submit">Сохранить и продолжить</button>
           <button class="secondary-button" type="button" data-cancel-public-profile>Отмена</button>
         </div>
       </form>`;
