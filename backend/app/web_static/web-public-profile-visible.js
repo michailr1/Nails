@@ -7,10 +7,10 @@ function masterPublicProfilePanel(profile = {}) {
   return ready
     ? `
       <div class="master-settings-heading">
-        <div><p class="eyebrow">Мастер</p><h2 id="master-profile-title">Профиль для клиенток</h2></div>
+        <div><p class="eyebrow">Мастер</p><h2 id="master-profile-title">Как вас увидят клиентки</h2></div>
         <button class="ghost-button master-settings-close" type="button" aria-label="Закрыть">×</button>
       </div>
-      <p class="muted">Так вас видят клиентки при записи.</p>
+      <p class="muted">Профиль для клиенток. Так вас видят при записи.</p>
       <dl class="client-public-profile-summary">
         <div><dt>Имя мастера</dt><dd>${escapeHtml(displayName)}</dd></div>
         <div><dt>Контакт</dt><dd>${publicContact ? escapeHtml(publicContact) : "Не указан"}</dd></div>
@@ -27,7 +27,7 @@ function masterPublicProfilePanel(profile = {}) {
       </form>`
     : `
       <div class="master-settings-heading">
-        <div><p class="eyebrow">Мастер</p><h2 id="master-profile-title">Профиль для клиенток</h2></div>
+        <div><p class="eyebrow">Перед приглашением</p><h2 id="master-profile-title">Как вас увидят клиентки</h2></div>
         <button class="ghost-button master-settings-close" type="button" aria-label="Закрыть">×</button>
       </div>
       <p>Укажите имя мастера. Контакт необязателен — его клиентка увидит, если понадобится связаться напрямую.</p>
@@ -49,7 +49,7 @@ async function renderMasterPublicProfile() {
   backdrop.innerHTML = `
     <section class="panel master-settings-panel master-profile-panel" role="dialog" aria-modal="true" aria-labelledby="master-profile-title">
       <div class="master-settings-heading">
-        <div><p class="eyebrow">Мастер</p><h2 id="master-profile-title">Профиль для клиенток</h2></div>
+        <div><p class="eyebrow">Мастер</p><h2 id="master-profile-title">Как вас увидят клиентки</h2></div>
         <button class="ghost-button master-settings-close" type="button" aria-label="Закрыть">×</button>
       </div>
       <p class="muted">Загружаем профиль…</p>
@@ -103,7 +103,7 @@ async function renderMasterPublicProfile() {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
     panel.innerHTML = `
       <div class="master-settings-heading">
-        <h2 id="master-profile-title">Профиль для клиенток</h2>
+        <h2 id="master-profile-title">Как вас увидят клиентки</h2>
         <button class="ghost-button master-settings-close" type="button" aria-label="Закрыть">×</button>
       </div>
       <p class="booking-edit-error">Не удалось загрузить профиль.</p>`;
