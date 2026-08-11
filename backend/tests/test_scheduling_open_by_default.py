@@ -40,7 +40,7 @@ def test_explicit_booking_succeeds_without_declared_hours(
     create_service,
     auth_headers,
 ):
-    user = create_user()
+    user = create_user(timezone="Europe/Berlin")
     create_service(user.id)
     _create_client(user.id)
     day = date(2026, 7, 20)
@@ -63,7 +63,7 @@ def test_explicit_booking_outside_suggestion_window_still_succeeds(
     create_availability,
     auth_headers,
 ):
-    user = create_user()
+    user = create_user(timezone="Europe/Berlin")
     create_service(user.id)
     _create_client(user.id)
     day = date(2026, 7, 21)
