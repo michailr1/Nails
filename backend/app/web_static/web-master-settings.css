@@ -1,13 +1,8 @@
-.topbar {
-  position: relative;
-  padding-right: 58px;
-}
-
 .master-account-host {
-  position: absolute;
+  position: fixed;
   z-index: 35;
-  top: 0;
-  right: 0;
+  top: 36px;
+  right: clamp(20px, 5vw, 68px);
 }
 
 .master-account {
@@ -199,13 +194,9 @@
 }
 
 @media (max-width: 760px) {
-  .topbar {
-    padding-right: 54px;
-  }
-
   .master-account-host {
-    top: 0;
-    right: 0;
+    top: 24px;
+    right: 16px;
   }
 
   .master-settings-backdrop {
