@@ -78,6 +78,7 @@ def create_user(clean_database) -> Callable[..., User]:
         *,
         role: UserRole = UserRole.master,
         is_active: bool = True,
+        timezone: str | None = None,
     ) -> User:
         with get_session_factory()() as session:
             user = User(
@@ -85,6 +86,7 @@ def create_user(clean_database) -> Callable[..., User]:
                 telegram_user_id=telegram_user_id,
                 role=role,
                 is_active=is_active,
+                timezone=timezone,
             )
             session.add(user)
             session.commit()
