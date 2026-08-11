@@ -10,8 +10,6 @@ from app.models import Booking, BookingStatus, Client, Service
 from app.schemas.scheduling import AvailabilitySummary, FreeSlotsResponse
 from app.schemas.scheduling_catalog_bookings import CatalogDayViewResponse
 from app.services.scheduling_common import (
-    DEFAULT_SUGGESTION_END,
-    DEFAULT_SUGGESTION_START,
     SLOT_STEP_MINUTES,
     availability_for_day,
     calculate_reservation,
@@ -19,6 +17,7 @@ from app.services.scheduling_common import (
     day_bounds,
     is_representable_local_datetime,
     overlaps,
+    suggestion_windows_for_day,
 )
 from app.services.scheduling_lookup import get_active_service
 from app.services.scheduling_presenters import booking_summary, service_summary
@@ -91,19 +90,11 @@ def find_free_slots_for_owner(
     timezone = owner_timezone(session, owner_user_id)
     service = get_active_service(session, owner_user_id, service_name)
     availability = availability_for_day(session, owner_user_id, day)
-    is_day_off = any(not item.is_available for item in availability)
-    explicit_windows = [item for item in availability if item.is_available]
-
-    if is_day_off:
-        suggestion_windows = []
-    elif explicit_windows:
-        suggestion_windows = [
-            (item.start_time, item.end_time)
-            for item in explicit_windows
-            if item.start_time is not None and item.end_time is not None
-        ]
-    else:
-        suggestion_windows = [(DEFAULT_SUGGESTION_START, DEFAULT_SUGGESTION_END)]
+    suggestion_windows, is_day_off = suggestion_windows_for_day(
+        session,
+        owner_user_id,
+        day,
+    )
 
     start_at, end_at = day_bounds(day, timezone)
     busy = [
