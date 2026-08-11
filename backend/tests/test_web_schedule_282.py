@@ -66,29 +66,32 @@ def test_web_schedule_reuses_existing_preview_and_replace_services():
     assert 'prefix="/web/api/schedule"' in source
 
 
-def test_profile_ui_explains_client_visible_hours_and_day_states():
-    source = (WEB / "web-working-schedule.js").read_text(encoding="utf-8")
-
-    assert "Именно в эти часы клиентки видят свободное время для записи" in source
-    assert "длительности процедуры" in source
-    assert "времени на подготовку и уборку" in source
-    assert "уже созданных записей" in source
-    assert "Рабочий день" in source
-    assert "Выходной" in source
-    assert "Не задано" in source
-    assert 'api("/web/api/schedule/preview"' in source
-    assert 'api("/web/api/schedule"' in source
-    assert "Сначала разберитесь с записями" in source
-
-
-def test_schedule_is_loaded_after_public_profile_and_is_mobile_contained():
+def test_usual_hours_are_one_setting_under_master_icon():
+    source = (WEB / "web-master-settings.js").read_text(encoding="utf-8")
     index = (WEB / "index.html").read_text(encoding="utf-8")
-    css = (WEB / "web-working-schedule.css").read_text(encoding="utf-8")
 
-    assert index.index("web-public-profile-visible.js") < index.index("web-working-schedule.js")
-    assert "web-working-schedule.css" in index
-    assert "minmax(0, 1fr)" in css
-    assert "width: 100%" in css
+    assert "data-master-account" in source
+    assert "Меню мастера" in source
+    assert "Настройки" in source
+    assert "Часовой пояс" in source
+    assert "Обычные рабочие часы" in source
+    assert "Исключение на конкретную дату задаётся в Календаре" in source
+    assert 'intervals: [{' in source
+    assert 'api("/web/api/schedule/default-work-hours"' in source
+    assert "web-master-settings.js" in index
+    assert "web-master-settings.css" in index
+
+
+def test_legacy_14_day_editor_is_removed_instead_of_duplicated():
+    index = (WEB / "index.html").read_text(encoding="utf-8")
+
+    assert not (WEB / "web-working-schedule.js").exists()
+    assert not (WEB / "web-working-schedule.css").exists()
+    assert "web-working-schedule.js" not in index
+    assert "web-working-schedule.css" not in index
+    assert "WORKING_SCHEDULE_DAYS" not in "\n".join(
+        path.read_text(encoding="utf-8") for path in WEB.glob("*.js")
+    )
 
 
 def test_no_parallel_schedule_model_or_schedule_migration_is_added():
