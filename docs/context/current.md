@@ -1,12 +1,12 @@
 # Nails — текущий контекст
 
-Дата фиксации: **10 августа 2026 года**.
+Дата фиксации: **11 августа 2026 года**.
 
 Перед работой прочитать `AGENTS.md`, этот файл, `docs/product/product-principles.md`, `docs/operations/engineering-principles.md`, остальные operational-документы и принятые ADR. GitHub проверять по API, production — фактическим preflight. Production state не предполагать.
 
 ## Фактическое production-состояние
 
-Последний свежий VPS preflight перед candidate #297 подтвердил:
+Последний production deploy и post-deploy acceptance подтвердили:
 
 ```text
 repository=michailr1/Nails
@@ -16,10 +16,10 @@ production repo=/opt/nails/repo
 production branch: main
 backend env=/opt/nails/.env
 internal API=http://127.0.0.1:8210
-production_sha=3e4eb842895f458a591ff30208d206a10af472e9
-running_api_sha=3e4eb842895f458a591ff30208d206a10af472e9
-running_web_sha=3e4eb842895f458a591ff30208d206a10af472e9
-running_client_bot_sha=3e4eb842895f458a591ff30208d206a10af472e9
+production_sha=ae01054ebec67e8925680ac521c919be112e6c0e
+running_api_sha=ae01054ebec67e8925680ac521c919be112e6c0e
+running_web_sha=ae01054ebec67e8925680ac521c919be112e6c0e
+running_client_bot_sha=ae01054ebec67e8925680ac521c919be112e6c0e
 alembic_head=0025
 api_health=200
 api_readiness=200
@@ -30,14 +30,14 @@ client_forward_state=active
 last_verified_deploy=DEPLOY_OK=true
 ```
 
-Fresh preflight также подтвердил clean production checkout, неизменённый production env/runtime/DB во время candidate попыток и health/readiness/web `200`.
+Последний backup перед release #297: `/opt/nails/backups/nails-before-deploy-20260810T233634Z.sql.gz`, verified=true. Post-deploy acceptance также подтвердил clean working tree, unchanged production env, отсутствие manual SQL/runtime changes и exact runtime SHA во всех production-компонентах.
 
 ## Release contract
 
 - Основной агент пишет код, тесты и документацию, управляет GitHub, CI, review и merge.
 - VPS-агент только исполняет утверждённые candidate/deploy/diagnostic runbook'и.
 - PR candidate проверяется из exact `origin/pr/<number>` без изменения production checkout.
-- Exact candidate SHA всегда берётся из fresh GitHub PR/preflight; его нельзя пиновать внутри этого же изменяемого контекстного файла, иначе любой context commit сам делает такой SHA устаревшим.
+- Exact candidate SHA всегда берётся из fresh GitHub PR/preflight; его нельзя self-pin'ить внутри этого же изменяемого контекстного файла.
 - Production deploy выполняется только постоянным `ops/deploy/deploy.sh <exact-SHA>`.
 - отдельного finalize entrypoint нет.
 - Никакого ручного SQL, source edit, `.env` edit, runtime repair или rollback на VPS.
@@ -55,115 +55,107 @@ Operational anchors:
 - Нэйли — личная помощница мастера, а не CRM;
 - основной пользовательский раздел каталога — «Мой прайс».
 
-## Последние production-релизы
+## Последние #277 production-срезы
 
-### #285 — реальный onboarding submit timezone
+### PR #294 — короткий booking-flow
 
-PR #293 / release `7da1d0725a4cb34d713eab1e9866f6030ffbdb10` исправил второй скрытый submit formatter в фактической цепочке `ContactAwareOnboardingBot -> OnboardingDraftPlatformBot`.
+Release `38621112d3276763c3909804df49d524cdcf945f`:
 
-Production acceptance доказал: draft и submit показывают один owner-local момент; raw UTC в клиентское сообщение не попадает. #285 закрыт completed.
+- service -> date напрямую;
+- addon screen не mandatory gate;
+- `Как в прошлый раз` сохраняет состав и открывает owner-local date picker.
 
-### #277 slice 1 — короткий booking-flow
+### PR #295 — «Мои записи»
 
-PR #294 / release `38621112d3276763c3909804df49d524cdcf945f`:
+Release `fb0ab3f14c69b72d5ff7210b93e1b8bfbcb7c484`:
 
-- после выбора процедуры клиентка сразу переходит к дате даже при наличии addons;
-- отдельный addon-screen больше не mandatory gate;
-- дополнения остаются доступными из итоговой сводки;
-- `Как в прошлый раз` открывает owner-local date picker и сохраняет прошлый состав.
+- только будущие `pending`/`approved`;
+- owner-local время;
+- appointment-time sort;
+- pending cancellable, approved без cancel.
 
-Production acceptance зелёный.
+### PR #296 — optional request note
 
-### #277 slice 2 — «Мои записи»
+Release `3e4eb842895f458a591ff30208d206a10af472e9`, Alembic `0025`:
 
-PR #295 / release `fb0ab3f14c69b72d5ff7210b93e1b8bfbcb7c484`:
+- note до 300 символов в draft/request snapshot;
+- note не меняет composition/slot/price/duration;
+- client projections note-free;
+- trusted master/API/BFF и durable master-forward получают note;
+- audit без свободного текста;
+- Telegram forward plain text, link preview disabled;
+- cabinet note escaped.
 
-- переиспользован существующий owner-isolated `GET /api/v1/client/requests`, без новой history-модели;
-- показываются только будущие `pending`/`approved`;
-- `rejected`, `cancelled` и прошлые записи скрыты из основного списка;
-- сортировка по фактическому времени визита;
-- время отображается в timezone мастера;
-- pending сохраняет кнопку отмены, approved — нет.
+### PR #297 — catalog sections/readability
 
-Production read-only diagnostic подтвердил exact release, owner-local filter/sort и runtime invariants.
+Current production release `ae01054ebec67e8925680ac521c919be112e6c0e`:
 
-### #277 slice 3 — optional request note
+- native collapsible `<details>/<summary>` sections в `Мой прайс`;
+- sections collapsed by default, active editor section auto-open;
+- existing editor/save/remove paths reused;
+- fixed/range/per-unit/on-request prices readable; missing price != `0 ₽`;
+- base/addon/buffer duration readable;
+- Russian position counts;
+- mobile <=760px stack, long-name wrap;
+- existing design tokens/dark theme preserved;
+- API/domain/DB schema unchanged;
+- exact repository readability contract passed 10/10 in candidate and production checkout.
 
-PR #296 / release `3e4eb842895f458a591ff30208d206a10af472e9`, Alembic `0025`:
-
-- одна необязательная заметка клиентки к конкретной заявке, максимум 300 символов;
-- note хранится в draft и snapshot'ится в `BookingRequest` при submit;
-- note не меняет service/addons/slot/price/duration;
-- client submit/list projections остаются note-free;
-- trusted master projection и WEB BFF получают note;
-- audit остаётся без свободного текста;
-- durable master-forward включает note, оставаясь plain-text без `parse_mode`;
-- кабинет экранирует note через `escapeHtml`;
-- migration `0025` добавляет nullable `VARCHAR(300)` в `client_booking_drafts` и `booking_requests`.
-
-Candidate acceptance отдельно доказал, что `11:00+03:00` и `08:00Z` — один absolute instant: различие ISO-представления не является изменением выбранного слота.
-
-Fresh production preflight перед #297 подтверждает, что этот release уже является текущим production baseline и Alembic head=`0025`.
-
-## Активный slice — #277 catalog sections/readability
-
-Активная ветка и PR:
+## Активный slice — #277 master-correction overlap acceptance
 
 ```text
 active_issue=277
-active_pr=297
-active_branch=feat/catalog-sections-readability-277
-base=3e4eb842895f458a591ff30208d206a10af472e9
+active_pr=298
+active_branch=test/request-overlap-277
+base=ae01054ebec67e8925680ac521c919be112e6c0e
 candidate_head=resolve_from_fresh_GitHub_PR_preflight
 candidate_migration=none
 expected_alembic_head=0025
 ```
 
-Цель — presentation-only улучшение `Мой прайс`:
+Цель — не менять product/domain код, а закрыть последний code-level acceptance gap #277 точным regression:
 
-- существующие category groups становятся native collapsible `<details>/<summary>`;
-- по умолчанию sections collapsed;
-- section с active editor открывается автоматически;
-- существующие `serviceSummaryCard` / `serviceEditorCard` и save/remove paths переиспользуются;
-- fixed/range/per-unit/on-request цены показываются читаемо;
-- отсутствующая цена не превращается в `0 ₽`, а показывается как `цена уточняется`;
-- base duration, addon extra time и master buffer-after показываются человекочитаемо;
-- русские count labels: `1 позиция`, `2 позиции`, `N позиций`;
-- mobile <=760px stack и long-name wrap;
-- только существующие design tokens, без literal hex/rgb colors;
-- DB/API/catalog-domain/schema не меняются.
+- клиентская заявка на base service 60 минут сама помещается до следующей записи;
+- мастер перед подтверждением добавляет addon `+50 мин`;
+- authoritative `create_booking()` должен вернуть `booking_overlap` до persistence;
+- request остаётся `pending`, без `booking_id` и без mutation исходных service/addons/time;
+- tentative create-new client не должен протечь после failed approval;
+- в БД не появляется вторая booking;
+- cabinet показывает явный `booking_overlap` текст, оставляет dialog открытым и refresh'ит slots.
 
-Repository regression:
-`backend/tests/test_web_catalog_readability_277.py` фиксирует полный source-level presentation contract и должен запускаться в exact candidate worktree вместо временных synthetic JS/browser harnesses.
+PR #298 содержит только regression + этот context refresh. Product API/schema/model/migration/domain/frontend code не меняется.
 
-История candidate #297:
+CI history #298:
 
-1. `e46b5a6...` — fail closed из-за временного harness с пустым `serviceCatalogDraft`;
-2. `e46b5a6...` — fail closed из-за временного harness, ошибочно привязавшего `catalogGroups()` к `this`; actual source `this` не использует;
-3. `99f8a5b...` — fail closed ДО startup из-за устаревшего `docs/context/current.md` (`fb0ab3.../0024` против fresh production `3e4eb842.../0025`);
-4. production context обновлён через PR. Для обновлённого контекста CI #1422, Agent responsibility #1333 и Production infrastructure contract #221 зелёные. Следующий candidate использует fresh exact PR head и baseline `3e4eb842.../0025`.
+1. initial head `2b1ea1f...` — backend test упал только из-за invalid test fixture: addon был создан с `duration_minutes=0`, нарушая общий DB constraint `duration_minutes > 0`;
+2. fixture исправлена на valid positive duration; addon business-time в сценарии по-прежнему определяется `extra_minutes=50`;
+3. head до context refresh `439af8d...` прошёл backend test suite; exact candidate должен определяться только после этого context commit и нового CI.
 
-Ни один предыдущий fail-closed не доказал product-source defect. Production во всех попытках остался неизменным и healthy.
+## Что остаётся после overlap slice
 
-## Что остаётся после catalog readability slice
+После зелёного PR #298 и production evidence в #277 останется только **реальная 360px Telegram/mobile приёмка** клиентского booking flow:
 
-Issue #277 не закрывать автоматически. Остаток acceptance:
+- разделы вместо плоского списка;
+- не более ~6 кнопок на страницу раздела;
+- короткие button labels не обрезаются;
+- price/time читаются в message text;
+- repeat-last виден при подходящем визите;
+- без addons можно отправить заявку;
+- optional note не создаёт mandatory step.
 
-1. реальная Telegram/мобильная 360px приёмка коротких кнопок и section flow;
-2. overlap при master correction должен оставаться виден до сохранения — authoritative `create_booking()` validation уже переиспользуется, но acceptance нужно зафиксировать по факту;
-3. затем вернуться к #280 cabinet reload/render ownership и к #284/#282 effective schedule UX.
+Это реальный UI acceptance, его нельзя честно заменить source-level тестом; потребуется один живой Telegram прогон с пользовательским участием. До этой точки все остальные #277 acceptance-пункты должны быть закрыты автоматизированными evidence.
 
 ## Точка продолжения
 
 ```text
-production_sha=3e4eb842895f458a591ff30208d206a10af472e9
+production_sha=ae01054ebec67e8925680ac521c919be112e6c0e
 alembic_head=0025
 active_issue=277
-active_pr=297
-active_branch=feat/catalog-sections-readability-277
+active_pr=298
+active_branch=test/request-overlap-277
 candidate_head=resolve_from_fresh_GitHub_PR_preflight
 client_bot_singleton=true
 client_forward_state=active
 release_flow=exact PR-head candidate -> GitHub ready -> merge exact head -> exact main deploy.sh
-next=exact candidate acceptance using repository regression -> merge/deploy if green
+next=new CI after context refresh -> isolated candidate acceptance of overlap regression -> merge/deploy if green -> one real Telegram 360px acceptance
 ```
