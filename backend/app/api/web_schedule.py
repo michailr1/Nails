@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
 from app.db import get_db_session
+from app.schemas.preferences import DefaultWorkHoursUpdateRequest, MasterPreferencesResponse
 from app.schemas.scheduling import AvailabilityReplaceRequest, AvailabilityReplaceResponse
 from app.schemas.scheduling_availability import AvailabilityPreviewResponse
 from app.schemas.web_schedule import WebScheduleRangeQuery, WebScheduleResponse
+from app.services.preferences import get_master_preferences, save_default_work_hours
 from app.services.scheduling_availability import replace_availability
 from app.services.scheduling_availability_preview import preview_availability
 from app.services.scheduling_common import SchedulingDomainError
@@ -56,6 +58,25 @@ def schedule(
             detail={"code": "invalid_schedule_range"},
         ) from exc
     return get_web_schedule(session, identity, query)
+
+
+@router.get("/default-work-hours", response_model=MasterPreferencesResponse)
+def default_work_hours(
+    session: SessionDependency,
+    identity: WriteIdentity,
+) -> MasterPreferencesResponse:
+    return get_master_preferences(session, identity)
+
+
+@router.put("/default-work-hours", response_model=MasterPreferencesResponse)
+def update_default_work_hours(
+    body: DefaultWorkHoursUpdateRequest,
+    request: Request,
+    session: SessionDependency,
+    identity: WriteIdentity,
+) -> MasterPreferencesResponse:
+    validate_web_boundary(request)
+    return save_default_work_hours(session, identity, body)
 
 
 @router.post("/preview", response_model=AvailabilityPreviewResponse)
