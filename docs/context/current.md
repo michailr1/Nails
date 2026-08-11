@@ -13,7 +13,7 @@ repository=michailr1/Nails
 production host=de.funti.cc
 public master portal=https://de.funti.cc:8446/web/
 production repo=/opt/nails/repo
-production branch=main
+production branch: main
 backend env=/opt/nails/.env
 production_sha=65d59acc9e9ecf791fd928e102da671b76ab1a3d
 running_api_sha=65d59acc9e9ecf791fd928e102da671b76ab1a3d
@@ -48,6 +48,7 @@ Operational anchors:
 
 - Hermes plugins: `nails-onboarding`, `nails-scheduling`;
 - роли только `master`, `admin`, `client`;
+- один живой Telegram-тест за раз;
 - отдельный deterministic client bot `@smartnails_bot`;
 - один client-bot runtime на token;
 - имя помощницы — «Нэйли»;
