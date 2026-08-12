@@ -110,7 +110,6 @@ def continue_from_telegram(
     result = consume_portal_continuation(session, request, token)
     response = RedirectResponse(url="/web/", status_code=status.HTTP_303_SEE_OTHER)
     response.headers["Cache-Control"] = "no-store"
-    response.headers["Referrer-Policy"] = "no-referrer"
     if result.authenticated and result.session_token is not None:
         set_session_cookie(response, result.session_token)
     return response
