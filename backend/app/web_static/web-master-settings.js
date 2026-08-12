@@ -121,18 +121,18 @@ async function renderMasterSettings() {
         <div class="master-setting-row">
           <div>
             <strong>Часовой пояс</strong>
-            <p class="muted">В нём показываем календарь и время клиенткам.</p>
+            <p class="muted">По нему показываем время в календаре и клиенткам.</p>
           </div>
           <span class="master-setting-value">${escapeHtml(state.timezone)}</span>
         </div>
         <div class="master-setting-row master-work-hours-row">
           <div>
-            <strong>Обычные рабочие часы</strong>
-            <p class="muted">Подсказки свободного времени на обычный день. Исключение на конкретную дату задаётся в Календаре и имеет приоритет.</p>
+            <strong>Рабочий день</strong>
+            <p class="muted">Обычно в это время Нэйли предлагает свободные окна. Для отдельного дня время можно изменить в Календаре.</p>
           </div>
           <div class="master-work-hours-fields">
-            <label><span>С</span><input name="start_time" type="time" required value="${escapeHtml(startTime)}"></label>
-            <label><span>До</span><input name="end_time" type="time" required value="${escapeHtml(endTime)}"></label>
+            <label><span>Начало</span><input name="start_time" type="time" required value="${escapeHtml(startTime)}"></label>
+            <label><span>Конец</span><input name="end_time" type="time" required value="${escapeHtml(endTime)}"></label>
           </div>
         </div>
         <p class="booking-edit-error" role="alert"></p>
