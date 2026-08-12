@@ -74,8 +74,10 @@ def test_usual_hours_are_one_setting_under_master_icon():
     assert "Меню мастера" in source
     assert "Настройки" in source
     assert "Часовой пояс" in source
-    assert "Обычные рабочие часы" in source
-    assert "Исключение на конкретную дату задаётся в Календаре" in source
+    assert "Рабочий день" in source
+    assert "Для отдельного дня время можно изменить в Календаре" in source
+    assert "Начало" in source
+    assert "Конец" in source
     assert 'intervals: [{' in source
     assert 'api("/web/api/schedule/default-work-hours"' in source
     assert "web-master-settings.js" in index
@@ -103,11 +105,14 @@ def test_master_account_menu_finishes_286_by_moving_not_duplicating_controls():
     assert "page.prepend(panel)" not in profile
     assert "renderMasterPublicProfile" in profile
 
-    # Аватар имеет отдельную угловую геометрию, а mobile dialog ограничен viewport.
+    # Аватар сохраняет отдельную угловую геометрию, а #304 убирает старую
+    # viewport-арифметику dialog width в пользу реальных mobile gutters.
     assert ".master-account-host" in css
     assert "position: absolute" in css
-    assert "calc(100vw - 20px)" in css
-    assert "calc(100dvh - 20px)" in css
+    assert "calc(100vw - 20px)" not in css
+    assert "calc(100vw - 12px)" not in css
+    assert "calc(100dvh - 36px)" in css
+    assert "calc(100dvh - 32px)" in css
     assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in css
 
 
