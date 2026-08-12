@@ -289,7 +289,6 @@ def consume_portal_continuation(
         request_id=request_id,
         settings=settings,
     )
-    challenge.status = WebChallengeStatus.continued.value
     if challenge.consumed_at is None:
         challenge.consumed_at = now
     _audit(
@@ -305,7 +304,7 @@ def consume_portal_continuation(
     session.commit()
     return ConsumedChallenge(
         True,
-        WebChallengeStatus.continued.value,
+        challenge.status,
         session_token,
     )
 
