@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 from conftest import WEB_ORIGIN_HEADERS
 from fastapi.testclient import TestClient
@@ -33,7 +34,7 @@ def _continue(client: TestClient, token: str):
     )
 
 
-def test_approve_returns_one_time_continuation_that_logs_in_new_browser(
+def test_continuation_does_not_consume_original_browser_challenge(
     client,
     create_user,
     auth_headers,
@@ -55,31 +56,40 @@ def test_approve_returns_one_time_continuation_that_logs_in_new_browser(
     telegram_browser = TestClient(client.app, base_url="https://testserver")
     opened = _continue(telegram_browser, token)
     assert opened.status_code == 303
-    assert opened.headers["location"] == "/web/"
+    assert opened.headers["location"] == f"/web/#continue={quote(token, safe='')}"
     assert opened.headers["cache-control"] == "no-store"
     assert opened.headers["referrer-policy"] == "no-referrer"
     assert telegram_browser.cookies.get("__Host-nails_session")
-    state = telegram_browser.get("/web/api/auth/session", headers=WEB_ORIGIN_HEADERS)
-    assert state.status_code == 200
-    assert state.json() == {"authenticated": True}
-
-    replay = TestClient(client.app, base_url="https://testserver")
-    repeated = _continue(replay, token)
-    assert repeated.status_code == 303
-    assert replay.cookies.get("__Host-nails_session") is None
-    denied = replay.get("/web/api/auth/session", headers=WEB_ORIGIN_HEADERS)
-    assert denied.status_code == 401
+    telegram_state = telegram_browser.get(
+        "/web/api/auth/session", headers=WEB_ORIGIN_HEADERS
+    )
+    assert telegram_state.status_code == 200
+    assert telegram_state.json() == {"authenticated": True}
 
     with get_session_factory()() as session:
         challenge = session.scalar(select(WebLoginChallenge))
         assert challenge is not None
-        assert challenge.status == WebChallengeStatus.continued.value
+        assert challenge.status == WebChallengeStatus.approved.value
+
+    original = client.post(
+        "/web/api/auth/challenges/consume",
+        headers=WEB_ORIGIN_HEADERS,
+        json={"challenge_id": started["challenge_id"]},
+    )
+    assert original.status_code == 200
+    assert original.json() == {"authenticated": True, "status": "consumed"}
+
+    with get_session_factory()() as session:
+        challenge = session.scalar(select(WebLoginChallenge))
+        assert challenge is not None
+        assert challenge.status == WebChallengeStatus.consumed.value
+        sessions = session.scalars(select(WebSession)).all()
+        assert len(sessions) == 2
 
     telegram_browser.close()
-    replay.close()
 
 
-def test_continuation_still_works_if_original_browser_consumed_first(
+def test_continuation_remains_reusable_within_ttl_after_browser_consume(
     client,
     create_user,
     auth_headers,
@@ -100,19 +110,24 @@ def test_continuation_still_works_if_original_browser_consumed_first(
     )
     assert original.json() == {"authenticated": True, "status": "consumed"}
 
-    telegram_browser = TestClient(client.app, base_url="https://testserver")
-    opened = _continue(telegram_browser, token)
-    assert opened.status_code == 303
-    assert telegram_browser.cookies.get("__Host-nails_session")
+    first = TestClient(client.app, base_url="https://testserver")
+    second = TestClient(client.app, base_url="https://testserver")
+    first_open = _continue(first, token)
+    second_open = _continue(second, token)
+    assert first_open.status_code == 303
+    assert second_open.status_code == 303
+    assert first.cookies.get("__Host-nails_session")
+    assert second.cookies.get("__Host-nails_session")
 
     with get_session_factory()() as session:
-        sessions = session.scalars(select(WebSession)).all()
-        assert len(sessions) == 2
         challenge = session.scalar(select(WebLoginChallenge))
         assert challenge is not None
-        assert challenge.status == WebChallengeStatus.continued.value
+        assert challenge.status == WebChallengeStatus.consumed.value
+        sessions = session.scalars(select(WebSession)).all()
+        assert len(sessions) == 3
 
-    telegram_browser.close()
+    first.close()
+    second.close()
 
 
 def test_tampered_or_expired_continuation_does_not_authenticate(
@@ -133,6 +148,7 @@ def test_tampered_or_expired_continuation_does_not_authenticate(
     bad_token = f"{token[:-1]}{'0' if token[-1] != '0' else '1'}"
     response = _continue(tampered, bad_token)
     assert response.status_code == 303
+    assert response.headers["location"] == "/web/"
     assert tampered.cookies.get("__Host-nails_session") is None
 
     with get_session_factory()() as session:
@@ -144,6 +160,7 @@ def test_tampered_or_expired_continuation_does_not_authenticate(
     expired = TestClient(client.app, base_url="https://testserver")
     response = _continue(expired, token)
     assert response.status_code == 303
+    assert response.headers["location"] == "/web/"
     assert expired.cookies.get("__Host-nails_session") is None
 
     with get_session_factory()() as session:
@@ -178,6 +195,21 @@ def test_read_and_deny_never_return_continuation_token(
     assert denied.status_code == 200
     assert denied.json()["status"] == "denied"
     assert "continuation_token" not in denied.json()
+
+
+def test_frontend_auth_state_machine_fails_closed_and_exposes_browser_handoff():
+    static_root = Path(__file__).resolve().parents[1] / "app" / "web_static"
+    guard = (static_root / "web-auth-state-machine.js").read_text()
+    index = (static_root / "index.html").read_text()
+
+    assert 'new Set(["pending"])' in guard
+    assert "WEB_AUTH_OPEN_STATUSES.has(current.status)" in guard
+    assert "unknown" not in guard.lower() or "неизвестном состоянии" in guard
+    assert 'textContent = "Открыть в браузере"' in guard
+    assert 'new URLSearchParams(fragment).get("continue")' in guard
+    assert "userAgent" not in guard
+    assert "navigator.userAgent" not in guard
+    assert 'src="/web/web-auth-state-machine.js"' in index
 
 
 def test_public_web_proxy_hides_upstream_security_header_duplicates():
