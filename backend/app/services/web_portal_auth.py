@@ -31,12 +31,81 @@ from app.services.web_auth import (
 from app.web_auth_models import WebChallengeStatus, WebLoginChallenge, WebSession
 
 PORTAL_ROLES = frozenset({UserRole.master, UserRole.admin})
+_CONTINUATION_PURPOSE = "portal-continuation"
 
 
 @dataclass(frozen=True, slots=True)
 class PortalSessionContext:
     identity: RequestIdentity
     web_session: WebSession
+
+
+def _continuation_payload(challenge: WebLoginChallenge) -> str | None:
+    if challenge.user_id is None or challenge.approved_at is None:
+        return None
+    return ":".join(
+        (
+            str(challenge.id),
+            str(challenge.user_id),
+            challenge.approved_at.isoformat(),
+            challenge.expires_at.isoformat(),
+        )
+    )
+
+
+def build_portal_continuation_token(challenge: WebLoginChallenge) -> str | None:
+    payload = _continuation_payload(challenge)
+    if payload is None or challenge.status != WebChallengeStatus.approved.value:
+        return None
+    signature = _keyed_hash(payload, purpose=_CONTINUATION_PURPOSE)
+    return f"{challenge.id}.{signature}"
+
+
+def _create_portal_session(
+    session: Session,
+    request: Request,
+    *,
+    user: User,
+    now,
+    request_id: str,
+    settings,
+) -> str:
+    session_token = secrets.token_urlsafe(32)
+    request_ip_hash = _keyed_hash(
+        _request_ip(request),
+        purpose="ip",
+        settings=settings,
+    )
+    web_session = WebSession(
+        token_hash=_keyed_hash(
+            session_token,
+            purpose="session-token",
+            settings=settings,
+        ),
+        user_id=user.id,
+        target_owner_user_id=None,
+        last_seen_at=now,
+        idle_expires_at=now
+        + timedelta(seconds=settings.web_session_idle_ttl_seconds),
+        absolute_expires_at=now
+        + timedelta(seconds=settings.web_session_absolute_ttl_seconds),
+        rotation_counter=1,
+        created_ip_hash=request_ip_hash,
+        last_ip_hash=request_ip_hash,
+        user_agent_hash=_user_agent_hash(request, settings),
+        request_id=request_id,
+    )
+    session.add(web_session)
+    _audit(
+        session,
+        action="web_session_created",
+        request_id=request_id,
+        object_type="web_session",
+        owner_user_id=user.id,
+        actor_user_id=user.id,
+        object_id=web_session.id,
+    )
+    return session_token
 
 
 def consume_portal_challenge(
@@ -115,47 +184,128 @@ def consume_portal_challenge(
         session.commit()
         return ConsumedChallenge(False, challenge.status)
 
-    session_token = secrets.token_urlsafe(32)
-    request_ip_hash = _keyed_hash(
-        _request_ip(request),
-        purpose="ip",
+    session_token = _create_portal_session(
+        session,
+        request,
+        user=user,
+        now=now,
+        request_id=request_id,
         settings=settings,
     )
-    web_session = WebSession(
-        token_hash=_keyed_hash(
-            session_token,
-            purpose="session-token",
-            settings=settings,
-        ),
-        user_id=user.id,
-        target_owner_user_id=None,
-        last_seen_at=now,
-        idle_expires_at=now
-        + timedelta(seconds=settings.web_session_idle_ttl_seconds),
-        absolute_expires_at=now
-        + timedelta(seconds=settings.web_session_absolute_ttl_seconds),
-        rotation_counter=1,
-        created_ip_hash=request_ip_hash,
-        last_ip_hash=request_ip_hash,
-        user_agent_hash=_user_agent_hash(request, settings),
-        request_id=request_id,
-    )
-    session.add(web_session)
     challenge.status = WebChallengeStatus.consumed.value
     challenge.consumed_at = now
-    _audit(
-        session,
-        action="web_session_created",
-        request_id=request_id,
-        object_type="web_session",
-        owner_user_id=user.id,
-        actor_user_id=user.id,
-        object_id=web_session.id,
-    )
     session.commit()
     return ConsumedChallenge(
         True,
         WebChallengeStatus.consumed.value,
+        session_token,
+    )
+
+
+def consume_portal_continuation(
+    session: Session,
+    request: Request,
+    token: str,
+) -> ConsumedChallenge:
+    validate_web_boundary(request)
+    settings = _settings()
+    now = _now()
+    request_id = _request_id()
+    try:
+        challenge_value, supplied_signature = token.split(".", 1)
+        challenge_id = uuid.UUID(challenge_value)
+    except (ValueError, AttributeError):
+        session.commit()
+        return ConsumedChallenge(False, "invalid")
+    if len(supplied_signature) != 64:
+        session.commit()
+        return ConsumedChallenge(False, "invalid")
+
+    rate_scope = _keyed_hash(
+        f"{challenge_id}:{_request_ip(request)}",
+        purpose="continue-scope",
+        settings=settings,
+    )
+    if not _consume_rate_bucket(
+        session,
+        action="challenge_continue",
+        scope_hash=rate_scope,
+        limit=settings.web_rate_consume_limit,
+        window_seconds=settings.web_rate_consume_window_seconds,
+        now=now,
+    ):
+        _raise_rate_limited(session)
+
+    challenge = session.scalar(
+        select(WebLoginChallenge)
+        .where(WebLoginChallenge.id == challenge_id)
+        .with_for_update()
+    )
+    if challenge is None:
+        session.commit()
+        return ConsumedChallenge(False, "invalid")
+    if now >= challenge.expires_at:
+        if challenge.status == WebChallengeStatus.approved.value:
+            challenge.status = WebChallengeStatus.expired.value
+        session.commit()
+        return ConsumedChallenge(False, WebChallengeStatus.expired.value)
+    if challenge.status not in {
+        WebChallengeStatus.approved.value,
+        WebChallengeStatus.consumed.value,
+    }:
+        session.commit()
+        return ConsumedChallenge(False, challenge.status)
+
+    payload = _continuation_payload(challenge)
+    if payload is None:
+        session.commit()
+        return ConsumedChallenge(False, "invalid")
+    expected_signature = _keyed_hash(
+        payload,
+        purpose=_CONTINUATION_PURPOSE,
+        settings=settings,
+    )
+    if not hmac.compare_digest(supplied_signature, expected_signature):
+        session.commit()
+        return ConsumedChallenge(False, "invalid")
+
+    user = session.scalar(
+        select(User).where(
+            User.id == challenge.user_id,
+            User.is_active.is_(True),
+            User.role.in_(PORTAL_ROLES),
+        )
+    )
+    if user is None:
+        challenge.status = WebChallengeStatus.denied.value
+        session.commit()
+        return ConsumedChallenge(False, challenge.status)
+
+    session_token = _create_portal_session(
+        session,
+        request,
+        user=user,
+        now=now,
+        request_id=request_id,
+        settings=settings,
+    )
+    challenge.status = WebChallengeStatus.continued.value
+    if challenge.consumed_at is None:
+        challenge.consumed_at = now
+    _audit(
+        session,
+        action="web_login_continuation_consumed",
+        request_id=request_id,
+        object_type="web_login_challenge",
+        owner_user_id=user.id,
+        actor_user_id=user.id,
+        object_id=challenge.id,
+        safe_changes={"method": "telegram_link"},
+    )
+    session.commit()
+    return ConsumedChallenge(
+        True,
+        WebChallengeStatus.continued.value,
         session_token,
     )
 

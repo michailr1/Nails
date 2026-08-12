@@ -2,12 +2,11 @@ import os
 
 from .feedback_schema import SAVE_FEEDBACK
 from .feedback_tool import save_feedback
+from .portal import PORTAL_URL
 from .schemas import NAILS_SCHEDULING
 from .tools import nails_scheduling
 from .web_login_schema import WEB_LOGIN
 from .web_login_tool import web_login
-
-PORTAL_URL = "https://de.funti.cc:8446/web/"
 
 _EFFECTIVE_SCHEDULE_CONTRACT = (
     "When the master asks about working hours, why client slots stop early, whether a "

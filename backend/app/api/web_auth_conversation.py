@@ -60,6 +60,7 @@ def get_conversational_challenge(
 @router.post(
     "/api/v1/web-auth/conversation/decision",
     response_model=ConversationalChallengeDecisionResponse,
+    response_model_exclude_none=True,
 )
 def decide_conversational_login(
     body: ConversationalChallengeDecisionRequest,
@@ -82,4 +83,5 @@ def decide_conversational_login(
         status=result.status,
         expires_at=result.expires_at,
         remaining_seconds=result.remaining_seconds,
+        continuation_token=result.continuation_token,
     )

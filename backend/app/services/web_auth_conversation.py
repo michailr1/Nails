@@ -13,6 +13,7 @@ from app.auth import RequestIdentity
 from app.config import get_settings
 from app.models import UserRole
 from app.services.web_auth import _consume_rate_bucket, _raise_rate_limited
+from app.services.web_portal_auth import build_portal_continuation_token
 from app.web_auth_models import WebChallengeStatus, WebLoginChallenge
 
 
@@ -21,6 +22,7 @@ class ConversationalChallenge:
     status: str
     expires_at: datetime | None
     remaining_seconds: int
+    continuation_token: str | None = None
 
 
 def _now() -> datetime:
@@ -58,11 +60,21 @@ def _enforce_rate_limit(
         _raise_rate_limited(session)
 
 
-def _view(challenge: WebLoginChallenge | None, now: datetime) -> ConversationalChallenge:
+def _view(
+    challenge: WebLoginChallenge | None,
+    now: datetime,
+    *,
+    continuation_token: str | None = None,
+) -> ConversationalChallenge:
     if challenge is None:
         return ConversationalChallenge("not_found", None, 0)
     remaining = max(0, int((challenge.expires_at - now).total_seconds()))
-    return ConversationalChallenge(challenge.status, challenge.expires_at, remaining)
+    return ConversationalChallenge(
+        challenge.status,
+        challenge.expires_at,
+        remaining,
+        continuation_token,
+    )
 
 
 def _can_approve_web_login(identity: RequestIdentity) -> bool:
@@ -179,5 +191,12 @@ def decide_conversational_challenge(
     elif challenge.status == WebChallengeStatus.pending.value:
         challenge.status = WebChallengeStatus.denied.value
 
+    continuation_token = None
+    if decision == "approve" and challenge.status == WebChallengeStatus.approved.value:
+        continuation_token = build_portal_continuation_token(challenge)
     session.commit()
-    return _view(challenge, now)
+    return _view(
+        challenge,
+        now,
+        continuation_token=continuation_token,
+    )
