@@ -3,6 +3,7 @@ import os
 from .feedback_schema import SAVE_FEEDBACK
 from .feedback_tool import save_feedback
 from .portal import PORTAL_URL
+from .presentation_guard import capture_web_login_result, enforce_login_url
 from .schemas import NAILS_SCHEDULING
 from .tools import nails_scheduling
 from .web_login_schema import WEB_LOGIN
@@ -58,3 +59,7 @@ def register(ctx):
             schema=WEB_LOGIN,
             handler=web_login,
         )
+        register_hook = getattr(ctx, "register_hook", None)
+        if register_hook is not None:
+            register_hook("post_tool_call", capture_web_login_result)
+            register_hook("transform_llm_output", enforce_login_url)
