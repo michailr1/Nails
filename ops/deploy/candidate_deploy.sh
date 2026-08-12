@@ -75,6 +75,7 @@ edge_network="${project}-edge"
 internal_network="${project}-internal"
 
 compose() {
+  GIT_SHA="$SHA" \
   NAILS_COMPOSE_PROJECT_NAME="$project" \
   NAILS_POSTGRES_VOLUME_NAME="$volume" \
   NAILS_EDGE_NETWORK_NAME="$edge_network" \
@@ -155,6 +156,11 @@ candidate_web_id="$(compose ps -q nails-web)"
 [[ -n "$candidate_db_id" && -n "$candidate_api_id" && -n "$candidate_web_id" ]] || die "candidate isolated runtime is incomplete"
 [[ -z "$(compose ps -q nails-client-bot)" ]] || die "candidate client bot must not be created"
 
+candidate_api_sha="$(compose exec -T nails-api python -c 'import os; print(os.environ.get("NAILS_GIT_SHA", "unknown"))' < /dev/null)"
+candidate_web_sha="$(compose exec -T nails-web sh -c 'printf %s "$NAILS_GIT_SHA"' < /dev/null)"
+[[ "$candidate_api_sha" == "$SHA" ]] || die "candidate API runtime SHA $candidate_api_sha does not match requested $SHA"
+[[ "$candidate_web_sha" == "$SHA" ]] || die "candidate WEB runtime SHA $candidate_web_sha does not match requested $SHA"
+
 verify_production_unchanged
 failed=false
 printf 'CANDIDATE_RUNTIME_OK=true\n'
@@ -169,6 +175,8 @@ printf 'candidate_api_container=%s\n' "$candidate_api_id"
 printf 'candidate_web_container=%s\n' "$candidate_web_id"
 printf 'candidate_api_url=http://127.0.0.1:%s\n' "$api_port"
 printf 'candidate_web_url=http://127.0.0.1:%s\n' "$web_port"
+printf 'candidate_runtime_api_sha=%s\n' "$candidate_api_sha"
+printf 'candidate_runtime_web_sha=%s\n' "$candidate_web_sha"
 printf 'candidate_client_bot_created=false\n'
 printf 'candidate_db_isolated=true\n'
 printf 'candidate_runtime_isolated=true\n'
