@@ -83,9 +83,9 @@ Operational anchors:
 ## Точка продолжения
 
 ```text
-exact_production_sha=resolve_from_fresh_production_preflight
-exact_origin_main_sha=resolve_from_fresh_GitHub_preflight
-exact_running_sha=resolve_from_fresh_production_preflight
+production_exact_ref=resolve_from_fresh_production_preflight
+origin_main_exact_ref=resolve_from_fresh_GitHub_preflight
+running_exact_ref=resolve_from_fresh_production_preflight
 alembic_head=0025
 active_issue=304
 active_branch=fix/304-mobile-master-settings-layout
