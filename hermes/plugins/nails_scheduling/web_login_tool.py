@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
+from .portal import build_login_url
 from .tools import TrustedContextError, _api_key, _trusted_telegram_user_id
 from .transport import _call_backend, _error
 
@@ -16,8 +18,12 @@ _ALLOWED_STATUSES = {
     "expired",
     "locked",
     "consumed",
+    "continued",
     "not_found",
 }
+_CONTINUATION_TOKEN_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[0-9a-f]{64}$"
+)
 
 
 def _json_response(payload: dict[str, Any]) -> str:
@@ -45,10 +51,18 @@ def _sanitize_result(result: Any) -> dict[str, Any]:
         raise ValueError("invalid status")
     if not isinstance(remaining_seconds, int) or remaining_seconds < 0:
         raise ValueError("invalid ttl")
-    return {
+    safe_result: dict[str, Any] = {
         "status": status,
         "remaining_seconds": remaining_seconds,
     }
+    continuation_token = result.get("continuation_token")
+    if continuation_token is not None:
+        if status != "approved" or not isinstance(continuation_token, str):
+            raise ValueError("invalid continuation token")
+        if _CONTINUATION_TOKEN_RE.fullmatch(continuation_token) is None:
+            raise ValueError("invalid continuation token")
+        safe_result["login_url"] = build_login_url(continuation_token)
+    return safe_result
 
 
 def web_login(args: dict[str, Any], **kwargs: Any) -> str:

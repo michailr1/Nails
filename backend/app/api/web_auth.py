@@ -4,7 +4,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.auth import RequestIdentity
@@ -31,6 +31,7 @@ from app.services.web_auth import (
 )
 from app.services.web_portal_auth import (
     consume_portal_challenge,
+    consume_portal_continuation,
     require_portal_session_context,
 )
 from app.timezones import owner_timezone_name
@@ -98,6 +99,21 @@ def consume(
         authenticated=result.authenticated,
         status=result.status,
     )
+
+
+@router.get("/web/api/auth/continue")
+def continue_from_telegram(
+    token: str,
+    request: Request,
+    session: SessionDependency,
+) -> RedirectResponse:
+    result = consume_portal_continuation(session, request, token)
+    response = RedirectResponse(url="/web/", status_code=status.HTTP_303_SEE_OTHER)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    if result.authenticated and result.session_token is not None:
+        set_session_cookie(response, result.session_token)
+    return response
 
 
 @router.post(

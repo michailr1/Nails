@@ -27,3 +27,4 @@ class ConversationalChallengeDecisionResponse(BaseModel):
     status: str
     expires_at: datetime | None
     remaining_seconds: int = Field(ge=0)
+    continuation_token: str | None = None
