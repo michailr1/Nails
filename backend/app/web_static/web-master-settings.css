@@ -61,17 +61,19 @@
   display: grid;
   place-items: center;
   overflow: auto;
-  padding: 18px;
+  padding: 24px;
   background: color-mix(in srgb, var(--text) 38%, transparent);
 }
 
 .master-settings-panel {
   box-sizing: border-box;
-  width: min(620px, calc(100vw - 36px));
+  width: min(620px, 100%);
   max-width: 100%;
-  max-height: min(760px, calc(100dvh - 36px));
+  max-height: min(760px, calc(100dvh - 48px));
   overflow: auto;
   overscroll-behavior: contain;
+  padding: 24px;
+  border-radius: 22px;
 }
 
 .master-settings-heading,
@@ -90,16 +92,22 @@
 
 .master-settings-heading {
   align-items: flex-start;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 
-.master-settings-heading > div {
+.master-settings-heading > div,
+.master-setting-row > div {
   min-width: 0;
 }
 
 .master-settings-heading h2,
-.master-settings-heading p {
+.master-settings-heading p,
+.master-setting-row p {
   overflow-wrap: anywhere;
+}
+
+.master-settings-heading h2 {
+  margin-bottom: 0;
 }
 
 .master-settings-close {
@@ -121,8 +129,8 @@
 .client-public-profile-form label {
   display: grid;
   min-width: 0;
-  gap: 6px;
-  margin-top: 14px;
+  gap: 7px;
+  margin-top: 16px;
 }
 
 .client-public-profile-form input {
@@ -137,13 +145,9 @@
   border-top: 1px solid var(--border);
 }
 
-.master-setting-row > div {
-  min-width: 0;
-}
-
 .master-setting-row p {
-  margin: 5px 0 0;
-  overflow-wrap: anywhere;
+  margin: 6px 0 0;
+  line-height: 1.45;
 }
 
 .master-setting-value {
@@ -163,6 +167,10 @@
   display: grid;
   min-width: 0;
   gap: 5px;
+  padding: 9px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-muted);
 }
 
 .master-work-hours-fields label span {
@@ -174,7 +182,13 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
 }
 
 .master-settings-actions {
@@ -189,8 +203,40 @@
   max-width: 100%;
 }
 
+.master-profile-panel > .muted {
+  margin: 0 0 18px;
+  line-height: 1.45;
+}
+
 .master-profile-panel .client-public-profile-summary {
-  margin: 16px 0;
+  display: grid;
+  gap: 0;
+  margin: 0 0 18px;
+  border-top: 1px solid var(--border);
+}
+
+.master-profile-panel .client-public-profile-summary > div {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.master-profile-panel .client-public-profile-summary dt,
+.master-profile-panel .client-public-profile-summary dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.master-profile-panel .client-public-profile-summary dt {
+  color: var(--muted);
+}
+
+.master-profile-panel [data-edit-public-profile] {
+  width: auto;
+  min-height: 44px;
 }
 
 @media (max-width: 760px) {
@@ -202,33 +248,48 @@
   .master-settings-backdrop {
     align-items: end;
     place-items: end center;
-    padding: 10px;
+    padding: 18px;
   }
 
   .master-settings-panel {
-    width: calc(100vw - 20px);
-    max-height: calc(100dvh - 20px);
+    width: 100%;
+    max-height: calc(100dvh - 36px);
     margin: 0;
+    padding: 20px;
+    border-radius: 22px;
   }
 
   .master-settings-heading {
-    gap: 10px;
+    gap: 12px;
+  }
+
+  .master-settings-heading .eyebrow {
+    margin-bottom: 6px;
   }
 
   .master-setting-row {
     align-items: stretch;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
+    padding: 17px 0;
   }
 
   .master-setting-value {
     align-self: flex-start;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--surface-muted);
   }
 
   .master-work-hours-fields {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     width: 100%;
+    gap: 10px;
+  }
+
+  .master-work-hours-fields label {
+    width: auto;
   }
 
   .master-settings-actions {
@@ -241,20 +302,34 @@
     width: 100%;
     min-width: 0;
   }
+
+  .master-profile-panel .client-public-profile-summary > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+
+  .master-profile-panel [data-edit-public-profile] {
+    width: 100%;
+  }
 }
 
 @media (max-width: 390px) {
   .master-settings-backdrop {
-    padding: 6px;
+    padding: 16px;
   }
 
   .master-settings-panel {
-    width: calc(100vw - 12px);
-    max-height: calc(100dvh - 12px);
+    max-height: calc(100dvh - 32px);
+    padding: 18px;
   }
 
   .master-account-menu {
-    width: min(240px, calc(100vw - 20px));
+    width: min(240px, calc(100vw - 32px));
     min-width: 0;
+  }
+
+  .master-work-hours-fields,
+  .master-settings-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
