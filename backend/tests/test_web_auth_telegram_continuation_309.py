@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from conftest import WEB_ORIGIN_HEADERS
 from fastapi.testclient import TestClient
@@ -56,7 +57,7 @@ def test_approve_returns_one_time_continuation_that_logs_in_new_browser(
     assert opened.status_code == 303
     assert opened.headers["location"] == "/web/"
     assert opened.headers["cache-control"] == "no-store"
-    assert "referrer-policy" not in opened.headers
+    assert opened.headers["referrer-policy"] == "no-referrer"
     assert telegram_browser.cookies.get("__Host-nails_session")
     state = telegram_browser.get("/web/api/auth/session", headers=WEB_ORIGIN_HEADERS)
     assert state.status_code == 200
@@ -177,3 +178,16 @@ def test_read_and_deny_never_return_continuation_token(
     assert denied.status_code == 200
     assert denied.json()["status"] == "denied"
     assert "continuation_token" not in denied.json()
+
+
+def test_public_web_proxy_hides_upstream_security_header_duplicates():
+    nginx = (Path(__file__).resolve().parents[2] / "web" / "nginx.conf").read_text()
+    for header in (
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Referrer-Policy",
+        "Permissions-Policy",
+        "Content-Security-Policy",
+    ):
+        assert f"proxy_hide_header {header};" in nginx
+        assert f"add_header {header} " in nginx
