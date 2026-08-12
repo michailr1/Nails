@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -108,7 +109,10 @@ def continue_from_telegram(
     session: SessionDependency,
 ) -> RedirectResponse:
     result = consume_portal_continuation(session, request, token)
-    response = RedirectResponse(url="/web/", status_code=status.HTTP_303_SEE_OTHER)
+    redirect_url = "/web/"
+    if result.authenticated:
+        redirect_url = f"/web/#continue={quote(token, safe='')}"
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
     response.headers["Cache-Control"] = "no-store"
     if result.authenticated and result.session_token is not None:
         set_session_cookie(response, result.session_token)
