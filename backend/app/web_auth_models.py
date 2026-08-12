@@ -24,7 +24,6 @@ class WebChallengeStatus(StrEnum):
     pending = "pending"
     approved = "approved"
     consumed = "consumed"
-    continued = "continued"
     expired = "expired"
     locked = "locked"
     denied = "denied"
