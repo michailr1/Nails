@@ -56,7 +56,7 @@ def test_approve_returns_one_time_continuation_that_logs_in_new_browser(
     assert opened.status_code == 303
     assert opened.headers["location"] == "/web/"
     assert opened.headers["cache-control"] == "no-store"
-    assert opened.headers["referrer-policy"] == "no-referrer"
+    assert "referrer-policy" not in opened.headers
     assert telegram_browser.cookies.get("__Host-nails_session")
     state = telegram_browser.get("/web/api/auth/session", headers=WEB_ORIGIN_HEADERS)
     assert state.status_code == 200
