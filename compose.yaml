@@ -24,6 +24,8 @@ services:
   nails-api:
     build:
       context: ./backend
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
@@ -86,6 +88,8 @@ services:
   nails-client-bot:
     build:
       context: ./backend
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     environment:
       CLIENT_BOT_ENABLED: ${CLIENT_BOT_ENABLED:-false}
@@ -116,6 +120,8 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     ports:
       - "${NAILS_WEB_BIND:-127.0.0.1}:${NAILS_WEB_PORT:-8220}:8080"
