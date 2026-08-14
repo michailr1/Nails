@@ -12,6 +12,9 @@ function masterAccountHostInTitleRow() {
     row.append(title);
   }
 
+  const side = topbar.querySelector(":scope > .topbar-side");
+  if (side) row.append(side);
+
   let host = row.querySelector(".master-account-host");
   if (!host) {
     host = topbar.querySelector(".master-account-host");
@@ -21,6 +24,8 @@ function masterAccountHostInTitleRow() {
     host = document.createElement("div");
     host.className = "master-account-host";
     row.append(host);
+  } else if (host !== row.lastElementChild) {
+    row.append(host);
   }
   return host;
 }
@@ -29,7 +34,7 @@ masterAccountHost = masterAccountHostInTitleRow;
 
 const installMasterSettingsButtonBeforePlacement = installMasterSettingsButton;
 installMasterSettingsButton = function installMasterSettingsButtonInTitleRow() {
-  const existingHost = document.querySelector(".topbar > .master-account-host");
-  if (existingHost) masterAccountHostInTitleRow();
+  masterAccountHostInTitleRow();
   installMasterSettingsButtonBeforePlacement();
+  masterAccountHostInTitleRow();
 };
