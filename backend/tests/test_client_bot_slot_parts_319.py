@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from app.client_bot_booking_flow import draft_day_part_keyboard
@@ -20,8 +20,8 @@ def _starts(start: datetime, end: datetime, step_minutes: int = 15) -> list[str]
 
 def test_319_full_day_keeps_slots_after_1545_and_matches_engine_count():
     day = date(2026, 8, 20)
-    start = datetime(2026, 8, 20, 10, 0, tzinfo=timezone.utc)
-    end = datetime(2026, 8, 20, 23, 0, tzinfo=timezone.utc)
+    start = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    end = datetime(2026, 8, 20, 23, 0, tzinfo=UTC)
     starts = _starts(start, end)
 
     parts = split_slot_day_parts(
@@ -44,8 +44,8 @@ def test_319_full_day_keeps_slots_after_1545_and_matches_engine_count():
 
 def test_319_day_part_keyboard_exposes_all_actual_ranges():
     day = date(2026, 8, 20)
-    start = datetime(2026, 8, 20, 10, 0, tzinfo=timezone.utc)
-    end = datetime(2026, 8, 20, 23, 0, tzinfo=timezone.utc)
+    start = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    end = datetime(2026, 8, 20, 23, 0, tzinfo=UTC)
     starts = _starts(start, end)
     keyboard = draft_day_part_keyboard(
         DRAFT_ID,
@@ -73,11 +73,11 @@ def test_319_day_part_keyboard_exposes_all_actual_ranges():
 
 def test_319_boundaries_follow_actual_window_and_hide_empty_parts():
     day = date(2026, 8, 20)
-    start = datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc)
-    end = datetime(2026, 8, 20, 15, 0, tzinfo=timezone.utc)
+    start = datetime(2026, 8, 20, 12, 0, tzinfo=UTC)
+    end = datetime(2026, 8, 20, 15, 0, tzinfo=UTC)
     starts = [
-        datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc).isoformat(),
-        datetime(2026, 8, 20, 14, 45, tzinfo=timezone.utc).isoformat(),
+        datetime(2026, 8, 20, 12, 0, tzinfo=UTC).isoformat(),
+        datetime(2026, 8, 20, 14, 45, tzinfo=UTC).isoformat(),
     ]
 
     parts = split_slot_day_parts(
