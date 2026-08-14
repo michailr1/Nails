@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -34,7 +34,8 @@ from app.services.client_repeat_last import (
     create_repeat_last_draft,
     repeat_last_preview,
 )
-from app.services.scheduling_common import SchedulingDomainError
+from app.services.scheduling_common import SchedulingDomainError, suggestion_windows_for_day
+from app.timezones import owner_timezone
 
 router = APIRouter(
     prefix="/api/v1/client/booking-drafts",
@@ -82,6 +83,21 @@ def _draft_context(
         session,
         identity,
         binding_id=draft.binding_id,
+    )
+
+
+def _working_window(
+    session: Session,
+    owner_user_id: uuid.UUID,
+    day: date,
+) -> tuple[datetime | None, datetime | None]:
+    windows, is_day_off = suggestion_windows_for_day(session, owner_user_id, day)
+    if is_day_off or not windows:
+        return None, None
+    timezone = owner_timezone(session, owner_user_id)
+    return (
+        datetime.combine(day, min(start for start, _ in windows), tzinfo=timezone),
+        datetime.combine(day, max(end for _, end in windows), tzinfo=timezone),
     )
 
 
@@ -186,7 +202,15 @@ def get_slots(
 ) -> ClientBookingDraftSlotsResponse:
     try:
         context = _draft_context(session, identity, draft_id)
-        return draft_slots(session, context, draft_id, day)
+        result = draft_slots(session, context, draft_id, day)
+        window_start, window_end = _working_window(
+            session,
+            context.owner_user_id,
+            day,
+        )
+        return result.model_copy(
+            update={"window_start": window_start, "window_end": window_end}
+        )
     except SchedulingDomainError as exc:
         raise _translate(exc) from exc
 
