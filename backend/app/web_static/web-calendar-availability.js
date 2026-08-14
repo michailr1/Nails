@@ -68,7 +68,6 @@ function calendarDayExceptionControls(iso) {
   </section>`;
 }
 
-const dayPanelBeforeAvailability = dayPanel;
 dayPanel = function dayPanelWithAvailability(data, iso) {
   const bookings = bookingsForDate(data, iso);
   const title = dateLabel(iso, { weekday: "long", day: "numeric", month: "long" });
@@ -78,7 +77,6 @@ dayPanel = function dayPanelWithAvailability(data, iso) {
   </div>`;
 };
 
-const groupedCalendarBeforeAvailability = groupedCalendar;
 groupedCalendar = function groupedCalendarWithAvailability(data, range) {
   const days = [];
   for (let iso = range.dateFrom; iso <= range.dateTo; iso = addDays(iso, 1)) days.push(iso);
@@ -97,7 +95,6 @@ groupedCalendar = function groupedCalendarWithAvailability(data, range) {
   }).join("")}</div>`;
 };
 
-const monthPanelBeforeAvailability = monthPanel;
 monthPanel = function monthPanelWithAvailability(data, range) {
   const first = parseIsoDate(range.dateFrom);
   const leading = (first.getUTCDay() + 6) % 7;
@@ -235,8 +232,8 @@ async function defaultCalendarHours(iso) {
   const preferences = await api("/web/api/schedule/default-work-hours");
   const usual = (preferences.default_work_intervals || [])[0] || {};
   return {
-    start: calendarAvailabilityTime(usual.start_time || "10:00"),
-    end: calendarAvailabilityTime(usual.end_time || "23:00"),
+    start: calendarAvailabilityTime(usual.start_time),
+    end: calendarAvailabilityTime(usual.end_time),
   };
 }
 
