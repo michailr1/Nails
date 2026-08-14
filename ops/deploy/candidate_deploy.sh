@@ -13,7 +13,7 @@ die() {
 SHA="$1"
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "exact SHA must contain 40 lowercase hexadecimal characters"
 ACTION="${NAILS_CANDIDATE_ACTION:-up}"
-[[ "$ACTION" == up || "$ACTION" == status || "$ACTION" == down ]] || die "NAILS_CANDIDATE_ACTION must be up, status, or down"
+[[ "$ACTION" == up || "$ACTION" == status || "$ACTION" == bootstrap || "$ACTION" == down ]] || die "NAILS_CANDIDATE_ACTION must be up, status, bootstrap, or down"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd -P)"
@@ -73,6 +73,8 @@ project="nails-candidate-${suffix}"
 volume="${project}-postgres"
 edge_network="${project}-edge"
 internal_network="${project}-internal"
+[[ "$project" != nails ]] || die "candidate project must not be the production project"
+[[ "$volume" != nails-postgres-data ]] || die "candidate volume must not be the production volume"
 
 compose() {
   GIT_SHA="$SHA" \
@@ -112,6 +114,63 @@ if [[ "$ACTION" == status ]]; then
   printf 'candidate_project=%s\n' "$project"
   printf 'candidate_api_url=http://127.0.0.1:%s\n' "$api_port"
   printf 'candidate_web_url=http://127.0.0.1:%s\n' "$web_port"
+  printf 'production_runtime_unchanged=true\n'
+  printf 'production_db_unchanged=true\n'
+  exit 0
+fi
+
+if [[ "$ACTION" == bootstrap ]]; then
+  candidate_db_id="$(compose ps -q nails-db)"
+  candidate_api_id="$(compose ps -q nails-api)"
+  candidate_web_id="$(compose ps -q nails-web)"
+  [[ -n "$candidate_db_id" && -n "$candidate_api_id" && -n "$candidate_web_id" ]] || die "candidate runtime must be running before bootstrap"
+  [[ -z "$(compose ps -q nails-client-bot)" ]] || die "candidate client bot must not be created"
+  candidate_api_sha="$(compose exec -T nails-api python -c 'import os; print(os.environ.get("NAILS_GIT_SHA", "unknown"))' < /dev/null)"
+  [[ "$candidate_api_sha" == "$SHA" ]] || die "candidate API runtime SHA $candidate_api_sha does not match requested $SHA"
+
+  compose exec -T nails-api python - <<'PY'
+from sqlalchemy import select
+
+from app.db import get_session_factory
+from app.models import User, UserRole
+
+SYNTHETIC_TELEGRAM_USER_ID = 1900000001
+
+with get_session_factory()() as session:
+    users = list(session.scalars(select(User).order_by(User.telegram_user_id)))
+    target = next(
+        (user for user in users if user.telegram_user_id == SYNTHETIC_TELEGRAM_USER_ID),
+        None,
+    )
+    if target is None:
+        if users:
+            raise SystemExit("candidate trusted identity bootstrap requires an empty users table")
+        target = User(
+            telegram_user_id=SYNTHETIC_TELEGRAM_USER_ID,
+            role=UserRole.master,
+            is_active=True,
+        )
+        session.add(target)
+        session.commit()
+
+    users = list(session.scalars(select(User).order_by(User.telegram_user_id)))
+    if len(users) != 1 or users[0].telegram_user_id != SYNTHETIC_TELEGRAM_USER_ID:
+        raise SystemExit("candidate trusted identity bootstrap requires exactly one synthetic user")
+    if users[0].role != UserRole.master or not users[0].is_active:
+        raise SystemExit("candidate synthetic trusted identity must be an active master")
+
+print("candidate_trusted_identity_bootstrap=true")
+print("candidate_trusted_identity_count=1")
+print("candidate_trusted_identity_active=true")
+print("candidate_trusted_identity_role=master")
+PY
+  verify_production_unchanged
+  printf 'candidate_action=bootstrap\n'
+  printf 'candidate_sha=%s\n' "$SHA"
+  printf 'candidate_trusted_identity_bootstrap_idempotent=true\n'
+  printf 'candidate_client_bot_created=false\n'
+  printf 'candidate_db_isolated=true\n'
+  printf 'candidate_runtime_isolated=true\n'
   printf 'production_runtime_unchanged=true\n'
   printf 'production_db_unchanged=true\n'
   exit 0
