@@ -1,0 +1,280 @@
+.calendar-day-heading > div,
+.calendar-week-heading > div {
+  min-width: 0;
+}
+
+.calendar-day-off,
+.calendar-day-hours {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 24px;
+  align-items: center;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 680;
+  line-height: 1.2;
+}
+
+.calendar-day-off {
+  border-color: color-mix(in srgb, var(--warning) 46%, var(--border));
+  color: var(--warning);
+}
+
+.calendar-day-exception {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-muted);
+}
+
+.calendar-day-exception-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.calendar-day-exception-actions,
+.calendar-availability-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calendar-open-day {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.calendar-open-day:hover > span:first-child,
+.calendar-open-day:focus-visible > span:first-child {
+  color: var(--primary-dark);
+}
+
+.month-cell.is-day-off {
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+}
+
+.month-cell .calendar-day-off {
+  margin-top: 5px;
+  white-space: nowrap;
+}
+
+.calendar-availability-backdrop {
+  position: fixed;
+  z-index: 82;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 24px;
+  background: color-mix(in srgb, var(--text) 38%, transparent);
+}
+
+.calendar-availability-dialog {
+  box-sizing: border-box;
+  width: min(620px, 100%);
+  max-width: 100%;
+  max-height: min(760px, calc(100dvh - 48px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+  border-radius: 22px;
+}
+
+.calendar-availability-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.calendar-availability-heading > div {
+  min-width: 0;
+}
+
+.calendar-availability-heading h2 {
+  margin: 0;
+}
+
+.calendar-availability-heading .eyebrow {
+  margin-bottom: 6px;
+}
+
+.calendar-availability-close {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.calendar-preview-result {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-muted);
+}
+
+.calendar-preview-result > p {
+  margin: 0;
+}
+
+.calendar-preview-result.blocked {
+  border-color: color-mix(in srgb, var(--warning) 48%, var(--border));
+}
+
+.calendar-conflicts {
+  display: grid;
+  gap: 8px;
+}
+
+.calendar-conflict {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.calendar-conflict > strong,
+.calendar-conflict > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.calendar-conflict > span:last-child {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.calendar-availability-actions {
+  margin-top: 16px;
+}
+
+.calendar-hours-form {
+  display: grid;
+  gap: 16px;
+}
+
+.calendar-hours-form > p {
+  margin: 0;
+}
+
+.calendar-hours-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.calendar-hours-fields label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+
+.calendar-hours-fields label > span {
+  color: var(--muted);
+  font-size: .76rem;
+}
+
+.calendar-hours-fields input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+}
+
+@media (max-width: 760px) {
+  .calendar-day-exception {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .calendar-day-exception-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .calendar-day-exception-actions > button,
+  .calendar-availability-actions > button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .calendar-availability-backdrop {
+    align-items: end;
+    place-items: end center;
+    padding: 16px;
+  }
+
+  .calendar-availability-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 32px);
+    padding: 20px;
+  }
+
+  .calendar-availability-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calendar-conflict {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calendar-conflict > span:last-child {
+    grid-column: 1;
+    grid-row: auto;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 390px) {
+  .calendar-hours-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
