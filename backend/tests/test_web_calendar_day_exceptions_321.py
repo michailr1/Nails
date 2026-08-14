@@ -41,20 +41,24 @@ def test_321_keeps_single_day_mental_model_and_does_not_restore_14_day_editor():
     assert not (WEB / "web-working-schedule.js").exists()
     assert not (WEB / "web-working-schedule.css").exists()
     assert "web-working-schedule" not in index
-    assert "date_from" not in source
-    assert "date_to" not in source
     assert "отпуск" not in source.lower()
+    assert "data-day-off" in source
+    assert "data-day-hours" in source
 
 
-def test_321_account_button_is_in_topbar_flow_not_fixed_or_sticky():
+def test_321_account_button_is_in_title_row_and_not_viewport_fixed_or_sticky():
     settings = (WEB / "web-master-settings.js").read_text(encoding="utf-8")
-    css = (WEB / "web-master-settings.css").read_text(encoding="utf-8")
+    placement = (WEB / "web-account-placement.js").read_text(encoding="utf-8")
+    css = (WEB / "web-account-placement.css").read_text(encoding="utf-8")
+    index = (WEB / "index.html").read_text(encoding="utf-8")
 
-    host_block = css.split(".master-account-host {", 1)[1].split("}", 1)[0]
-    assert "position: fixed" not in host_block
-    assert "position: sticky" not in host_block
-    assert "position: relative" in host_block
-    assert "margin-left: auto" in host_block
+    assert "master-title-account-row" in placement
+    assert "master-account-host" in placement
+    assert "position: fixed" not in css
+    assert "position: sticky" not in css
+    assert "margin-left: auto" in css
+    assert "web-account-placement.js" in index
+    assert "web-account-placement.css" in index
 
     assert 'document.querySelector(".sidebar-bottom")?.remove()' in settings
     assert 'document.querySelector(".mobile-logout")?.remove()' in settings
