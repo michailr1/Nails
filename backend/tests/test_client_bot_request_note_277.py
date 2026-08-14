@@ -38,6 +38,9 @@ class FakeRuntimeApi(RuntimeDraftNailsClientApi):
         assert day == date(2026, 8, 30)
         return {
             "starts_at": [] if self.stale else [STARTS_AT],
+            "window_start": "2026-08-30T10:00:00+03:00",
+            "window_end": "2026-08-30T23:00:00+03:00",
+            "step_minutes": 15,
             "draft": self._summary(starts_at=None),
         }
 
