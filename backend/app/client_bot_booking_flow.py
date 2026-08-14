@@ -13,6 +13,7 @@ from app.client_bot import (
     master_menu_keyboard,
     resolve_current_slot,
 )
+from app.client_bot_slot_parts import split_slot_day_parts
 
 
 class DraftNailsClientApi(NailsClientApi):
@@ -167,6 +168,44 @@ def draft_addon_keyboard(draft: dict[str, Any]) -> dict[str, Any]:
     return {"inline_keyboard": rows}
 
 
+def _draft_slot_parts(
+    slots: dict[str, Any],
+    *,
+    selected_day: date,
+):
+    window_start = slots.get("window_start")
+    window_end = slots.get("window_end")
+    if window_start is None or window_end is None:
+        raise ValueError("draft slots response is missing working window")
+    return split_slot_day_parts(
+        slots.get("starts_at") or [],
+        selected_day=selected_day,
+        window_start=window_start,
+        window_end=window_end,
+        step_minutes=int(slots.get("step_minutes") or 0),
+    )
+
+
+def draft_day_part_keyboard(
+    draft_id: str,
+    slots: dict[str, Any],
+    *,
+    selected_day: date,
+) -> dict[str, Any]:
+    uuid.UUID(draft_id)
+    rows = [
+        [
+            {
+                "text": part.title,
+                "callback_data": f"p:{draft_id}:{selected_day:%Y%m%d}:{part.key}",
+            }
+        ]
+        for part in _draft_slot_parts(slots, selected_day=selected_day)
+    ]
+    rows.append([{"text": "← К датам", "callback_data": f"dates:{draft_id}"}])
+    return {"inline_keyboard": rows}
+
+
 def draft_slot_picker_keyboard(
     draft_id: str,
     starts_at: list[Any],
@@ -175,7 +214,7 @@ def draft_slot_picker_keyboard(
 ) -> dict[str, Any]:
     uuid.UUID(draft_id)
     rows: list[list[dict[str, str]]] = []
-    for value in starts_at[:24]:
+    for value in starts_at:
         parsed = _parse_slot(value)
         if parsed.date() != selected_day:
             continue
@@ -183,7 +222,14 @@ def draft_slot_picker_keyboard(
         if not rows or len(rows[-1]) >= 4:
             rows.append([])
         rows[-1].append({"text": parsed.strftime("%H:%M"), "callback_data": callback})
-    rows.append([{"text": "← К датам", "callback_data": f"dates:{draft_id}"}])
+    rows.append(
+        [
+            {
+                "text": "← К частям дня",
+                "callback_data": f"d:{draft_id}:{selected_day:%Y%m%d}",
+            }
+        ]
+    )
     return {"inline_keyboard": rows}
 
 
@@ -307,6 +353,7 @@ class DraftPlatformBot(PlatformBot):
             "addons",
             "dates",
             "d",
+            "p",
             "t",
             "send",
         }:
@@ -381,10 +428,10 @@ class DraftPlatformBot(PlatformBot):
             if starts:
                 self._send(
                     chat_id,
-                    f"Свободное время на {selected_day:%d.%m}:",
-                    draft_slot_picker_keyboard(
+                    f"Выберите время дня на {selected_day:%d.%m}:",
+                    draft_day_part_keyboard(
                         draft_id,
-                        starts,
+                        slots,
                         selected_day=selected_day,
                     ),
                 )
@@ -399,6 +446,41 @@ class DraftPlatformBot(PlatformBot):
                     ),
                 )
             return
+        if action == "p":
+            _, compact_day, part_key = rest.split(":", 2)
+            selected_day = date.fromisoformat(
+                f"{compact_day[0:4]}-{compact_day[4:6]}-{compact_day[6:8]}"
+            )
+            slots = api.draft_slots(telegram_user_id, draft_id, selected_day)
+            part = next(
+                (
+                    item
+                    for item in _draft_slot_parts(slots, selected_day=selected_day)
+                    if item.key == part_key
+                ),
+                None,
+            )
+            if part is None:
+                self._send(
+                    chat_id,
+                    "В этой части дня свободного времени больше нет. Выберите другую.",
+                    draft_day_part_keyboard(
+                        draft_id,
+                        slots,
+                        selected_day=selected_day,
+                    ),
+                )
+                return
+            self._send(
+                chat_id,
+                f"{part.title} — выберите время:",
+                draft_slot_picker_keyboard(
+                    draft_id,
+                    list(part.starts_at),
+                    selected_day=selected_day,
+                ),
+            )
+            return
         if action == "t":
             _, compact = rest.split(":", 1)
             selected_day = date.fromisoformat(
@@ -409,10 +491,10 @@ class DraftPlatformBot(PlatformBot):
             if starts_at is None:
                 self._send(
                     chat_id,
-                    "Это время уже заняли. Выберите другое.",
-                    draft_slot_picker_keyboard(
+                    "Это время уже заняли. Выберите время дня снова.",
+                    draft_day_part_keyboard(
                         draft_id,
-                        slots.get("starts_at") or [],
+                        slots,
                         selected_day=selected_day,
                     ),
                 )
