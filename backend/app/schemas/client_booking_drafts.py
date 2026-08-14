@@ -137,6 +137,8 @@ class ClientBookingDraftSlotsResponse(BaseModel):
     availability_known: bool
     is_working: bool
     step_minutes: int
+    window_start: datetime | None = None
+    window_end: datetime | None = None
     starts_at: list[datetime]
 
 
