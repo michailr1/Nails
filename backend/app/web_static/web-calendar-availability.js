@@ -171,10 +171,13 @@ async function previewCalendarException(body, payload, successText) {
     const day = (preview.days || [])[0];
     if (!day) throw new Error("preview_missing_day");
     const conflicts = day.conflicts || [];
+    const conflictLead = day.can_apply
+      ? "Существующие записи сохранятся:"
+      : "Мешает существующая запись:";
     body.innerHTML = `
       <div class="calendar-preview-result ${day.can_apply ? "can-apply" : "blocked"}">
         <strong>${day.can_apply ? escapeHtml(successText) : "Сохранить выходной нельзя"}</strong>
-        ${conflicts.length ? `<p class="muted">Мешает существующая запись:</p><div class="calendar-conflicts">${conflicts.map((item) => `
+        ${conflicts.length ? `<p class="muted">${conflictLead}</p><div class="calendar-conflicts">${conflicts.map((item) => `
           <div class="calendar-conflict">
             <strong>${escapeHtml(item.client_public_name)}</strong>
             <span>${escapeHtml(item.service_name)}</span>
