@@ -259,7 +259,7 @@ def slot_picker_keyboard(
 ) -> dict[str, Any]:
     uuid.UUID(binding_id)
     rows: list[list[dict[str, str]]] = []
-    for value in starts_at[:24]:
+    for value in starts_at:
         parsed = _parse_slot(value)
         if parsed.date() != selected_day:
             continue
