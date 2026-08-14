@@ -1,14 +1,19 @@
 .master-title-account-row {
   display: flex;
   min-width: 0;
+  width: 100%;
   flex: 1 1 auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 16px;
 }
 
 .master-title-account-row > :first-child {
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.master-title-account-row > .topbar-side {
+  flex: 0 1 auto;
 }
 
 .master-account-host {
@@ -24,11 +29,23 @@
 @media (max-width: 760px) {
   .main > .topbar > .master-title-account-row {
     width: 100%;
+    flex-wrap: wrap;
     padding-right: 0;
   }
 
   .master-title-account-row > :first-child {
+    order: 1;
     padding-right: 0;
+  }
+
+  .master-title-account-row > .master-account-host {
+    order: 2;
+  }
+
+  .master-title-account-row > .topbar-side {
+    order: 3;
+    width: 100%;
+    flex-basis: 100%;
   }
 
   .master-account-host {
