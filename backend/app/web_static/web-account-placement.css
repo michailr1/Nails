@@ -1,0 +1,38 @@
+.master-title-account-row {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.master-title-account-row > :first-child {
+  min-width: 0;
+}
+
+.master-account-host {
+  position: relative;
+  z-index: 35;
+  top: auto;
+  right: auto;
+  flex: 0 0 auto;
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+@media (max-width: 760px) {
+  .main > .topbar > .master-title-account-row {
+    width: 100%;
+    padding-right: 0;
+  }
+
+  .master-title-account-row > :first-child {
+    padding-right: 0;
+  }
+
+  .master-account-host {
+    top: auto;
+    right: auto;
+  }
+}
