@@ -28,28 +28,31 @@
 
 @media (max-width: 760px) {
   .main > .topbar > .master-title-account-row {
+    position: relative;
+    display: block;
     width: 100%;
-    flex-wrap: wrap;
-    padding-right: 0;
+    padding-right: 64px;
   }
 
   .master-title-account-row > :first-child {
-    order: 1;
+    min-width: 0;
     padding-right: 0;
   }
 
   .master-title-account-row > .master-account-host {
-    order: 2;
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin: 0;
   }
 
   .master-title-account-row > .topbar-side {
-    order: 3;
     width: 100%;
-    flex-basis: 100%;
+    margin-top: 16px;
   }
 
   .master-account-host {
-    top: auto;
-    right: auto;
+    top: 0;
+    right: 0;
   }
 }
