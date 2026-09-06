@@ -54,7 +54,7 @@
 .client-invite-block a { color: inherit; text-decoration: underline; text-underline-offset: .2rem; }
 .client-invite-actions { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
 
-.client-request-summary-row { display: grid; min-width: 0; gap: .7rem; margin: .8rem 0 1rem; padding: .8rem 1rem; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); border-radius: 1rem; background: color-mix(in srgb, var(--surface) 92%, currentColor 8%); overflow: hidden; }
+.client-request-summary-row { display: grid; min-width: 0; gap: .7rem; margin: .8rem 0 1rem; padding: .8rem 1rem; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); border-radius: 1rem; background: color-mix(in srgb, var(--surface) 92%, currentColor 8%); }
 .client-request-summary-button { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .client-request-summary-button span { min-width: 0; overflow-wrap: anywhere; }
 .client-request-summary-button span:first-child { font-weight: 700; }
@@ -64,7 +64,7 @@
 .client-request-day-marker { display: inline-flex; align-items: center; width: fit-content; margin-left: auto; padding: .2rem .5rem; border-radius: 999px; background: color-mix(in srgb, currentColor 8%, transparent); font-size: .72rem; font-weight: 650; line-height: 1.2; opacity: .78; }
 .month-cell .client-request-day-marker { margin: .2rem 0 0; font-size: .66rem; white-space: normal; text-align: left; }
 .client-card-request-note { display: block; width: 100%; margin-top: .75rem; padding: .65rem .75rem; border: 1px solid color-mix(in srgb, currentColor 16%, transparent); border-radius: .8rem; background: transparent; color: inherit; font: inherit; font-size: .84rem; text-align: left; cursor: pointer; }
-.client-request-card { display: grid; width: 100%; min-width: 0; max-width: 100%; gap: 1rem; overflow: hidden; }
+.client-request-card { display: grid; width: 100%; min-width: 0; max-width: 100%; gap: 1rem; padding: 1rem; overflow: hidden; }
 .client-request-card > * { min-width: 0; }
 .client-request-head, .client-request-dialog-head { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .client-request-head > div, .client-request-dialog-head > div { min-width: 0; }
@@ -117,6 +117,7 @@
   .client-request-head time { white-space: normal; }
   .client-request-actions, .client-request-dialog-actions { display: grid; }
   .client-request-actions button, .client-request-dialog-actions button { width: 100%; }
+  .client-request-card { padding: 1rem; }
   .client-request-dialog { width: calc(100vw - 1rem); max-height: min(calc(100vh - 1rem), calc(100dvh - 1rem)); }
   .client-request-dialog-card { max-height: min(calc(100vh - 1rem), calc(100dvh - 1rem)); padding: 1rem; padding-bottom: calc(1rem + env(safe-area-inset-bottom) + 12px); border-radius: 1rem; }
   .client-request-dialog-actions { padding-bottom: max(4px, env(safe-area-inset-bottom)); }
