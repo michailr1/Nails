@@ -93,6 +93,7 @@ async function renderMasterPublicProfile() {
           }),
         });
         masterSettingsCloseDialog();
+        if (state.view === "clients") await renderClients();
       } catch (error) {
         if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
         errorLine.textContent = "Не удалось сохранить. Проверьте имя и попробуйте ещё раз.";
