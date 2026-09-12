@@ -64,11 +64,23 @@ function renderPersonalLink(actions, url) {
   }
 }
 
+async function openRequiredPublicProfile() {
+  if (typeof renderMasterPublicProfile === "function") {
+    await renderMasterPublicProfile();
+    return true;
+  }
+  return false;
+}
+
 async function togglePersonalLink(button) {
   const actions = button.closest(".client-reachability-actions");
   if (!actions) return;
   if (actions.querySelector(PERSONAL_LINK_BLOCK_SELECTOR)) {
     closePersonalLink(actions);
+    return;
+  }
+  if (button.dataset.publicProfileReady === "false") {
+    await openRequiredPublicProfile();
     return;
   }
 
@@ -89,6 +101,7 @@ async function togglePersonalLink(button) {
     await copyText(url, actions.querySelector("[data-copy-status]"));
   } catch (error) {
     if (error.status === 401) return renderLogin("Сессия завершилась. Войдите снова.");
+    if (error.message === "master_public_profile_required" && await openRequiredPublicProfile()) return;
     const line = document.createElement("span");
     line.className = "client-invite-error small";
     line.textContent = typeof clientLinkErrorText === "function"
@@ -99,6 +112,34 @@ async function togglePersonalLink(button) {
     button.disabled = false;
   }
 }
+
+const personalLinkDecorateClientCards = decorateClientCards;
+decorateClientCards = function decorateClientCardsWithRecoverableInvite(reachability) {
+  personalLinkDecorateClientCards(reachability);
+  const ready = Boolean(reachability.public_profile?.ready);
+  document.querySelectorAll("[data-personal-invite]").forEach((button) => {
+    button.disabled = false;
+    button.dataset.publicProfileReady = String(ready);
+  });
+  enhancePersonalLinkControls();
+};
+
+const personalLinkRenderReachabilityControls = renderReachabilityControls;
+renderReachabilityControls = function renderReachabilityControlsWithRecoverableInvite(reachability) {
+  personalLinkRenderReachabilityControls(reachability);
+  const button = document.querySelector("#show-client-invitation");
+  if (!button) return;
+  button.disabled = false;
+  button.dataset.publicProfileReady = String(Boolean(reachability.public_profile?.ready));
+};
+
+const personalLinkShowGeneralInvitation = showGeneralInvitation;
+showGeneralInvitation = async function showGeneralInvitationWithProfileRecovery(button) {
+  if (button?.dataset.publicProfileReady === "false") {
+    if (await openRequiredPublicProfile()) return;
+  }
+  return personalLinkShowGeneralInvitation(button);
+};
 
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-personal-invite]");
