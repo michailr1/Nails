@@ -20,7 +20,7 @@ def test_mobile_shell_cannot_overflow_document():
     assert "left: 12px" in css
     assert "right: 12px" in css
     assert "width: auto" in css
-    assert "bottom: calc(18px + env(safe-area-inset-bottom))" in css
+    assert "bottom: calc(12px + env(safe-area-inset-bottom))" in css
 
 
 def test_stale_calendar_and_statistics_render_recover_active_view():
