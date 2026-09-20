@@ -17,7 +17,7 @@ Exact refs для новых решений всё равно разрешать
 
 ## Архитектурные anchors
 
-- master bot: Hermes profile `nails`;
+- master bot: Hermes profile `nails`; runtime modules/skills: `nails-onboarding`, `nails-scheduling`;
 - client bot: отдельный deterministic runtime;
 - один client platform bot на всех мастеров;
 - `start_token -> owner_user_id` только server-side;
@@ -62,7 +62,9 @@ Issue #323 остаётся открытым до фактической mobile 
 - production deploy — только штатным `ops/deploy/deploy.sh <exact-main-sha>`;
 - backup перед mutating deploy;
 - никаких manual source/.env/SQL/runtime fixes;
-- при расхождении refs/runtime — fail closed.
+- при расхождении refs/runtime — fail closed;
+- отдельного finalize entrypoint нет;
+- успешный production run подтверждается маркером `DEPLOY_OK=true`.
 
 ## Реально открытые направления
 
