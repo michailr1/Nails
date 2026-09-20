@@ -11,6 +11,8 @@
 - [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — Hermes runtime contract;
 - [`docs/operations/engineering-principles.md`](docs/operations/engineering-principles.md) — инженерные принципы и release discipline.
 
+Перед любыми действиями в новом контексте основной агент обязан **сначала прочитать `docs/context/current.md`**. Нельзя заново угадывать runtime paths, service manager, release-flow, plugin keys или фактический production state по памяти предыдущего чата.
+
 Exact production checkout/origin/running SHA **не self-pin'ится как вечный факт**. Для candidate/release exact refs всегда устанавливаются свежим GitHub ref и read-only production preflight.
 
 Если tracked docs противоречат свежему GitHub, production preflight или фактическому коду deploy/candidate entrypoints, основной агент обязан сначала установить фактическое состояние и исправить документы через branch → PR → CI.
