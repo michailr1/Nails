@@ -1,121 +1,120 @@
 # Фактическое состояние проекта
 
-Дата актуализации: **21 июля 2026 года**.
+Дата актуализации: **20 сентября 2026 года**.
 
-Для продолжения сначала читать [`context/current.md`](context/current.md). GitHub `main` и production SHA там разделены: docs-only commits могут быть новее application runtime.
+Перед любым release-решением exact SHA проверяются заново: GitHub `main` — через fresh GitHub preflight, production — через VPS preflight. Этот tracked-файл не является реестром текущего running SHA.
 
 ## 1. Сводка
 
 | Область | Состояние |
 |---|---|
-| Production application/runtime | `aae810ab0413a5a6448c2f4781380c83b2de28e1` |
-| Production API/PostgreSQL | healthy/ready |
-| API bind | `127.0.0.1:8210` |
+| GitHub `main` на момент актуализации | `4ab4e6f80adefad80d03bf5b484d051b974738e1` |
+| Последний подтверждённый production deploy | `9b9c4829dfc6595441421a9d3c8fc2f6a53120af` |
+| Production host | `de.funti.cc` |
 | Master web | `https://de.funti.cc:8446/web/` |
-| Health endpoints | `/health`, `/ready` |
-| Alembic | `0013` |
-| Hermes gateway | active |
-| Shutdown/restart Telegram notification | disabled только для profile `nails` |
-| Backup/restore | NAILS-002F завершён и принят в production |
-| Pilot | завершён после живой проверки двумя мастерами |
-| NAILS-003 | завершён: preview, несколько окон и ADR-006 в production |
-| Master Web UI | принят владельцем; отдельная приёмка пилотным мастером отложена |
-| ADR-007 | завершён; реальный прайс перенесён |
-| Active issue | #171 — ADR-004 client contour |
-| Текущий этап | backend foundation детерминированного клиентского Telegram-бота |
+| Alembic head в `main` | `0025` |
+| Master Telegram | Hermes profile `nails` |
+| Client Telegram | отдельный deterministic runtime, один платформенный bot |
+| Client runtime lifecycle | встроен в штатный `compose.yaml` / `ops/deploy/deploy.sh` |
+| Multi-master client binding | реализован по ADR-009 |
+| Master cabinet | календарь, клиентки, прайс, статистика, заявки клиенток, профиль/настройки |
+| Backup/restore | ежедневный backup, retention, restore-contract, backup перед deploy |
+| Текущий продуктовый фокус | mobile UX/acceptance и эксплуатационная доводка |
 
-## 2. Что уже работает
+## 2. Что фактически реализовано
 
-### Telegram-контур мастера
+### Контур мастера
 
-- onboarding только для первичного заполнения;
-- изменение настроек мастера без повторного onboarding;
-- «Мой прайс»: создание, изменение, удаление из прайса и восстановление;
-- точное разрешение дат;
-- доступность по конкретным датам и несколько интервалов в день;
-- read-only preview изменения доступности;
-- исправление и снятие сохранённой настройки даты;
-- целый выходной с защитой существующих записей;
-- просмотр дня и свободных окон;
-- клиентские карточки с расширенными private fields;
-- exact/candidate поиск и защита от случайных дублей;
-- создание записей с snapshots и дополнениями;
-- корректный перенос без самоблокировки;
-- мягкая отмена;
-- финализация визита и вечерний дайджест;
-- fresh-read/readback и verified guarded mutations;
-- защищённое сохранение негативного feedback.
+- onboarding и постоянные настройки мастера;
+- обычные рабочие часы и исключения по конкретным датам;
+- несколько интервалов в день и целый выходной;
+- «Мой прайс»: base/addon, fixed/range/per-unit/on-request, архив/восстановление;
+- клиентские карточки, внутренние заметки и поиск;
+- создание, перенос, мягкая отмена и финализация записи;
+- проверка overlap/day-off и snapshots состава, цены и длительности;
+- календарь день/неделя/месяц;
+- статистика и XLSX/CSV выгрузки;
+- Telegram-подтверждение входа в web-кабинет;
+- account menu: профиль для клиенток, настройки, выход;
+- входящие заявки клиенток с resolve/link/create, approve/reject;
+- итоговая цена и редактирование записи в кабинете.
 
-### Кабинет мастера
+### Клиентский Telegram-контур
 
-- вход с Telegram-подтверждением;
-- календарь дня, недели и месяца;
-- owner-scoped CSV/XLSX выгрузки;
-- компактный экран «Мой прайс» по разделам;
-- fixed/range/per-unit/on-request цены;
-- создание записи с основной процедурой и дополнениями;
-- быстрое добавление клиентки;
-- просмотр и редактирование полной пользовательской части карточки клиентки;
-- подтверждения мутаций, idempotency и fresh readback;
-- same-origin BFF без публикации внутреннего Booking API.
+Реализован не как будущий план, а как рабочий код:
 
-### Надёжность
+- отдельный deterministic Telegram bot без Hermes/LLM;
+- один платформенный bot обслуживает нескольких мастеров;
+- deep-link/start-token резолвит мастера **только сервер**;
+- `owner_user_id` нельзя выбирать через client body/query;
+- `master_public_profile` с обязательным `display_name`;
+- `public_contact` только explicit opt-in;
+- multi-binding: одна Telegram-клиентка может быть связана с несколькими мастерами;
+- «Ваши мастера» строится только по существующим binding'ам, без публичного каталога;
+- публичный прайс и свободные окна;
+- server-side booking draft с TTL;
+- выбор base service, addons и quantities;
+- пересчёт состава, цены и длительности на сервере;
+- отправка `BookingRequest`, которая **не резервирует слот**;
+- master approve повторно проверяет фактический overlap/day-off и создаёт обычный Booking;
+- reject и conflict не выполняют скрытый автоперенос;
+- «Мои записи»/актуальные заявки в клиентском интерфейсе;
+- короткое пояснение/сообщение мастеру как информация, а не команда бизнес-логики;
+- outbox транзакционных уведомлений и отдельный drainer;
+- уведомления клиентке о подтверждении/отказе;
+- reachability/linking и one-time personal links;
+- общий invite link мастера и персональная ссылка на карточку;
+- отдельные client credentials;
+- client API и bot flags разрешены только парой `false/false` или `true/true`;
+- штатный deploy проверяет раздельность master/client Telegram token и singleton runtime.
 
-- ежедневные backup;
-- isolated restore-test;
-- retention daily/weekly/monthly/runtime;
-- Telegram archive администратора;
-- backup перед мутирующим deploy;
-- exact PR-head candidate до merge;
-- единый main deploy через `ops/deploy/deploy.sh`;
-- rollback как deploy предыдущего SHA.
+### Приватность клиентского контура
 
-## 3. Принятый реальный прайс
+- числовой Telegram ID мастера клиентке не раскрывается;
+- личное Telegram-имя/username мастера автоматически не публикуются;
+- `@username` виден только если мастер сам записал его в `public_contact`;
+- internal aliases, notes и технические идентификаторы не входят в публичную проекцию;
+- совпадение имени/телефона не связывает клиентку с существующей карточкой автоматически;
+- первую связь подтверждает мастер.
 
-Подтверждённый owner-scoped перенос:
+## 3. Архитектурные решения SaaS
+
+ADR-009 принят и реализован в клиентском binding-контуре:
+
+1. один платформенный клиентский bot;
+2. server-side start-token → owner;
+3. multi-binding;
+4. public profile мастера;
+5. без публичного каталога мастеров;
+6. без per-master white-label bots;
+7. billing/subscriptions остаются отдельным будущим этапом.
+
+Старый single-master подход с `CLIENT_OWNER_TELEGRAM_USER_ID` считается obsolete и не должен возвращаться.
+
+## 4. Production и GitHub
+
+Последний подтверждённый production deploy:
 
 ```text
-payload_sha256=cfdff556d17ee2cf31781dac91fd7bf33023e668daabe28a26c5960babd0ba77
-created_count=33
-updated_count=0
-archived_count=1
-target_active_service_count=33
-non_target_catalogs_unchanged=true
-fresh_readback_verified=true
-backup_alembic=0013
-backup_verified=true
-NASTYA_PRICE_TRANSFER_OK=true
+sha=9b9c4829dfc6595441421a9d3c8fc2f6a53120af
+prev_sha=3817dc211e521b44614ee50169b42a5813434042
+running_web_sha=9b9c4829dfc6595441421a9d3c8fc2f6a53120af
+running_client_bot_sha=9b9c4829dfc6595441421a9d3c8fc2f6a53120af
+client_bot_singleton=true
 ```
 
-Отдельная ручная приёмка пилотным мастером отложена. Этап принят владельцем; новые пожелания оформляются отдельными follow-up задачами.
+В `main` после этого смержен `4ab4e6f...` с исправлением узкой mobile navigation и recoverable invite flow. Его нельзя считать production без отдельного VPS deploy/preflight.
 
-## 4. Семантика ADR-006
+## 5. Что больше не является «следующим этапом»
 
-Явно названное мастером время открыто по умолчанию.
+Устаревшие формулировки о том, что client runtime, client identity, booking requests или multi-master ещё только предстоит сделать, больше не соответствуют коду `main`.
 
-Прямая запись отклоняется только при:
+## 6. Текущая работа
 
-- явно сохранённом целом выходном;
-- overlap с активной записью с учётом reserved intervals и buffers.
+Активными остаются только реально незавершённые или не принятые задачи, в частности:
 
-Положительные интервалы и диапазон подсказок не являются жёстким запретом. Они формируют только предлагаемые свободные окна.
-
-## 5. Следующий этап — ADR-004
-
-Клиентский контур первой версии:
-
-- отдельный deterministic Telegram bot без LLM и без публичного Hermes;
-- client identity отделена от доверенных `admin|master` users;
-- новая identity остаётся pending с nullable `client_id` до явного решения мастера;
-- совпадение имени, username или телефона не присоединяет существующую карточку автоматически;
-- клиентка видит публичный прайс, свободные окна и только свои заявки/записи;
-- отправленная клиенткой заявка не резервирует время;
-- мастер связывает identity с owner-scoped карточкой либо создаёт новую, затем подтверждает или отклоняет заявку;
-- подтверждение вызывает существующий доменный `create_booking` и повторно проверяет overlap;
-- crash-gap после внутреннего Booking commit восстанавливается повтором с тем же детерминированным idempotency key без второго Booking;
-- private aliases и notes наружу не выводятся;
-- первый запуск рассчитан на одного мастера.
-
-Implementation issue: **#171**.
-
-Первый рабочий срез — backend foundation и security contracts до подключения bot runtime.
+- #323 — mobile UI acceptance заявок/confirm dialog/profile placement;
+- #316 — механическая защита `main` от direct push;
+- #268 — накопленный cabinet UX debt;
+- #252 — устранение global render overrides/script-order coupling;
+- #223 — будущая автоматизированная воронка подключения мастеров.
