@@ -19,7 +19,11 @@
 | Multi-master client binding | реализован по ADR-009 |
 | Master cabinet | календарь, клиентки, прайс, статистика, заявки клиенток, профиль/настройки |
 | Backup/restore | ежедневный backup, retention, restore-contract, backup перед deploy |
-| Текущий продуктовый фокус | mobile UX/acceptance и эксплуатационная доводка |
+| Production application/runtime | последний подтверждённый runtime = `9b9c482...`; exact state проверять preflight |
+| Alembic | `0025` в текущем `main` |
+| Active issue | #323 mobile acceptance; остальные реальные open scope ниже |
+| Текущий этап | mobile UX/acceptance и эксплуатационная доводка |
+| Текущий product context | `docs/context/current.md` |
 
 ## 2. Что фактически реализовано
 
