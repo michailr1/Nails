@@ -21,7 +21,7 @@ Exact production checkout/origin/running SHA **не self-pin'ится как в�
 
 ### Основной агент ChatGPT
 
-Основной агент:
+Основной агент ChatGPT — единственный исполнитель, который:
 
 - анализирует требования, код, архитектуру и production reports;
 - принимает рядовые технические/архитектурные решения;
@@ -34,7 +34,7 @@ Exact production checkout/origin/running SHA **не self-pin'ится как в�
 
 ### VPS-агент
 
-VPS-агент — **исполнитель заранее подготовленного runbook**.
+VPS-агент — **только исполнитель заранее подготовленного runbook**.
 
 Ему разрешено:
 
@@ -45,8 +45,8 @@ VPS-агент — **исполнитель заранее подготовле�
 
 Ему запрещено:
 
-- писать или исправлять tracked code/docs;
-- создавать commits/branches/PR или выполнять merge;
+- писать, редактировать, исправлять или рефакторить код, тесты, миграции или tracked docs;
+- создавать commits/branches/PR, выполнять push, merge или любые изменения в GitHub;
 - принимать архитектурные решения;
 - делать ad-hoc SQL/source/.env fixes;
 - продолжать после fail-closed вне явно предусмотренного rollback.
@@ -90,6 +90,8 @@ GitHub changes и merge выполняет основной агент. Merge me
 
 ### Production release после merge
 
+Отдельного finalize entrypoint в репозитории нет.
+
 Поддерживаемый production path:
 
 ```text
@@ -127,11 +129,11 @@ Rollback = штатный deploy предыдущего exact SHA. Ручног�
 2. Проверить fresh `main`, relevant issues и production state.
 3. Создать branch и внести изменения.
 4. Создать PR, review, CI.
-5. Если runtime change требует pre-merge acceptance — VPS выполняет isolated candidate.
+5. Если runtime change требует pre-merge acceptance — VPS выполняет candidate deployment точного открытого PR-head SHA через isolated candidate path.
 6. Основной агент анализирует report и выполняет merge.
 7. Для runtime release VPS выполняет exact-main production deploy.
 8. Основной агент проводит пользовательскую acceptance.
-9. Обновить current/status docs при значимом milestone.
-10. Закрыть issue после выполнения его актуальных критериев.
+9. Основной агент обновляет `docs/context/current.md` после значимого production milestone или изменения точки продолжения.
+10. Issue закрывает основной агент после выполнения его актуальных критериев.
 
 Пользователь не должен выдавать пошаговые технические задания, если следующий безопасный шаг основной агент может определить сам.
