@@ -4,120 +4,132 @@
 
 Обязательные нормативные документы:
 
-- [`docs/context/current.md`](docs/context/current.md) — компактный актуальный handoff: политика разрешения production state, текущая задача, обнаруженные проблемы, принятые решения и точка продолжения;
-- [`docs/product/product-principles.md`](docs/product/product-principles.md) — обязательная продуктовая философия: Нэйли как личная помощница мастера, язык мастера, «Мой прайс», прогрессивное раскрытие сложности и проектирование от ментальной модели мастера;
-- [`docs/operations/agent-responsibilities.md`](docs/operations/agent-responsibilities.md) — разделение ответственности основного и VPS-агента;
-- [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — проверенная production-топология, пути и правильный способ управления Hermes;
-- [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — точный контракт загрузки profile-local plugins, `plugins.enabled` и Telegram toolsets для установленной версии Hermes;
-- [`docs/operations/engineering-principles.md`](docs/operations/engineering-principles.md) — обязательные инженерные принципы: соразмерность масштабу проекта, устранение класса ошибки вместо нового защитного слоя, правило вычитания, один постоянный deploy-скрипт (ADR-003), rollback как deploy предыдущего SHA.
+- [`docs/context/current.md`](docs/context/current.md) — актуальная точка продолжения;
+- [`docs/product/product-principles.md`](docs/product/product-principles.md) — продуктовая философия и терминология;
+- [`docs/operations/agent-responsibilities.md`](docs/operations/agent-responsibilities.md) — разделение ответственности;
+- [`docs/operations/production-infrastructure.md`](docs/operations/production-infrastructure.md) — production topology;
+- [`docs/operations/hermes-plugin-runtime.md`](docs/operations/hermes-plugin-runtime.md) — Hermes runtime contract;
+- [`docs/operations/engineering-principles.md`](docs/operations/engineering-principles.md) — инженерные принципы и release discipline.
 
-Перед любыми действиями в новом контекстном окне основной агент обязан сначала прочитать `docs/context/current.md`, затем остальные operational- и product-документы. Нельзя заново угадывать service manager, runtime paths, plugin keys, структуру конфигурации, release-flow или пользовательскую терминологию по памяти предыдущего чата.
+Exact production checkout/origin/running SHA **не self-pin'ится как вечный факт**. Для candidate/release exact refs всегда устанавливаются свежим GitHub ref и read-only production preflight.
 
-Exact production checkout/origin/running SHA **не self-pin'ится в tracked-документах**: файл не может содержать SHA коммита, который содержит сам этот файл. Exact SHA для candidate/release всегда устанавливается свежим GitHub ref и фактическим read-only production preflight. Отсутствие exact SHA в `docs/context/current.md` не является расхождением.
-
-Если `docs/context/current.md` противоречит свежему GitHub, production preflight, коду `ops/deploy/deploy.sh` или более узкому deployment report по фактам, которые документ действительно фиксирует, основной агент обязан остановиться, установить фактическое состояние и обновить нормативные документы через branch → PR → CI.
+Если tracked docs противоречат свежему GitHub, production preflight или фактическому коду deploy/candidate entrypoints, основной агент обязан сначала установить фактическое состояние и исправить документы через branch → PR → CI.
 
 ## Неизменяемая граница ответственности
 
 ### Основной агент ChatGPT
 
-Основной агент ChatGPT — единственный исполнитель, который:
+Основной агент:
 
-- анализирует требования, репозиторий, архитектуру и отчёты production;
-- принимает технические, архитектурные и продуктовые решения;
-- пишет, изменяет и удаляет код, тесты, миграции и документацию;
-- создаёт ветки, коммиты, issues и pull requests;
-- проводит review, исправляет замечания и проверяет CI;
-- выполняет любые изменения в GitHub, включая merge;
-- выбирает точный release SHA, source ref, критерии приёмки и rollback;
-- формирует точный candidate/main-deploy/rollback runbook;
-- закрывает issue только после требуемой production-приёмки.
+- анализирует требования, код, архитектуру и production reports;
+- принимает рядовые технические/архитектурные решения;
+- пишет код, тесты, миграции и документацию;
+- создаёт/обновляет issues, branches и PR;
+- проводит review, проверяет CI и выполняет merge;
+- выбирает exact candidate/release SHA;
+- формирует candidate/deploy/rollback runbook;
+- закрывает issue после требуемой приёмки.
 
 ### VPS-агент
 
-VPS-агент — **только исполнитель заранее подготовленного runbook** на production-сервере.
+VPS-агент — **исполнитель заранее подготовленного runbook**.
 
 Ему разрешено:
 
-- выполнять точные команды из runbook без изменения их смысла;
-- делать указанные backup, candidate deployment, main deployment, restart, verification и rollback;
-- выполнять указанные диагностические проверки;
-- до merge fetch точного PR head в заранее указанную `origin/pr/<number>` ref без изменения checkout;
-- после merge запускать единый штатный main release через `ops/deploy/deploy.sh` для точного `origin/main` SHA;
+- выполнять точные candidate/deploy/diagnostic/rollback команды;
+- делать предусмотренные backup и runtime checks;
+- fetch exact refs, требуемые runbook;
 - возвращать фактический отчёт без секретов.
 
-VPS-агенту запрещено:
+Ему запрещено:
 
-- писать, редактировать, исправлять или рефакторить код;
-- самостоятельно менять тесты, миграции, документацию или конфигурацию;
-- создавать ветки, коммиты, теги или pull requests;
-- выполнять push, merge или любые изменения в GitHub;
-- принимать архитектурные, технические или продуктовые решения;
-- придумывать недостающие команды либо менять runbook;
-- выполнять ad-hoc SQL, shell-исправления или ручные патчи приложения;
-- вручную разделять, переставлять или пропускать шаги `ops/deploy/deploy.sh`;
-- продолжать deployment после ошибки вне явно предусмотренного rollback.
+- писать или исправлять tracked code/docs;
+- создавать commits/branches/PR или выполнять merge;
+- принимать архитектурные решения;
+- делать ad-hoc SQL/source/.env fixes;
+- продолжать после fail-closed вне явно предусмотренного rollback.
 
 ## Правило остановки
 
-При любой ошибке, расхождении SHA, неожиданном состоянии или неполной инструкции VPS-агент обязан:
+При ошибке, расхождении SHA или неожиданном runtime state VPS-агент:
 
-1. остановить дальнейшие действия;
-2. выполнить только встроенный rollback, если он уже предусмотрен runbook;
-3. сохранить диагностику;
-4. сообщить точный этап, команду/проверку, ошибку, checkout SHA, running SHA, состояние сервисов, путь backup и результат rollback;
-5. **не исправлять проблему самостоятельно**.
-
-Исправление всегда возвращается основному агенту ChatGPT и проходит обычный цикл: код → тесты → PR → CI → release validation.
+1. останавливает дальнейшие действия;
+2. выполняет только предусмотренный rollback;
+3. сохраняет диагностику;
+4. сообщает exact refs, failing stage, runtime state и backup;
+5. не исправляет проблему самостоятельно.
 
 ## Git и GitHub
 
 ### PR candidate до merge
 
-VPS-агент может fetch точного PR head в `origin/pr/<number>` и выполнить candidate deployment через постоянный `ops/deploy/deploy.sh`. Candidate SHA должен совпадать с заранее указанной ref, быть потомком production baseline, а production checkout обязан остаться на исходном SHA.
+Нормативный pre-merge candidate entrypoint — **изолированный adapter**:
 
-Candidate является дополнительной production validation до merge. Он допустим только для открытого PR-head SHA. После squash/rebase merge этот SHA не равен новому `main`, поэтому старый candidate нельзя выдавать за validation нового merge SHA.
+```text
+ops/deploy/candidate_deploy.sh
+```
+
+Candidate:
+
+- строится из exact открытого PR-head;
+- использует отдельный Compose project, ports/networks/volume;
+- не использует production DB/env/runtime;
+- не меняет production checkout;
+- не запускает конкурирующий client bot на production Telegram token;
+- после проверки очищает candidate resources.
+
+`ops/deploy/deploy.sh` — **не candidate entrypoint**. Это единственный постоянный production deploy path.
+
+Candidate PR-head и будущий merge SHA могут отличаться при merge commit/squash/rebase. Поэтому pre-merge candidate доказывает корректность дерева PR, но после merge exact `main` всё равно проверяется CI/preflight и деплоится как отдельный exact release. Нельзя выдавать PR-head SHA за running main SHA.
 
 ### GitHub merge
 
-Любое создание или изменение содержимого GitHub остаётся исключительной ответственностью основного агента ChatGPT. Метод merge выбирается осознанно до production validation. Нельзя утверждать, что rebase/squash SHA уже проверен candidate, если candidate запускался для другого PR-head SHA.
+GitHub changes и merge выполняет основной агент. Merge method выбирается в соответствии с текущим repository policy. После merge источник истины — фактический `origin/main` SHA.
 
 ### Production release после merge
 
-Отдельного finalize entrypoint в репозитории нет. После merge штатный поддерживаемый путь один:
+Поддерживаемый production path:
 
 ```text
 NAILS_RELEASE_REF=origin/main bash ops/deploy/deploy.sh <exact-main-SHA>
 ```
 
-Этот main deploy сам:
+Production deploy:
 
-1. fetch и проверяет `origin/main == exact SHA`;
-2. проверяет clean checkout и ancestry;
-3. создаёт detached release worktree;
-4. создаёт и валидирует database/runtime backup;
-5. собирает и проверяет API/WEB images;
-6. останавливает только предусмотренные runtime-компоненты;
-7. запускает миграции и новый runtime;
-8. проверяет health/readiness/runtime SHA;
-9. устанавливает plugins, skills и digest runtime;
-10. только после успешных runtime-проверок fast-forward’ит локальный production checkout;
-11. возвращает `DEPLOY_OK=true`.
+1. проверяет exact `origin/main`;
+2. проверяет clean checkout/ancestry;
+3. создаёт release worktree;
+4. делает и валидирует backup;
+5. собирает runtime images;
+6. запускает migrations/runtime;
+7. проверяет health/readiness/running SHA;
+8. проверяет client runtime invariants при enabled;
+9. обновляет локальный production checkout только после успешной проверки;
+10. возвращает `DEPLOY_OK=true`.
 
-Ручной «finalize» отдельной командой, локальный merge до или вместо `deploy.sh`, повторное развертывание уже работающего candidate либо обход встроенного backup/rollback не являются поддерживаемым flow.
+Rollback = штатный deploy предыдущего exact SHA. Ручного finalize или ручных source/DB fixes нет.
+
+## Client runtime invariants
+
+- один платформенный client bot обслуживает нескольких мастеров;
+- client API и bot flags включаются/выключаются только вместе;
+- master/client Telegram tokens различаются;
+- client runtime не имеет direct DB access;
+- на одном token должен быть один активный runtime;
+- legacy host client-bot runtime должен быть inactive;
+- `start_token -> owner_user_id` резолвится только сервером.
 
 ## Обязательный порядок работы
 
-1. Основной агент читает этот файл и operational source of truth.
-2. Перед пользовательским проектированием основной агент читает `docs/product/product-principles.md` и сверяет терминологию и сценарий с ним.
-3. Основной агент проверяет актуальный `main`, active issue и production state.
-4. Основной агент создаёт ветку и вносит изменения.
-5. Основной агент создаёт PR, проводит review и проверяет CI.
-6. При необходимости VPS-агент выполняет candidate deployment точного открытого PR-head SHA из `origin/pr/<number>`; checkout не меняется.
-7. Основной агент анализирует candidate report и выполняет GitHub merge.
-8. Для точного смерженного `main` SHA VPS-агент выполняет единый штатный main deploy через `ops/deploy/deploy.sh`; отдельного finalize нет.
-9. Основной агент проводит пользовательскую приёмку.
-10. Основной агент обновляет `docs/context/current.md` после значимого production milestone или изменения точки продолжения, но не self-pin'ит туда exact SHA текущего tracked commit.
-11. Issue закрывает основной агент после выполнения всех критериев.
+1. Прочитать этот файл и current context.
+2. Проверить fresh `main`, relevant issues и production state.
+3. Создать branch и внести изменения.
+4. Создать PR, review, CI.
+5. Если runtime change требует pre-merge acceptance — VPS выполняет isolated candidate.
+6. Основной агент анализирует report и выполняет merge.
+7. Для runtime release VPS выполняет exact-main production deploy.
+8. Основной агент проводит пользовательскую acceptance.
+9. Обновить current/status docs при значимом milestone.
+10. Закрыть issue после выполнения его актуальных критериев.
 
-Любая инструкция, передающая VPS-агенту написание кода, исправление файлов, изменение GitHub или несуществующий release entrypoint, противоречит этому контракту и не должна выполняться.
+Пользователь не должен выдавать пошаговые технические задания, если следующий безопасный шаг основной агент может определить сам.
