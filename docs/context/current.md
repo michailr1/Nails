@@ -1,96 +1,82 @@
 # Nails — текущий контекст
 
-Дата фиксации: **12 августа 2026 года**.
+Дата фиксации: **20 сентября 2026 года**.
 
-Перед работой прочитать `AGENTS.md`, этот файл, `docs/product/product-principles.md`, `docs/operations/engineering-principles.md`, остальные operational-документы и принятые ADR. GitHub проверять по API, production — фактическим preflight. Production state не предполагать.
+Перед работой читать `AGENTS.md`, этот файл, product/engineering principles и принятые ADR. GitHub и production всегда проверять фактически: tracked-документы не заменяют preflight.
 
-## Фактическое production-состояние
+## Source of truth
 
-production branch: main.
+- GitHub `main` на момент актуализации: `4ab4e6f80adefad80d03bf5b484d051b974738e1`.
+- Последний подтверждённый production deploy: `9b9c4829dfc6595441421a9d3c8fc2f6a53120af`.
+- `4ab4e6f...` **не считать production**, пока VPS не подтвердит deploy/running SHA.
+- Alembic head в текущем `main`: `0025`.
 
-**Exact checkout/origin/running SHA намеренно не хранится в этом tracked-файле.** Файл не может надёжно содержать SHA коммита, который содержит сам этот файл: любое обновление SHA создаёт новый SHA и снова делает значение устаревшим. Для release/candidate решений единственный источник exact SHA — свежий GitHub ref + фактический read-only production preflight.
+Exact refs для новых решений всё равно разрешать заново.
 
-Последняя подтверждённая пользовательская production-приёмка до исправления этого operational-контракта была для app release `8fec2cc1a6ebbebda0ac78c3cbd048903933a036`:
+## Архитектурные anchors
 
-```text
-repository=michailr1/Nails
-production host=de.funti.cc
-public master portal=https://de.funti.cc:8446/web/
-production repo=/opt/nails/repo
-production branch=main
-backend env=/opt/nails/.env
-client_runtime_enabled=true
-client_bot_singleton=true
-legacy_client_bot_active=inactive
-alembic_head=0025
-api_health=200
-api_readiness=200
-public_web=200
-working_tree_clean=true
-production_env_unchanged=true
-manual_sql_executed=false
-manual_runtime_changes=false
-manual_source_changes=false
-DEPLOY_OK=true
-POST_DEPLOY_OK=true
-```
+- master bot: Hermes profile `nails`;
+- client bot: отдельный deterministic runtime;
+- один client platform bot на всех мастеров;
+- `start_token -> owner_user_id` только server-side;
+- multi-binding включён;
+- публичного каталога мастеров нет;
+- `master_public_profile.display_name` обязателен для активной ссылки;
+- `public_contact` только opt-in;
+- numeric master Telegram ID клиентке не раскрывается;
+- pending client request не резервирует слот;
+- master approve повторно проверяет slot/day-off;
+- client runtime не ходит в БД напрямую;
+- client API и bot feature flags включаются/выключаются только вместе;
+- один client-bot runtime на token; legacy host runtime должен быть inactive.
 
-Последний известный backup из этой приёмки: `/opt/nails/backups/nails-before-deploy-20260811T192338Z.sql.gz`.
+## Что уже не является активной разработкой
 
-Release `8fec2cc1...` завершил #286: иконка мастера вынесена в угол, меню содержит «Профиль для клиенток», «Настройки», «Выйти», старые logout-контролы удалены, профиль мастера перенесён из раздела клиенток. Это **историческая отметка принятого app release**, а не утверждение о текущем checkout SHA.
+ADR-004/client contour, ADR-009 binding и client runtime **реализованы**. Не возвращать obsolete single-master server-config `CLIENT_OWNER_TELEGRAM_USER_ID` и не планировать bot-per-master.
 
-## Текущая проблема — #304
+Старые issues #171 и #248 должны рассматриваться как завершённые по фактическому коду/production history, а не как roadmap.
 
-Ручная приёмка на реальном iPhone выявила визуальный дефект release `8fec2cc1...`: модальные панели «Настройки» и «Как вас увидят клиентки» технически не переполняют viewport, но выглядят сломанно — слишком маленькие внешние поля, неясная композиция полей времени и слабая визуальная структура профиля.
+## Текущий UI/release контекст
 
-Issue #304 исправляет только существующий web UI в месте причины:
+Последний merge в `main` — #326 / #325:
 
-- `backend/app/web_static/web-master-settings.css` — mobile shell, отступы и контролы;
-- `backend/app/web_static/web-master-settings.js` — понятный пользовательский текст «Рабочий день», «Начало», «Конец»;
-- `backend/app/web_static/web-public-profile-visible.js` остаётся на существующем API/markup-контракте и использует исправленный общий shell;
-- backend, API, БД, timezone и scheduling semantics не меняются;
-- regression фиксирует реальные mobile gutters и отсутствие возврата к `calc(100vw - 20px/12px)`.
+- mobile bottom nav на узком viewport переведена на стабильные 4 равные колонки;
+- invite buttons больше не образуют тупик при незаполненном public profile;
+- при необходимости открывается «Как вас увидят клиентки»;
+- после сохранения profile экран «Клиентки» обновляется;
+- CI exact head был зелёным перед merge.
 
-Активная ветка: `fix/304-mobile-master-settings-layout`.
+Нужен отдельный production deploy/acceptance `4ab4e6f...`.
+
+Issue #323 остаётся открытым до фактической mobile acceptance request cards + confirm dialog + profile placement.
 
 ## Release contract
 
-- Основной агент пишет код, тесты и документацию, управляет GitHub, CI, review и merge.
-- VPS-агент только исполняет candidate/deploy/diagnostic runbook'и.
-- Exact production SHA, origin/main SHA и running SHA всегда разрешаются свежим preflight; `docs/context/current.md` не является self-pinned SHA registry.
-- Exact candidate SHA берётся из fresh GitHub PR/preflight.
-- Candidate не должен менять production checkout/runtime/DB; изолированный candidate entrypoint сверяется с актуальным operational контрактом и #303.
-- Production deploy после merge — только штатный `ops/deploy/deploy.sh <exact-main-SHA>` / `NAILS_RELEASE_REF=origin/main`.
-- отдельного finalize entrypoint нет.
-- Никаких manual source/.env/SQL/DB/runtime fixes на VPS.
-- При реальном расхождении fresh GitHub, production preflight, runtime identity или deployment report — fail closed. Отсутствие self-pinned exact SHA в этом файле расхождением не является.
+- основной ChatGPT: архитектура, код, тесты, GitHub, CI, review, merge;
+- VPS-агент: candidate/production deploy, runtime acceptance, diagnostics, rollback;
+- pre-merge candidate — только изолированным candidate path;
+- production deploy — только штатным `ops/deploy/deploy.sh <exact-main-sha>`;
+- backup перед mutating deploy;
+- никаких manual source/.env/SQL/runtime fixes;
+- при расхождении refs/runtime — fail closed.
 
-Operational anchors:
+## Реально открытые направления
 
-- Hermes plugins: `nails-onboarding`, `nails-scheduling`;
-- роли только `master`, `admin`, `client`;
-- один живой Telegram-тест за раз;
-- отдельный deterministic client bot `@smartnails_bot`;
-- один client-bot runtime на token;
-- имя помощницы — «Нэйли»;
-- Нэйли — личная помощница мастера, а не CRM;
-- основной пользовательский раздел каталога — «Мой прайс».
-
-## После #304
-
-Вернуться к fresh preflight оставшегося scope #284: исключения рабочего времени по конкретному дню и прозрачное отображение ограничений клиентских слотов. ADR-006 не менять.
+- #323 mobile UI acceptance;
+- #316 branch protection;
+- #268 остаточный cabinet UX debt;
+- #252 web render/script-order tech debt;
+- #223 future self-service master onboarding.
 
 ## Точка продолжения
 
 ```text
-production_exact_ref=resolve_from_fresh_production_preflight
-origin_main_exact_ref=resolve_from_fresh_GitHub_preflight
-running_exact_ref=resolve_from_fresh_production_preflight
+origin_main_at_doc_refresh=4ab4e6f80adefad80d03bf5b484d051b974738e1
+last_confirmed_production=9b9c4829dfc6595441421a9d3c8fc2f6a53120af
 alembic_head=0025
-active_issue=304
-active_branch=fix/304-mobile-master-settings-layout
-candidate_head=resolve_from_fresh_PR_preflight
-client_bot_singleton=true
-legacy_client_bot_active=inactive
-next=finish #303 source-of-truth fix -> deploy operational contract -> restacked #304 CI -> isolated candidate -> exact fast-forward merge -> deploy -> real iPhone acceptance
+client_contour=implemented
+client_binding=multi-master
+client_runtime=permanent-compose-runtime
+client_bot_singleton_required=true
+next=refresh preflight -> deploy/accept 4ab4e6f if still main -> continue only real open issues
 ```
