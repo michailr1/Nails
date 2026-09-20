@@ -92,7 +92,7 @@ SaaS onboarding  ⬜ self-service подключение, тарифы и billin
 - нижняя 4-tab navigation;
 - request cards и confirm dialog;
 - invite/profile UX;
-- рабочий график и его прозрачность в кабинете;
+- рабочий график и его прозрачность в кабинете (#282/#284; реализованы общий интервал и исключения по датам, но не весь исходный acceptance);
 - уменьшение script-order/global override debt;
 - механическая защита `main`.
 
@@ -123,7 +123,7 @@ Issue #223 остаётся будущим направлением:
 ## Ближайший порядок
 
 1. Завершить production acceptance текущих mobile fixes (#323 и связанные регрессии).
-2. Закрыть уже фактически выполненные старые client/runtime/schedule issues.
+2. Закрыть уже фактически выполненные старые client/runtime issues; #282/#284 оставить до полного исходного acceptance.
 3. Устранить оставшийся web tech debt (#252/#268 по реальному scope).
 4. Включить repository protection для `main` (#316).
 5. После стабилизации — проектировать self-service SaaS onboarding (#223), не возвращаясь к single-master client architecture.
