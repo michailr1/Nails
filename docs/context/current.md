@@ -71,6 +71,8 @@ Issue #323 остаётся открытым до фактической mobile 
 - #323 mobile UI acceptance;
 - #316 branch protection;
 - #268 остаточный cabinet UX debt;
+- #282 полноценный week-by-week schedule editor остаётся незавершённым;
+- #284 прозрачность effective schedule/client slots остаётся на финальную acceptance;
 - #252 web render/script-order tech debt;
 - #223 future self-service master onboarding.
 
