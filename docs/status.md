@@ -120,5 +120,7 @@ client_bot_singleton=true
 - #323 — mobile UI acceptance заявок/confirm dialog/profile placement;
 - #316 — механическая защита `main` от direct push;
 - #268 — накопленный cabinet UX debt;
+- #282 — полноценная недельная модель редактирования графика в кабинете ещё не закрыта: сейчас есть общий рабочий интервал + исключения по датам;
+- #284 — прозрачность всех факторов, ограничивающих client slots, требует отдельной финальной acceptance;
 - #252 — устранение global render overrides/script-order coupling;
 - #223 — будущая автоматизированная воронка подключения мастеров.
