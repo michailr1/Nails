@@ -2,7 +2,9 @@
 
 Дата фиксации: **20 сентября 2026 года**.
 
-Перед работой читать `AGENTS.md`, этот файл, product/engineering principles и принятые ADR. GitHub и production всегда проверять фактически: tracked-документы не заменяют preflight.
+Перед работой читать `AGENTS.md`, этот файл, product/engineering principles и принятые ADR. Обязательный engineering source: `docs/operations/engineering-principles.md`. GitHub и production всегда проверять фактически: tracked-документы не заменяют preflight. **Production state не предполагать.**
+
+production branch: main
 
 ## Source of truth
 
@@ -28,7 +30,9 @@ Exact refs для новых решений всё равно разрешать
 - master approve повторно проверяет slot/day-off;
 - client runtime не ходит в БД напрямую;
 - client API и bot feature flags включаются/выключаются только вместе;
-- один client-bot runtime на token; legacy host runtime должен быть inactive.
+- один client-bot runtime на token; legacy host runtime должен быть inactive;
+- роли только `master`, `admin`, `client`;
+- один живой Telegram-тест за раз.
 
 ## Что уже не является активной разработкой
 
