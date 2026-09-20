@@ -1,358 +1,208 @@
 # Архитектура
 
+Дата актуализации: **20 сентября 2026 года**.
+
 ## 1. Назначение
 
-Nails — закрытый Telegram-помощник мастера по ведению графика, услуг, клиентов и записей. Диалог ведёт Hermes, но все бизнес-правила и данные контролируются отдельным Booking API и PostgreSQL.
+Nails состоит из двух пользовательских контуров:
 
-Главный принцип:
+1. доверенный контур мастера — Telegram/Hermes + web-кабинет;
+2. недоверенный клиентский Telegram-контур — отдельный deterministic bot без LLM.
 
-> Модель может предложить действие, но не может сама считать его выполненным.
+Оба используют один доменный FastAPI/PostgreSQL слой. PostgreSQL — источник истины; модель/бот не считаются источником факта об успешной бизнес-операции.
 
-Любое чтение или изменение рабочих данных должно происходить через ограниченную функцию Booking API с серверной проверкой роли, владельца и бизнес-правил.
-
-## 2. Фактическое состояние на 13 июля 2026 года
-
-```text
-Telegram
-   ↓
-Hermes Telegram Gateway
-   ↓
-profile: nails
-   ├── SOUL.md
-   ├── separate user sessions
-   └── safe tools: vision, image_gen, tts, skills, clarify
-
-127.0.0.1:8210
-   ↓
-nails-api (FastAPI)
-   ↓
-nails-db (PostgreSQL)
-```
-
-Обе части уже работают на `de.funti.cc`, но **Hermes пока не подключён к Booking API**. Поэтому Telegram-профиль ещё не может сохранять график, услуги, клиентов и записи.
-
-Production backend commit:
+## 2. Фактическая схема
 
 ```text
-cca0109ea8c716fdf03d97c34a1c0f06bfb5fc50
+MASTER
+Telegram -> Hermes Gateway -> restricted Nails plugins
+                         \
+                          -> FastAPI -> PostgreSQL
+Master Web -> same-origin BFF /
+
+CLIENT
+Telegram -> nails-client-bot -> /api/v1/client/* -> FastAPI -> PostgreSQL
+                         \
+                          -> notification outbox -> Telegram
 ```
 
-Alembic revision:
+Production API публикуется только на loopback, web идёт через edge/reverse proxy.
+
+## 3. Контур мастера
+
+Hermes profile `nails`:
+
+- получает trusted Telegram identity из gateway context;
+- не доверяет Telegram ID/role из текста модели;
+- использует restricted onboarding/scheduling plugins;
+- не имеет direct SQL/SSH/shell business path;
+- постоянные бизнес-данные хранит в PostgreSQL, а не в Hermes memory.
+
+Web-кабинет использует Telegram challenge/session auth и owner-scoped BFF.
+
+## 4. Client contour
+
+Клиентский bot:
+
+- отдельный token и `CLIENT_INTERNAL_API_KEY`;
+- отдельный runtime `python -m app.client_bot_v1`;
+- не работает внутри Hermes;
+- не обращается к PostgreSQL напрямую;
+- вся бизнес-логика проходит через client API;
+- deterministic UI: callbacks, contact flow, шаблоны, без LLM-команд.
+
+Runtime также дренирует notification outbox и ведёт runtime state/observability.
+
+## 5. ADR-009: one platform bot + multi-master
+
+Нормативный binding:
 
 ```text
-0001 (head)
+Telegram deep-link
+  -> start_token
+  -> server-side token resolution
+  -> owner_user_id
+  -> owner-scoped client binding
 ```
 
-## 3. Целевая схема
+Клиент **не может** передать произвольный `owner_user_id` через body/query.
+
+Одна Telegram-клиентка может иметь несколько owner-scoped binding'ов. «Ваши мастера» строится только из её binding'ов; глобального каталога мастеров нет.
+
+Не использовать:
+
+- bot-per-master;
+- `CLIENT_OWNER_TELEGRAM_USER_ID`;
+- client-selected owner;
+- auto-link существующей карточки по имени/телефону.
+
+## 6. Public master profile
+
+`master_public_profile` является публичной проекцией мастера для клиентского контура:
+
+- `display_name` обязателен для активации invite link;
+- `public_contact` nullable и публикуется только по explicit opt-in;
+- master numeric Telegram ID не раскрывается;
+- Telegram personal name/username не публикуются автоматически.
+
+## 7. Заявка клиентки и Booking
+
+`BookingRequest` и `Booking` — разные сущности.
 
 ```text
-Telegram user
-   ↓
-Hermes Telegram Gateway
-   ↓ trusted platform context
-profile: nails
-   ↓ restricted Nails domain tools
-Booking API (FastAPI)
-   ├── authentication by trusted Telegram identity
-   ├── role and owner checks
-   ├── validation and confirmation rules
-   ├── audit and idempotency
-   └── transactions
-   ↓
-PostgreSQL — source of truth
+client draft
+ -> select composition
+ -> free slots
+ -> submit BookingRequest(pending)
+ -> slot remains free
+ -> master resolve/link client
+ -> approve
+ -> recheck day-off/overlap
+ -> create Booking(scheduled)
+ -> notify client
 ```
 
-Google Calendar подключается позднее только как одностороннее визуальное представление подтверждённых данных.
+Pending request не резервирует время. Конфликт при approve не вызывает автоматический перенос.
 
-## 4. Hermes Telegram Gateway
+## 8. Client drafts
 
-Gateway:
+Server-side draft хранит выбранную композицию и выбранный slot ограниченное время.
 
-- является единственным Telegram-транспортом;
-- использует отдельный bot token для Nails;
-- принимает личные сообщения только от Telegram ID из allowlist;
-- создаёт раздельные пользовательские сессии;
-- передаёт платформенный Telegram ID через доверенный gateway context;
-- не заменяется aiogram в MVP.
+При изменении состава слот пересчитывается/сбрасывается. Цена, длительность и доступность считаются сервером, а не Telegram bot.
 
-Allowlist отвечает только на вопрос «можно ли начать диалог». Он **не определяет бизнес-роль** и не даёт доступ к данным конкретного мастера. Роль и принадлежность данных обязан проверять Booking API.
+## 9. Notifications and reachability
 
-## 5. Профиль Hermes `nails`
+Транзакционные уведомления идут через outbox:
 
-Профиль изолирован от основного Hermes-профиля и имеет отдельные:
+- runtime claim;
+- Telegram send;
+- ack/retry;
+- throttling;
+- dedupe/idempotency contracts.
 
-- `.env`;
-- конфигурацию;
-- Telegram token;
-- allowlist;
-- SOUL;
-- пользовательские сессии;
-- набор разрешённых инструментов.
+Reachability мастера показывает возможность связаться с клиенткой в Telegram.
 
-### Текущий whitelist
+## 10. Master web
 
-```text
-vision
-image_gen
-tts
-skills
-clarify
+Основные разделы:
+
+- Calendar;
+- Clients;
+- My price;
+- Statistics.
+
+В account menu находятся:
+
+- public profile;
+- settings;
+- logout.
+
+Кабинет также показывает входящие client requests, связывание identity, approve/reject и invite links.
+
+## 11. Расписание
+
+ADR-006:
+
+- целый сохранённый day-off — жёсткий запрет;
+- фактический overlap active booking — жёсткий запрет;
+- positive availability intervals формируют предлагаемые окна, но не являются универсальным запретом для явно заданного мастером времени.
+
+Client free slots используют эффективное расписание и полную длительность композиции.
+
+## 12. Deployment
+
+`compose.yaml` содержит:
+
+- `nails-db`;
+- `nails-api`;
+- `nails-client-bot`;
+- `nails-web`.
+
+Client API/runtime feature flags разрешены только согласованной парой `false/false` или `true/true`. Production deploy проверяет отдельность master/client bot tokens и singleton client runtime.
+
+Единственный постоянный production entrypoint:
+
+```bash
+ops/deploy/deploy.sh <exact-main-sha>
 ```
 
-### Запрещено
+Pre-merge candidate должен быть изолирован и не менять production checkout/DB/runtime.
 
-```text
-terminal
-file
-code_execution
-web
-browser
-arbitrary HTTP
-memory
-session_search
-delegation
-cronjob
-computer_use
-context_engine
-todo
-kanban
-MCP
-GitHub
-SSH
-deployment tools
-direct SQL
-```
+## 13. Data model
 
-`skills.write_approval=true`: агент не должен самостоятельно менять skills без подтверждения.
+Alembic head текущего `main`: `0025`.
 
-### Почему отключена встроенная память
+Помимо core master tables существуют client primitives:
 
-Встроенные `MEMORY.md` и `USER.md` являются профильными, а не полноценной tenant-aware бизнес-базой. При нескольких Telegram-пользователях это создаёт риск смешивания данных.
+- client Telegram identities/contexts;
+- master link tokens/public profile;
+- contact forwards;
+- booking requests;
+- booking drafts;
+- notification outbox/linking state;
+- request note.
 
-Поэтому:
+Точный список колонок и constraints всегда проверять по migrations/models.
 
-```text
-memory.memory_enabled=false
-memory.user_profile_enabled=false
-```
+## 14. Security invariants
 
-Hermes помнит текущую сессию, но постоянное состояние графика, onboarding и клиентской базы должно храниться в PostgreSQL.
+- owner scoping обязателен;
+- trusted master identity и client transport identity разделены;
+- private client fields не выходят в client responses;
+- secrets не попадают в GitHub/logs;
+- pending request не даёт полномочий Booking;
+- public profile не раскрывает raw master identity;
+- release только через CI + acceptance contract;
+- production data не используется в CI.
 
-## 6. Booking API
+## 15. Будущие SaaS-слои
 
-Booking API является единственной точкой доступа к бизнес-данным.
+Не реализованы как часть ADR-009:
 
-### Уже реализовано
+- billing/subscriptions;
+- публичная self-service регистрация мастера;
+- SaaS admin dashboard;
+- public master directory;
+- per-master white-label bots.
 
-- FastAPI application foundation;
-- обязательная runtime-конфигурация;
-- IANA validation для `APP_TIMEZONE`;
-- SQLAlchemy engine и sessions;
-- Alembic migration framework;
-- `/health`;
-- `/ready` с проверкой PostgreSQL;
-- initial schema;
-- Docker image и Compose deployment;
-- CI и production-like smoke-test.
-
-### Следующий срез
-
-NAILS-002B добавит:
-
-- `start_onboarding`;
-- `get_onboarding_state`;
-- сохранение черновиков;
-- подтверждение и исправление блоков;
-- `pause_onboarding`;
-- `resume_onboarding`;
-- `complete_onboarding`;
-- audit events;
-- server-side role checks.
-
-### Будущие обязанности
-
-- поиск свободных интервалов;
-- проверка пересечений;
-- расчёт длительности и буферов;
-- создание, перенос и отмена записей;
-- управление клиентскими карточками;
-- снимок стоимости;
-- безопасный аудит;
-- idempotency;
-- календарные sync jobs.
-
-## 7. PostgreSQL
-
-PostgreSQL — единственный источник истины.
-
-### Фактически созданные таблицы
-
-```text
-users
-services
-clients
-bookings
-schedule_rules
-schedule_exceptions
-audit_events
-onboarding_states
-onboarding_drafts
-```
-
-Основные бизнес-таблицы содержат `owner_user_id`. Это является базой tenant isolation, но само наличие поля не заменяет обязательные фильтры и проверки в API.
-
-Удаление владельца не каскадно уничтожает рабочую историю: owner foreign keys используют защитную семантику `RESTRICT` там, где потеря данных недопустима.
-
-Idempotency записи ограничена владельцем:
-
-```text
-owner_user_id + idempotency_key
-```
-
-### Роли PostgreSQL
-
-- `nails_admin` — bootstrap-role контейнера, только для первичной инициализации;
-- `nails_app` — application-role Booking API.
-
-`nails_app` не имеет:
-
-- `SUPERUSER`;
-- `CREATEDB`;
-- `CREATEROLE`;
-- `REPLICATION`.
-
-## 8. Docker topology
-
-```text
-VPS de.funti.cc
-
-127.0.0.1:8210
-      ↓
-  nails-api
-   ├── nails-edge
-   └── nails-internal
-             ↓
-          nails-db
-```
-
-- `nails-db` подключён только к `nails-internal`;
-- PostgreSQL не публикует host-port;
-- `nails-api` использует `nails-internal` для БД;
-- `nails-api` использует `nails-edge` для loopback HTTP;
-- внешний bind API отсутствует.
-
-Контейнер API:
-
-- работает как непривилегированный пользователь `nails`;
-- имеет read-only root filesystem;
-- запускается с `CapDrop=ALL`;
-- использует `no-new-privileges:true`.
-
-## 9. Время
-
-- `APP_TIMEZONE` обязателен;
-- используется формат IANA;
-- неизвестная или пустая зона блокирует запуск;
-- production: `Europe/Berlin`;
-- бизнес-границы дня вычисляются в зоне мастера;
-- timestamps в БД хранятся timezone-aware там, где представляют момент времени.
-
-Автоматический молчаливый fallback на UTC запрещён.
-
-## 10. Поток onboarding
-
-Целевой поток NAILS-002B–002D:
-
-```text
-Telegram message
-  → Hermes identifies onboarding intent
-  → restricted onboarding tool
-  → Booking API resolves trusted Telegram identity
-  → role/owner validation
-  → draft saved in PostgreSQL
-  → summary returned to Hermes
-  → user confirms or corrects
-  → confirmed block becomes available to later business logic
-```
-
-Черновые данные не должны влиять на рабочее расписание до подтверждения блока.
-
-## 11. Поток записи
-
-Целевой поток NAILS-002E и NAILS-003:
-
-```text
-User request
-  → Hermes extracts intent and parameters
-  → Booking API resolves role and owner
-  → client/service lookup
-  → duration, buffer and availability calculation
-  → summary and confirmation
-  → transactional write
-       - booking change
-       - audit event
-       - calendar sync job after NAILS-006
-  → result returned to Telegram
-```
-
-Google Calendar не участвует в бизнес-транзакции.
-
-## 12. Google Calendar
-
-Google Calendar подключается на NAILS-006:
-
-- только односторонний экспорт из PostgreSQL;
-- ошибка календаря не отменяет бизнес-операцию;
-- используются retries и backoff;
-- credentials доступны только sync-component;
-- модель не получает calendar credentials.
-
-## 13. Backup
-
-До пилота с реальными данными обязательны:
-
-- автоматические PostgreSQL backups;
-- копия вне рабочей БД и вне единственного диска VPS;
-- журнал результатов;
-- тест восстановления в отдельную БД;
-- документированный результат restore-test.
-
-Запуск контейнеров и сохранение данных после restart уже проверены, но это не заменяет backup и disaster recovery.
-
-## 14. Разделение ответственности
-
-### GitHub / основной ChatGPT
-
-- архитектура;
-- код;
-- миграции;
-- тесты;
-- CI;
-- документация;
-- PR и merge.
-
-### VPS-агент
-
-- проверка конкретного hostname;
-- получение точного commit из `main`;
-- deployment;
-- миграции;
-- runtime и infrastructure tests;
-- отчёт об ошибках.
-
-VPS-агент не исправляет tracked-файлы и не выполняет push.
-
-## 15. Принципы безопасности
-
-- профиль Hermes не считается sandbox;
-- отсутствие инструмента означает отсутствие функции;
-- модель не является доверенным источником Telegram ID или роли;
-- все business writes проверяются backend;
-- внутренние aliases не используются как public names;
-- production data не попадает в GitHub и CI;
-- secrets не выводятся в логи и отчёты;
-- pilot начинается только после end-to-end tests и restore-test.
-
-## 16. Будущий публичный контур
-
-Клиентский бот не входит в MVP. Он должен быть отдельным агентом с отдельной авторизацией, отдельными tools и существенно меньшими полномочиями. Его нельзя совмещать с доверенным контуром мастера.
+Это отдельный roadmap после стабилизации текущего продукта.

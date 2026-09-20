@@ -1,247 +1,121 @@
 # Роли и полномочия
 
-## 1. Принцип авторизации
+Дата актуализации: **20 сентября 2026 года**.
 
-В Nails есть разные уровни доступа, которые нельзя смешивать:
+## 1. Уровни identity
 
-1. **Telegram allowlist мастера** — разрешает доверенному пользователю начать диалог с Нэйли.
-2. **Роль Booking API мастера** — определяет бизнес-полномочия `master` или `admin`.
-3. **Client transport identity** — отдельная недоверенная публичная identity клиентского бота с полномочиями `client`; она не хранится в операторской таблице `users` и не получает master/admin key.
-4. **Техническая роль PostgreSQL** — определяет права процесса приложения на базу.
+В Nails разделены:
 
-Наличие Telegram ID в allowlist не делает пользователя `admin` и не даёт доступ к данным другого мастера. Клиентская Telegram identity также не может назначить себе owner, client ID или роль через аргументы запроса. Модель не может назначить роль через текст сообщения.
+1. Telegram allowlist/Hermes identity доверенного мастера;
+2. business role `master/admin`;
+3. web session/effective owner;
+4. client transport identity отдельного Telegram-бота;
+5. PostgreSQL application/admin roles.
 
-## 2. Роль `master`
+Ни один уровень не должен подменять другой.
 
-`master` работает только со своими бизнес-данными.
+## 2. `master`
 
-Разрешено:
-
-- проходить и возобновлять собственный onboarding;
-- просматривать свой график и свободные окна;
-- управлять собственным прайсом в пределах разрешённого интерфейса;
-- создавать и редактировать свои клиентские карточки;
-- создавать записи;
-- переносить и отменять записи после подтверждения;
-- просматривать входящие заявки клиенток;
-- явно связывать новую Telegram identity с существующей карточкой либо создавать для неё новую карточку;
-- подтверждать или отклонять собственные pending-заявки;
-- блокировать личное рабочее время;
-- управлять разовыми исключениями своего графика;
-- добавлять внутренние aliases и notes;
-- просматривать историю собственных бизнес-операций;
-- получать собственные сводки и показатели.
-
-Запрещено:
-
-- читать или изменять данные другого мастера;
-- изменять роли и системный allowlist;
-- менять secrets;
-- просматривать technical credentials;
-- выполнять shell, SSH или arbitrary code;
-- выполнять прямой SQL;
-- изменять system integration configuration;
-- самостоятельно обходить подтверждение опасной операции;
-- использовать внутреннее обозначение как публичное имя клиентки.
-
-## 3. Роль `admin`
-
-`admin` имеет все полномочия `master`, а также:
-
-- создаёт и активирует доверенных пользователей после явного решения администратора;
-- назначает и отзывает операторские роли через строго определённую administrative API operation;
-- управляет Telegram allowlist вне модели;
-- управляет системными настройками первого пилота;
-- просматривает безопасный технический аудит и ошибки;
-- запускает диагностические операции через whitelisted admin tools;
-- управляет архивированием и восстановлением данных;
-- подтверждает merge дублей, когда такая функция будет реализована;
-- проводит первый синтетический onboarding перед подключением мастера;
-- контролирует очистку тестовых данных перед пилотом.
-
-Даже `admin` не должен получать:
-
-- unrestricted shell через Telegram;
-- прямой SQL через модель;
-- secrets других Hermes-профилей;
-- credentials внешних интеграций в prompt;
-- возможность отключить audit или owner checks обычной командой в чате.
-
-## 4. Роль `client`
-
-`client` — полномочия отдельного детерминированного Telegram-бота по ADR-004. Это не `UserRole` доверенной операторской таблицы `users` и не профиль Hermes.
-
-Identity формируется только из:
-
-- отдельного client-bot internal key;
-- Telegram user ID из проверенного Telegram Update;
-- owner, заданного server-side конфигурацией первого запуска;
-- owner-scoped записи `client_telegram_identities`.
+Мастер работает только со своими owner-scoped данными.
 
 Разрешено:
 
-- читать публичную часть активного прайса выбранного server-side owner;
-- читать предлагаемые свободные окна;
-- сообщить собственное публичное имя и передать телефон только через проверенный Telegram contact;
-- создать заявку на запись;
-- читать только собственные заявки и разрешённую публичную часть собственных подтверждённых записей;
-- отменить собственную pending-заявку;
-- позднее — отправить запрос мастеру на отмену или перенос подтверждённой записи.
+- onboarding и настройки;
+- расписание/исключения;
+- прайс;
+- клиентские карточки и private notes;
+- bookings;
+- заявки клиенток;
+- linking/resolve identity;
+- approve/reject;
+- public profile;
+- general/personal invite links;
+- статистика и выгрузки.
 
 Запрещено:
 
-- автоматически присоединять существующую карточку по совпадению имени, username или телефона;
-- выбирать существующий `client_id`: первую связь подтверждает мастер;
-- читать расписание, записи или заявки других клиенток;
-- читать private alias, notes, медицинские/технические пометки и предпочтения из внутренней карточки;
-- выбирать или передавать owner ID, client ID, роль или чужой Telegram ID;
-- создавать подтверждённый Booking напрямую;
-- подтверждать собственную заявку;
-- резервировать pending-заявкой слот;
-- вызывать master/admin endpoints;
-- получать master internal key, Hermes tools, shell, SQL или произвольный HTTP;
-- менять цену, длительность, скидку или правила мастера;
-- использовать свободный текст как доменные аргументы.
+- читать данные другого owner;
+- менять системные роли/secrets;
+- direct SQL/shell через продуктовый интерфейс;
+- обходить обязательные подтверждения;
+- публиковать private client fields.
 
-Совпадение телефона является только подсказкой мастеру, даже когда Telegram contact принадлежит отправителю. Это предотвращает захват существующей карточки по известным персональным данным.
+## 3. `admin`
 
-## 5. Клиентский bot runtime
+Admin имеет master business access в разрешённых границах плюс контролируемые administrative lifecycle/diagnostic операции.
 
-Клиентский бот — отдельный deterministic runtime:
+Admin не получает unrestricted shell/SQL через Telegram-модель и не может обычной командой отключить owner checks/audit.
 
-- inline-кнопки и фиксированные шаблоны;
-- отдельный Telegram token;
-- отдельный client internal key;
-- без LLM и без публичного профиля Hermes;
-- без доступа к master/admin identity;
-- с проверкой, что callback/contact принадлежит `from.id`;
-- с rate limit и abuse protection;
-- Booking API остаётся внутренним и не публикуется в интернет.
+## 4. Client transport identity
 
-Свободное сообщение клиентки не интерпретируется. Возможная пересылка мастеру выполняется отдельным ограниченным flow и не даёт тексту влиять на owner, client, service, время, цену или решение заявки.
+Client — не operator `users.role` и не Hermes profile.
 
-## 6. Технические идентичности PostgreSQL
+Доверенными источниками являются:
 
-### `nails_app`
+- отдельный `CLIENT_INTERNAL_API_KEY`;
+- Telegram user ID из проверенного Update;
+- server-side binding/context;
+- server-side start-token resolution.
 
-Прикладная роль Booking API.
-
-Фактические ограничения production:
+**Owner больше не задаётся конфигурацией одного мастера.** Модель ADR-009:
 
 ```text
-SUPERUSER=0
-CREATEDB=0
-CREATEROLE=0
-REPLICATION=0
+start_token -> owner_user_id   (server-side only)
+telegram_user_id + owner_user_id -> owner-scoped binding
 ```
 
-API обязан подключаться только как `nails_app`.
+Клиент не может передать произвольные `owner_user_id`, `client_id`, role или чужой Telegram ID через body/query.
 
-### `nails_admin`
+## 5. Что client может
 
-Bootstrap-role контейнера PostgreSQL. Используется при первичной инициализации базы и не должна использоваться приложением для обычной работы.
+- открыть ссылку конкретного мастера;
+- видеть public master profile;
+- видеть public price;
+- получать free slots;
+- создавать/изменять собственный server-side draft;
+- отправлять собственную BookingRequest;
+- видеть собственные актуальные заявки/подтверждённые записи;
+- отменять разрешённые собственные pending-действия;
+- передавать contact через Telegram ownership flow;
+- отправить короткое пояснение мастеру как информацию;
+- переключаться только между мастерами, с которыми уже есть binding.
 
-Пароли обеих ролей хранятся только в production `.env` вне GitHub.
+## 6. Что client не может
 
-## 7. Hermes profile access
+- подтверждать Booking;
+- резервировать slot pending-заявкой;
+- auto-link карточку по имени/телефону;
+- видеть чужие requests/bookings;
+- видеть internal alias/notes;
+- выбирать owner из глобального списка;
+- видеть numeric Telegram ID мастера;
+- получать personal Telegram username мастера без explicit `public_contact`.
 
-Профиль `nails` ограничен Telegram allowlist и whitelist инструментов и предназначен только для доверенного контура мастера.
+## 7. Public profile мастера
 
-Текущие разрешённые toolsets:
+Client-facing identity строится из `master_public_profile`:
 
-```text
-vision
-image_gen
-tts
-skills
-clarify
-```
+- `display_name` — обязательный gate invite link;
+- `public_contact` — nullable, opt-in.
 
-Они не предоставляют бизнес-полномочия. Nails domain tools передают trusted identity в Booking API.
+Telegram account fields мастера не являются автоматическим public profile.
 
-Запрещены:
+## 8. Multi-binding
 
-- terminal;
-- file access;
-- code execution;
-- web/browser/arbitrary HTTP;
-- direct SQL;
-- cron/delegation;
-- MCP;
-- infrastructure and deployment tools.
+Одна Telegram-клиентка может иметь несколько независимых binding'ов к разным owners.
 
-Встроенная память профиля отключена, чтобы данные нескольких Telegram-пользователей не смешивались. Persistent business state хранится в PostgreSQL.
+«Ваши мастера» содержит только эти binding'и. Публичного directory/discovery нет.
 
-Клиентский бот не загружает этот профиль и не наследует его personality, tools или allowlist.
+## 9. Runtime boundaries
 
-## 8. Проверка полномочий в Booking API
+Master Hermes key и client internal key различаются. Master/client Telegram tokens также должны различаться.
 
-### Master/admin request
+Client runtime не получает direct DB access. Его полномочия ограничены client API + notification claim/ack transport.
 
-Для каждого доверенного запроса API должен:
+## 10. Production roles
 
-1. получить trusted Telegram identity из gateway/tool context либо master web session;
-2. найти активного пользователя;
-3. определить роль из PostgreSQL;
-4. определить владельца данных;
-5. проверить разрешённую операцию;
-6. применить owner filter ко всем чтениям и изменениям;
-7. запросить confirmation для опасной операции;
-8. записать audit event;
-9. использовать idempotency для повторного запроса.
+Release/deploy роли:
 
-### Client request
-
-Для каждого клиентского запроса API должен:
-
-1. проверить отдельный client internal key;
-2. получить Telegram user ID только от bot runtime;
-3. разрешить единственного owner из server-side конфигурации;
-4. найти или создать owner-scoped pending `client_telegram_identity`;
-5. не связывать существующую карточку без master decision;
-6. разрешить только публичную client operation;
-7. применить одновременно owner и client identity filters;
-8. использовать idempotency для мутаций;
-9. записать безопасный audit без private contents и без Telegram ID/телефона.
-
-Telegram ID, роль, owner ID и client ID из текста сообщения, callback data вне подписанного/серверного состояния или model-generated arguments не считаются доверенными.
-
-## 9. Матрица полномочий
-
-| Операция | `master` | `admin` | `client` | Telegram allowlist без backend role |
-|---|---:|---:|---:|---:|
-| Начать диалог с Нэйли | да | да | нет | да |
-| Использовать client bot | нет как роль | нет как роль | да | нет |
-| Читать собственный onboarding | да | да | нет | нет |
-| Читать полный собственный календарь мастера | да | да | нет | нет |
-| Читать публичный прайс/окна | да | да | да | нет |
-| Читать чужие бизнес-данные | нет | только через отдельную admin-функцию | нет | нет |
-| Создать подтверждённую запись | да | да | нет | нет |
-| Создать заявку | нет как client flow | нет как client flow | да | нет |
-| Связать Telegram identity с карточкой | да, owner-scoped | да | нет | нет |
-| Подтвердить/отклонить заявку | да | да | нет | нет |
-| Отменить собственную pending-заявку | нет как client flow | нет как client flow | да | нет |
-| Читать private client fields | собственные owner-scoped | расширенно по отдельной функции | нет | нет |
-| Управлять ролями | нет | да | нет | нет |
-| Управлять server secrets | нет | нет через Telegram | нет | нет |
-| Выполнить shell/SQL | нет | нет через модель | нет | нет |
-| Просмотреть безопасный audit | собственный | расширенный | нет | нет |
-
-## 10. Роли в процессе разработки
-
-### Основной ChatGPT
-
-- проектирует;
-- пишет код и миграции;
-- обновляет GitHub;
-- создаёт PR;
-- контролирует документацию и CI.
-
-### VPS-агент
-
-- выполняет только точный утверждённый candidate/main deployment и диагностику;
-- не редактирует tracked-файлы;
-- не создаёт commit и не делает push;
-- при ошибке останавливается и возвращает диагностику.
-
-Это разделение защищает production от незадокументированных исправлений непосредственно на сервере.
+- основной ChatGPT — repo/code/tests/docs/PR/CI;
+- VPS-agent — candidate/deploy/runtime acceptance/rollback;
+- пользователь не обязан выдавать пошаговые технические инструкции.

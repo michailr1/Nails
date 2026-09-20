@@ -2,7 +2,7 @@
 
 Статус: **обязательный проектный контракт**.
 
-Краткая обязательная версия находится в корневом [`AGENTS.md`](../../AGENTS.md). При расхождении старые документы и prompts приводятся к этому контракту и фактическому поведению `ops/deploy/deploy.sh`.
+Краткая обязательная версия находится в корневом [`AGENTS.md`](../../AGENTS.md). При расхождении старые документы и prompts приводятся к этому контракту и фактическим entrypoint'ам: isolated pre-merge `ops/deploy/candidate_deploy.sh` и production `ops/deploy/deploy.sh`.
 
 ## 1. Основной принцип
 
@@ -75,9 +75,10 @@ VPS-агент не имеет права:
 2. Основной агент называет точный PR-head SHA и PR number.
 3. VPS fetch выполняется только в ref вида `origin/pr/<number>`.
 4. Проверяется, что ref равен указанному SHA и candidate является потомком текущего production checkout.
-5. Candidate строится из отдельного worktree точного SHA.
-6. Runtime запускается с `NAILS_GIT_SHA=<candidate SHA>`.
-7. Production checkout остаётся на исходном SHA.
+5. Нормативный candidate entrypoint — `ops/deploy/candidate_deploy.sh`; он создаёт изолированный Compose project из точного SHA.
+6. Candidate использует отдельные ports/networks/volume и не использует production DB/env; client bot не конкурирует с production Telegram token.
+7. Runtime candidate запускается с `NAILS_GIT_SHA=<candidate SHA>`.
+8. Production containers, DB volume и checkout остаются неизменными; cleanup удаляет candidate resources.
 
 Candidate — дополнительная production validation открытого PR-head SHA. Если GitHub merge создаёт другой SHA, например rebase/squash commit, этот новый SHA требует собственного штатного main deployment и не считается уже проверенным candidate.
 
