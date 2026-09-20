@@ -1,146 +1,129 @@
 # Roadmap
 
-Дата актуализации: **21 июля 2026 года**.
+Дата актуализации: **20 сентября 2026 года**.
 
-Roadmap хранит только порядок продуктовых этапов. Фактический SHA, production runtime и активный PR смотреть в [`context/current.md`](context/current.md); завершённые возможности — в [`status.md`](status.md).
+Roadmap показывает продуктовый порядок. Exact production/main SHA смотреть через свежий preflight; фактические реализованные возможности — в [`status.md`](status.md).
 
 ## Статусы
 
-- ✅ завершено и подтверждено;
-- 🟡 выполняется;
+- ✅ завершено и принято/реализовано;
+- 🟡 выполняется или ждёт production acceptance;
 - ⬜ запланировано.
 
 ## Текущая точка
 
 ```text
-NAILS-001  ✅ базовые продуктовые и security-правила
-NAILS-002  ✅ сквозной master scheduling и backup/restore
-Пилот      ✅ живое тестирование двумя мастерами завершено
-NAILS-003  ✅ корректировка ограничений рабочего времени
-Web UI     ✅ кабинет мастера принят владельцем
-ADR-007    ✅ реальный прайс и модель base + дополнения приняты
-ADR-004    🟡 детерминированный клиентский контур
+NAILS-001        ✅ продуктовые и security-инварианты
+NAILS-002        ✅ master scheduling + backup/restore
+NAILS-003        ✅ рабочее время / ADR-006
+Master Web UI    ✅ основной кабинет мастера
+ADR-007          ✅ прайс base + addons
+ADR-004          ✅ client identity, requests, deterministic bot
+ADR-009          ✅ SaaS binding: one platform bot + deep-links + multi-binding
+ADR-010          ✅ client notifications/reachability runtime primitives
+Client runtime   ✅ встроен в штатный deploy lifecycle
+Mobile UX        🟡 точечная production acceptance и регрессии
+SaaS onboarding  ⬜ self-service подключение, тарифы и billing
 ```
 
-## NAILS-001 — процессы и инварианты ✅
+## Завершённый рабочий контур мастера ✅
 
-Зафиксированы и сохраняются:
+Подтверждены в коде:
 
-- PostgreSQL как источник истины;
-- owner scoping;
-- restricted tools без shell, SSH, direct SQL и arbitrary HTTP;
-- trusted Telegram identity только из gateway context;
-- обязательное подтверждение каждой мутации;
-- snapshots цены, длительности и buffers в записи;
-- приватность внутренних полей клиентки;
-- точный backend date resolver и IANA timezone;
-- backup перед мутирующим deploy и проверенный restore;
-- exact PR-head candidate до merge;
-- после merge — один атомарный main release через `ops/deploy/deploy.sh`;
-- rollback как deploy предыдущего SHA.
+- onboarding и persistent settings;
+- расписание и исключения по датам;
+- прайс, base/addon composition;
+- карточки клиенток;
+- создание/перенос/отмена/finalization;
+- календарь, статистика и выгрузки;
+- web auth через Telegram;
+- профиль мастера и настройки;
+- owner scoping, idempotency, audit, backup/restore.
 
-## NAILS-002 — рабочий контур мастера ✅
+## Клиентский контур ✅
 
-Завершены и приняты:
+Старый раздел «ADR-004 🟡» закрыт по фактическому состоянию кода.
 
-- onboarding с сохранением state/draft;
-- настройки имени, стиля и обычных часов;
-- «Мой прайс»: создание, изменение, удаление из прайса и восстановление;
-- доступность по конкретным датам;
-- несколько рабочих интервалов в один день;
-- просмотр дня и свободных окон;
-- клиентские карточки с дополнительными private fields;
-- exact/candidate поиск и защита от случайных дублей;
-- создание записей;
-- перенос без самоблокировки;
-- мягкая отмена;
-- fresh-read/readback и verified guarded mutations;
-- ежедневные backup, isolated restore-test, retention и Telegram archive;
-- ограниченный живой пилот.
+Реализованы:
 
-## NAILS-003 — ограничения рабочего времени ✅
+1. **Client foundation**
+   - owner-scoped client Telegram identity;
+   - booking requests;
+   - server-side drafts;
+   - public price/free slots;
+   - client isolation/security contracts.
 
-Issue #104 завершён фактическими механизмами `availability_intervals`, preview-flow и ADR-006.
+2. **Master request flow**
+   - входящие заявки в кабинете;
+   - resolve/link/create client card;
+   - approve/reject;
+   - повторная проверка slot conflict;
+   - pending request не резервирует Booking.
 
-Подтверждено:
+3. **Deterministic Telegram bot**
+   - отдельный runtime и credentials;
+   - один platform bot для нескольких мастеров;
+   - deep-link/start-token;
+   - base service → addons/quantities → date/slot → summary → submit;
+   - «Мои записи» и актуальные заявки;
+   - короткое пояснение мастеру без превращения текста в доменные аргументы.
 
-- дата может содержать несколько положительных интервалов подсказок;
-- частичное закрытие формируется заменой одного окна несколькими итоговыми окнами;
-- дополнительное открытие формируется тем же итоговым набором интервалов;
-- `preview_availability` показывает текущее и предлагаемое состояние до подтверждения;
-- `update_availability` остаётся единственным write-путём, owner-scoped, audited и идемпотентным;
-- настройку можно исправить повторной заменой или снять через `state=unknown`;
-- целый выходной задаётся через `state=unavailable`;
-- существующая запись не переносится и не отменяется автоматически;
-- выходной при существующей записи блокируется preview/write-проверкой;
-- положительные интервалы влияют только на подсказки свободных окон;
-- согласно ADR-006 явно названная мастером запись разрешена вне сетки и вне положительных окон, если день не является выходным и нет overlap.
+4. **SaaS binding / ADR-009**
+   - start-token → owner только server-side;
+   - public profile мастера;
+   - public contact opt-in;
+   - multi-binding;
+   - «Ваши мастера» только по своим binding'ам;
+   - без публичного каталога.
 
-Жёсткие частичные запреты намеренно не вводятся: они противоречили бы принятой модели «явное время открыто по умолчанию». Для жёсткого отказа используется целый выходной либо фактическое пересечение с другой записью.
+5. **Notifications / reachability**
+   - outbox;
+   - drainer в client runtime;
+   - approve/reject notification;
+   - reachability;
+   - general/personal invite links;
+   - singleton client runtime release invariant.
 
-## Web-интерфейс мастера ✅
+## Текущая доводка 🟡
 
-Кабинет мастера принят владельцем. Отдельная приёмка пилотным мастером отложена и не блокирует roadmap; новые пожелания оформляются отдельными follow-up задачами.
+Приоритет — не достраивать заново client MVP, а стабилизировать уже работающий продукт:
 
-Работают:
+- mobile layout и Safari visual viewport;
+- нижняя 4-tab navigation;
+- request cards и confirm dialog;
+- invite/profile UX;
+- рабочий график и его прозрачность в кабинете;
+- уменьшение script-order/global override debt;
+- механическая защита `main`.
 
-- безопасный вход через Telegram-подтверждение;
-- календарь дня, недели и месяца;
-- выгрузки календаря и клиенток;
-- «Мой прайс» с компактными разделами и подтверждаемой заменой;
-- создание записи с основной процедурой и дополнениями;
-- карточки клиенток и их редактирование;
-- owner scoping, same-origin boundary, idempotency и fresh readback;
-- web остаётся тонким слоем над существующим Booking API.
+## Следующий крупный продуктовый этап ⬜
 
-## ADR-007 — реальный прайс и дополнения ✅
+### Self-service SaaS onboarding мастеров
 
-Реальный прайс пилотного мастера перенесён через owner-scoped доменный `replace_catalog` после verified backup/restore:
+Issue #223 остаётся будущим направлением:
 
-- 33 активные позиции;
-- 1 старая тестовая позиция архивирована;
-- другие каталоги не изменены;
-- fixed/range/per-unit/on-request и base/addon покрывают исходный прайс;
-- количество для per-unit и матрица совместимости остаются отложенными до подтверждённой необходимости.
+- onboarding bot/flow для нового мастера;
+- тарифная модель;
+- provider оплаты;
+- idempotent onboarding order;
+- автоматическая активация существующего master lifecycle;
+- отмена/истечение/отзыв доступа.
 
-Issue #122 закрыт. Будущие корректировки прайса не возвращают весь этап в активную разработку.
+Не смешивать это с уже готовым клиентским ботом.
 
-## Клиентский контур ADR-004 🟡
+## Позже ⬜
 
-Активный implementation issue: **#171**.
-
-Границы:
-
-- отдельный детерминированный Telegram-бот без разговорной LLM-поверхности и без публичного Hermes-профиля;
-- один мастер на первом запуске;
-- узкий публичный API;
-- client identity отделена от доверенных операторских `users`;
-- заявка клиентки не является подтверждённой записью и не резервирует время;
-- подтверждение мастером повторно проверяет выходной и overlap через существующий `create_booking`;
-- внутренние aliases, notes и прочие private fields клиентке недоступны;
-- отдельная abuse protection;
-- multi-master subscription, tenant management и биллинг остаются после MVP.
-
-Слайсы:
-
-1. **Backend foundation** — owner-scoped client identity, booking requests, публичный прайс/окна, client create/list/cancel, master approve/reject, isolation и audit.
-2. **Кабинет мастера** — входящие заявки, полная сводка, подтверждение/отказ и честный конфликт.
-3. **Deterministic Telegram bot** — кнопочный сценарий от прайса до отправки заявки.
-4. **Свои заявки и записи** — просмотр статусов и запросы на отмену/перенос.
-
-## После MVP ⬜
-
-- Google Calendar one-way export;
-- рекомендации по фактической длительности;
-- отчёты по выручке;
-- client service overrides;
-- административное объединение дублей;
-- multi-master SaaS-контур.
+- billing/subscriptions;
+- административная SaaS-панель;
+- более глубокие отчёты/рекомендации;
+- Google Calendar, если останется продуктовая необходимость;
+- merge дублей клиенток;
+- дальнейшая автоматизация поддержки.
 
 ## Ближайший порядок
 
-1. Принять implementation plan ADR-004 и security boundary.
-2. Реализовать Slice A — backend foundation.
-3. Добавить в кабинет мастера входящие заявки и решения.
-4. Подключить отдельный deterministic Telegram bot.
-5. Добавить просмотр своих заявок/записей и запросы на изменение.
+1. Завершить production acceptance текущих mobile fixes (#323 и связанные регрессии).
+2. Закрыть уже фактически выполненные старые client/runtime/schedule issues.
+3. Устранить оставшийся web tech debt (#252/#268 по реальному scope).
+4. Включить repository protection для `main` (#316).
+5. После стабилизации — проектировать self-service SaaS onboarding (#223), не возвращаясь к single-master client architecture.
